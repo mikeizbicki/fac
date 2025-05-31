@@ -1,0 +1,3 @@
+llm==0.25
+llm-anthropic==0.16
+files-to-prompt==0.6

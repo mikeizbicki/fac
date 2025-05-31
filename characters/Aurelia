@@ -1,0 +1,9 @@
+{ "Name": "Aurelia"
+, "Age": "2 years"
+, "Sex": "Female"
+, "Hair": "Blond"
+, "Favorites":
+    { "Animal": "Panda"
+    , "Food": "Pizza"
+    }
+}
