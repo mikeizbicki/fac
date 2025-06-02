@@ -1,0 +1,13 @@
+{ "Name": "Evan (אֶבֶן)"
+, "Age": "7 years"
+, "Sex": "Male"
+, "Hair": "Black"
+, "Favorites":
+    { "Animal": ["Owl"]
+    , "Food": ["Pasta", "Chicken Nuggets", "Maccaroni and Cheese"]
+    , "Toy": ["Making things out of paper"]
+    , "TV": ["Chronicles of Narnia"]
+    }
+}
+
+

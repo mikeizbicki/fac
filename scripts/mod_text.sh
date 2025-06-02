@@ -3,6 +3,12 @@
 set -e
 export $(cat .env | xargs)
 
+instructions="$2"
+if [ -z "$instructions" ]; then
+    echo "Error: no instructions specified"
+    exit 1
+fi
+
 chapter_dir=$1
 if [ -z "$chapter_dir" ]; then
     echo "Error: no chapter dir specified"
@@ -18,11 +24,10 @@ chapter_prompt_file="$base_dir"/chapter-prompt
 system_prompt_file="$base_dir"/system-prompt
 
 text_file="$chapter_dir"/text
-#if [ -e "$text_file" ]; then
-    #new_text_file=$(dirname $text_file)/.text.$(date +"%Y%m%d_%H%M%S")
-    #echo "$text_file exists; moving to $new_text_file"
-    #mv "$text_file" "$new_text_file"
-#fi
+if [ ! -e "$text_file" ]; then
+    echo "$text_file does not exist"
+    exit 1
+fi
 
 prompt_file="$chapter_dir"/prompt
 if [ ! -e "$prompt_file" ]; then
@@ -31,8 +36,10 @@ if [ ! -e "$prompt_file" ]; then
 fi
 
 #files_for_prompt=''
-files_for_prompt='characters
-'
+files_for_prompt="characters
+$prompt_file
+$chapter_prompt_file
+"
 for file in $(ls "$base_dir" | sort); do
     if [ "$file" == "$(basename "$chapter_dir")" ]; then
         break
@@ -43,17 +50,20 @@ done
 echo "files_for_prompt=$files_for_prompt"
 
 prompt="
-$(cat "$prompt_file")
+Perform the following task on the input file:
 
-$(cat "$chapter_prompt_file")
+$(echo "$instructions")
 
-The files below are previous chapters.
-The next chapter should build off of these results.
+The input file is:
+
+$(cat "$text_file")
+
+The files below are related to how the input file was generated.
+You may reference these files for consistency purposes,
+but do not make any major structural changes based on these files.
 $(files-to-prompt $files_for_prompt)
 "
 
 echo "prompt token count=$(ttok "$prompt" 2> /dev/null)"
-time llm --no-log -m anthropic/claude-sonnet-4-0 -s "$(ls "$system_prompt_file")" "$prompt" > "$text_file"
-echo "output token count=$(ttok "$(cat "$text_file")" 2> /dev/null)"
-
-scripts/simplify_text.sh "$text_file"
+time llm --no-log -m anthropic/claude-sonnet-4-0 -s "$(ls "$system_prompt_file")" "$prompt" > "$text_file.mod"
+echo "output token count=$(ttok "$(cat "$text_file.mod")" 2> /dev/null)"

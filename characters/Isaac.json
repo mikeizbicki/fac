@@ -1,0 +1,14 @@
+{ "Name": "Isaac"
+, "Age": "4 years"
+, "Sex": "Male"
+, "Hair": "Black"
+, "Favorites":
+    { "Animal": ["Koala"]
+    , "Food": ["Pasta", "Chicken Nuggets", "Maccaroni and Cheese"]
+    , "Toy": ["Light Saber", "Legos", "Marbles"]
+    , "TV": ["Paw Patrol", "Star Wars", "Blaze and the Monster Machines", "Pokemon"]
+    }
+}
+
+
+

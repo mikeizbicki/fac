@@ -1,0 +1,12 @@
+{ "Name": "Aaron"
+, "Age": "3 years"
+, "Sex": "Male"
+, "Hair": "Blond"
+, "Favorites":
+    { "Animal": ["Dinosaur", "Tiger"]
+    , "Food": ["Pasta (with pesto)", "Pizza", "Chicken Nuggets"]
+    , "Toy": ["Legos", "Trains", "Puzzles"]
+    , "TV": ["Paw Patrol", "Blaze and the Monster Machines", "Harry Potter"]
+    }
+}
+
