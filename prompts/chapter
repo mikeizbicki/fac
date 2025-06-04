@@ -1,30 +1,37 @@
-The output should have the following sections:
+The output should have the following sections (##):
 
 ## Story
 
-The story should be divided into multiple small sections using markdown.
-Each section should:
-1. Have a title in the target language.
-2. Begin with a markdown image.  The alt-text should describe what happens in the section in English.  The img url should be sectionXXX.png, where XXX is the section number.
-3. The story should contain 10-30 words in the target language.
-All text must include niqqud markings to make the text easy to read for children.
+Divide the story into 5-20 subsections (###) using markdown.
+Each subsection should:
+1. Have a title in the target language (with English translation in parentheses).
+2. Begin with a markdown image.
+    a. The alt-text should describe what happens in the section in English.
+    b. The img url should be sectionXXX.png, where XXX is the section number.
+3. Contain 10-30 words in the target language.
+4. Contain action that progresses the story.
 
 ## Vocabulary
 
-Should contain a markdown table of newly introduced words and english glosses; only provide roots, not all used forms.
-The table should be broken up into different sections for different parts of speech.
-Even grammarish words should be included.
-All words should contain appropriate diacritics (e.g. accents and niqqud) to aide learning.
+Create a markdown table for each part of speech.
+1. Each table should have two columns:
+    1. "Word" provides the dictionary form of the word in target language.
+    2. "Gloss" provides an English-language gloss
+3. Only list vocabulary new to the chapter.
+    DO NOT LIST VOCABULARY PREVIOUSLY USED IN ANOTHER CHAPTER.
 
 Whenever possible:
 1. Introduce a word and its opposite in the same story; use repetition to illustrate that the words are opposites
-2. Introduce etymologically related words in the same story, and use repetition to illustrate the relationship
+2. Introduce etymologically related words in the same story, and use repetition to illustrate the relationship.
+3. Focus the new vocabulary around a single theme.
 
 ## Grammar
 
-Should contain a list of short English descriptions of which grammar is introduced in the chapter.
-These items should not be detailed enough for learning, but only detailed enough so that a knowledgable teacher can skim the content to see what concepts are introduced in the chapter.
+Create a list of 1 sentence English descriptions of the grammar introduced in the chapter.
+1. The items should not be detailed enough for learning.
+2. They should be useful for a teacher to skim to see what material is introduced, or for a light review of the material.
 
 IMPORTANT:
-You should minimize the new grammar introduced,
-and only intoduce a new concept if it is absolutely required for the story.
+1. You should minimize the new grammar introduced.
+2. Only intoduce a new concept if it is absolutely required for the story.
+3. The text of the story should still review previous grammar.

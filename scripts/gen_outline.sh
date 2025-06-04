@@ -26,11 +26,20 @@ fi
 # generate output
 ########################################
 
+files_for_prompt="
+    characters
+    $story_about_file
+    $(dirname $story_dir)/about
+"
+echo "files_for_prompt=$files_for_prompt"
+
 prompt="
 Create an outline for the story described in the file \`$story_about_file\`.
 $(cat prompts/outline)
 
-$(files-to-prompt -c "$story_about_file" "characters")
+---
+
+$(files-to-prompt -c $files_for_prompt)
 "
 
 scripts/internal/llm.sh "$story_dir/outline" "$prompt"

@@ -1,5 +1,6 @@
 .env
 venv
+tmp
 
 *.sw?
 *.text*

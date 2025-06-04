@@ -3,7 +3,7 @@
 , "Sex": "Male"
 , "Hair": "Blond"
 , "Favorites":
-    { "Animal": ["Dinosaur", "Tiger"]
+    { "Animal": "Dinosaur"
     , "Food": ["Pasta (with pesto)", "Pizza", "Chicken Nuggets"]
     , "Toy": ["Legos", "Trains", "Puzzles"]
     , "TV": ["Paw Patrol", "Blaze and the Monster Machines", "Harry Potter"]

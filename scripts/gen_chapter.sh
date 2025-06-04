@@ -21,13 +21,16 @@ text_file="$chapter_dir"/text
 
 files_for_prompt="
     characters
+    $(dirname $story_dir)/about
     $story_dir/outline
 "
 for chapter in $(ls "$story_dir" | grep '^chapter' | sort -n); do
     text="$story_dir/$chapter/text"
     if [ -e "$text" ]; then
+        text_simplified="$text.simplified"
+        ./scripts/internal/simplify_text.sh "$text" "$text_simplified"
         files_for_prompt="$files_for_prompt
-        $story_dir/$chapter/text"
+        $text_simplified"
     fi
 done
 echo "files_for_prompt=$files_for_prompt"

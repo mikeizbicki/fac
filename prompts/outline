@@ -1,14 +1,76 @@
-1. The outline should contain between 5-15 chapters.
-2. The outline should be in English with markdown formatting.
+First create a list of scenes.
+Each scene should have:
+1. A name.
+2. A description of what appears in the scene.
+3. Whether the scene will be viewed top-down or from the side.
+4. A list of items that commonly appear in the scene.
+
+Then create an outline of the plot.
+1. The outline should be in English with markdown formatting.
+1. The outline should be broken up into a series of chapters based on one of the following story structures.
+    1. You must explicitly specify the story struture that you are using.
+    2. Possible structures are:
+        1. Freytag's pyramid.
+            1. Introduction: Establish the characters and stakes.
+            2. Rise, or rising action: Things seem to be on the up.
+            3. Climax: The world is turned upside-down.
+            4. Return, or fall: We’re heading for tragedy.
+            5. Catastrophe: The inevitable becomes true.
+
+        2. Dan Harmond's story cycle.
+            1. A character is in a zone of comfort. Everyday life is mundane and unchallenging.
+            2. But they want something. The protagonist’s desire compels them to take action.
+            3. They enter an unfamiliar situation. The character crosses the threshold to pursue what they want.
+            4. Adapt to it. They acquire skills and learn how to survive in this new world.
+            5. Get what they wanted. The character achieves their goal, but at a cost.
+            6. Pay a heavy price for it. New and unexpected losses follow the victory.
+            7. Then return to their familiar situation. The character goes back to where they started.
+            8. Having changed. The story’s resolution; the lessons they’ve learned stay with them, and the character has grown.
+
+        3. The Hero's Journey.
+            1. The Ordinary World: We meet our hero.
+            2. Call to Adventure: Will they meet the challenge?
+            3. Refusal of the Call: They resist the adventure.
+            4. Meeting the Mentor: A teacher arrives.
+            5. Crossing the First Threshold: The hero leaves their comfort zone.
+            6. Tests, Allies, Enemies: Making friends and facing roadblocks.
+            7. Approach to the Inmost Cave: Getting closer to our goal.
+            8. Ordeal: The hero’s biggest test yet!
+            9. Reward (Seizing the Sword): Light at the end of the tunnel
+            10. The Road Back: We aren’t safe yet.
+            11. Resurrection: The final hurdle is reached.
+            12. Return with the Elixir: The hero heads home, triumphant.
+
+        4. Seven Point Story Structure.
+            1. The Hook: a compelling introduction to the story’s intriguing world and/or characters
+            2. Plot Turn 1: an inciting incident that brings the protagonist into an adventure
+            3. Pinch 1: the stakes are raised with the introduction of the antagonist or the major conflict or challenge
+            4. Midpoint: a turning point in the story where the protagonist goes from reaction to action
+            5. Pinch 2: the major conflict takes a turn for the worse, and all appears lost for the protagonist
+            6. Plot Turn 2: the protagonist discovers something that helps them resolve the major conflict or defeat the antagonist
+            7. Resolution: the major conflict is resolved, and the antagonist is defeated
+
+        5. The Fichtean curve.
+            1. Rising Action: a series of increasingly troublesome crises that the hero is able to overcome.
+                (Each crisis should be its own chapter; there should be 3-8 crises.)
+            2. Climax: a final, larger crisis that is either catastrophic or redeeming for the protagonist.
+            3. Falling Action: the story will be resolved in some way.
+
 3. For each chapter, you should specify:
-    1. A 2-3 sentence plot description. (The plot must have a 3-act structure with tension building and being resolved.)
-    2. A short list of grammar concepts to introduce.
-        The grammar concepts should include increasingly complicated verb forms, sentence structure, time references, etc.
-    3. There should be a vocabulary theme for each chapter
-        (and the opportunity to review previous vocabulary).
+    1. The corresponding element in the story structure.
+    2. A scene, including:
+        1. The name of the scene (which should match exactly the name of a scene from the scenes section)
+        2. A list of characters that will appear.
+        3. A list of any items that will appear.
+    3. A 2-3 sentence plot description.
+        1. The chapter plot should internally follow a 3-act structure.
+        2. Explicitly list the setup, confrontation, and resolution, and ensure that these tie into the overall story structure well.
+    4. A short list of grammar concepts to introduce.
+        1. The grammar concepts for later chapters should include increasingly complicated verb forms, sentence structure, time references, etc.
+    5. A vocabulary theme.
+
 4. The plot should be designed to:
     1. Be fun for small kids.
     2. Be funny.
     3. Gradually introduce more complpex vocabulary/grammar/other idioms.
     4. Later chapters should build off the linguistic material in previous chapters.
-5. The characters are all "shape shifters" (בְּנֵי־חַיּוֹת in Hebrew, μεταμορφούμενος in Greek, and transformator in Latin)  that are able to change from their human form into the form of their favorite animal.  They use their transformed forms in different ways throughout the story to advance the plot.
