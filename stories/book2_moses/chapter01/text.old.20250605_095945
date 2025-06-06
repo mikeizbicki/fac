@@ -1,0 +1,188 @@
+{
+  "chapter": "הָעֹנִי מַתְחִיל",
+  "sections": [
+    {
+      "title_english": "Happy Children Playing",
+      "title_target": "יְלָדִים שְׂמֵחִים מְשַׂחֲקִים",
+      "image_caption": "Four children laughing and playing together in a sunny stone courtyard with tall columns and Egyptian decorations",
+      "text": "אַהֲרֹן וְאֶבֶן וְיִצְחָק וְאַרְלִיָה יְלָדִים שְׂמֵחִים. הֵם מְשַׂחֲקִים בֶּחָצֵר."
+    },
+    {
+      "title_english": "The Children Love Animals",
+      "title_target": "הַיְלָדִים אוֹהֲבִים חַיּוֹת",
+      "image_caption": "Each child dreaming of their favorite animal - a dinosaur, owl, koala, and panda appearing as thought bubbles above them",
+      "text": "אַהֲרֹן אוֹהֵב דִּינוֹזַאר. אֶבֶן אוֹהֵב יַנְשׁוּף. יִצְחָק אוֹהֵב קוֹאָלָה. אַרְלִיָה אוֹהֶבֶת פַּנְדָּה."
+    },
+    {
+      "title_english": "Bowser Arrives",
+      "title_target": "בָּאוֹסֶר בָּא",
+      "image_caption": "A large, menacing turtle-like creature with spikes entering the courtyard with smaller turtle minions behind him",
+      "text": "בָּאוֹסֶר הָרָע בָּא עִם הַקּוּפָּה שֶׁלּוֹ. הוּא גָּדוֹל וְרָע."
+    },
+    {
+      "title_english": "Bowser Demands Work",
+      "title_target": "בָּאוֹסֶר דוֹרֵשׁ עֲבוֹדָה",
+      "image_caption": "Bowser pointing angrily at the children while his koopa minions hold work tools and chains",
+      "text": "בָּאוֹסֶר אוֹמֵר: עֲבְדוּ לִי! אַתֶּם עֲבָדִים עַכְשָׁו! הַיְלָדִים עֲצֵבִים וּבוֹכִים."
+    },
+    {
+      "title_english": "Shenzi Comforts Them",
+      "title_target": "שֵׁנְצִי מְנַחֶמֶת אוֹתָם",
+      "image_caption": "A friendly dog with golden fur hugging each of the crying children in turn, making them smile",
+      "text": "כֶּלֶב שֵׁנְצִי בָּאָה. הִיא חוֹבֶקֶת אֶת הַיְלָדִים הָעֲצֵבִים. עַכְשָׁו הֵם שְׂמֵחִים."
+    },
+    {
+      "title_english": "The Children Discover Magic",
+      "title_target": "הַיְלָדִים מְגַלִּים קֶסֶם",
+      "image_caption": "The children beginning to glow with magical light as they start to transform, with surprised expressions on their faces",
+      "text": "הַיְלָדִים מְגַלִּים: הֵם בְּנֵי־חַיּוֹת! הֵם יְכוֹלִים לְהִשְׁתַּנּוֹת לְחַיּוֹת!"
+    },
+    {
+      "title_english": "Aaron Becomes a Dinosaur",
+      "title_target": "אַהֲרֹן נַעֲשֶׂה דִּינוֹזַאר",
+      "image_caption": "Aaron transforming into a large, friendly dinosaur with his blonde hair still visible, towering over the courtyard",
+      "text": "אַהֲרֹן מִשְׁתַּנֶּה לְדִּינוֹזַאר גָּדוֹל! הוּא חָזָק מְאֹד!"
+    },
+    {
+      "title_english": "Evan Becomes an Owl",
+      "title_target": "אֶבֶן נַעֲשֶׂה יַנְשׁוּף",
+      "image_caption": "Evan transforming into a wise-looking owl with dark feathers, his wings spread wide as he prepares to fly",
+      "text": "אֶבֶן מִשְׁתַּנֶּה לְיַנְשׁוּף חָכָם! הוּא יָכוֹל לָעוּף!"
+    },
+    {
+      "title_english": "Isaac Becomes a Koala",
+      "title_target": "יִצְחָק נַעֲשֶׂה קוֹאָלָה",
+      "image_caption": "Isaac transforming into a cute, fluffy koala with grey fur, climbing up one of the stone columns",
+      "text": "יִצְחָק מִשְׁתַּנֶּה לְקוֹאָלָה חָמוּד! הוּא יָכוֹל לְטַפֵּס!"
+    },
+    {
+      "title_english": "Aurelia Becomes a Panda",
+      "title_target": "אַרְלִיָה נַעֲשֵׂית פַּנְדָּה",
+      "image_caption": "Aurelia transforming into a small, adorable panda with black and white fur, rolling playfully on the ground",
+      "text": "אַרְלִיָה מִשְׁתַּנָּה לְפַנְדָּה קְטַנָּה! הִיא חֲמוּדָה מְאֹד!"
+    },
+    {
+      "title_english": "They Escape from Bowser",
+      "title_target": "הֵם בּוֹרְחִים מִבָּאוֹסֶר",
+      "image_caption": "The four animal-children escaping from the courtyard while Bowser and his koopas chase after them unsuccessfully",
+      "text": "הַחַיּוֹת בּוֹרְחוֹת מִבָּאוֹסֶר הָרָע! הוּא לֹא יָכוֹל לִתְפֹּס אוֹתָם!"
+    },
+    {
+      "title_english": "They Run to the Wilderness",
+      "title_target": "הֵם רָצִים לַמִּדְבָּר",
+      "image_caption": "The animal-children running across sandy dunes toward distant mountains, leaving the palace far behind",
+      "text": "הַחַיּוֹת רָצוֹת לַמִּדְבָּר. הַמִּדְבָּר רָחוֹק מִבָּאוֹסֶר."
+    },
+    {
+      "title_english": "Isaac Needs the Bathroom",
+      "title_target": "יִצְחָק צָרִיךְ שֵׁרוּתִים",
+      "image_caption": "Isaac the koala looking uncomfortable and urgent, pointing toward some rocks while the other animals wait",
+      "text": "יִצְחָק הַקּוֹאָלָה צָרִיךְ לַעֲשׂוֹת צוֹאָה! הוּא רָץ אַחֲרֵי הַסֶּלַע."
+    },
+    {
+      "title_english": "Isaac Returns Happy",
+      "title_target": "יִצְחָק חוֹזֵר שָׂמֵחַ",
+      "image_caption": "Isaac the koala returning to his friends with a relieved and happy expression, rejoining the group",
+      "text": "יִצְחָק חוֹזֵר אַחֲרֵי הַצּוֹאָה. הוּא שָׂמֵחַ עַכְשָׁו!"
+    },
+    {
+      "title_english": "They Feel Guilty",
+      "title_target": "הֵם מַרְגִּישִׁים אַשְׁמָה",
+      "image_caption": "The four animals sitting sadly in the desert, looking back toward the distant palace with worried expressions",
+      "text": "הַחַיּוֹת עֲצֵבוֹת. הֵן חוֹשְׁבוֹת עַל יְלָדִים אֲחֵרִים עִם בָּאוֹסֶר."
+    },
+    {
+      "title_english": "They Argue About Returning",
+      "title_target": "הֵם רָבִים עַל חֲזָרָה",
+      "image_caption": "The animal-children in a heated discussion, with some pointing back toward the palace and others shaking their heads",
+      "text": "הַחַיּוֹת רָבוֹת: לַחֲזוֹר אוֹ לֹא לַחֲזוֹר? הֵן כּוֹעֲסוֹת זוֹ עַל זוֹ."
+    },
+    {
+      "title_english": "They Remember to Love",
+      "title_target": "הֵן זוֹכְרוֹת לֶאֱהֹב",
+      "image_caption": "The animal-children hugging each other and making up, with gentle, loving expressions replacing their angry ones",
+      "text": "אֶבֶן הַיַּנְשׁוּף אוֹמֵר: נֶאֱהַב אַחַת אֶת הַשְּׁנִיָּה! הַחַיּוֹת מִתְנַצְּלוֹת וְחוֹבְקוֹת."
+    },
+    {
+      "title_english": "Evan Reads a Book",
+      "title_target": "אֶבֶן קוֹרֵא סֵפֶר",
+      "image_caption": "Evan the owl holding an ancient-looking book in his talons, reading intently while the other animals gather around to listen",
+      "text": "אֶבֶן הַיַּנְשׁוּף קוֹרֵא סֵפֶר. הַסֵּפֶר אוֹמֵר: עֲזֹר לַאֲחֵרִים!"
+    },
+    {
+      "title_english": "They Decide to Help",
+      "title_target": "הֵן מַחְלִיטוֹת לַעֲזוֹר",
+      "image_caption": "The four animals standing together determinedly, looking toward the palace with brave, resolved expressions",
+      "text": "הַחַיּוֹת מַחְלִיטוֹת: נַחֲזִיר וְנַעֲזוֹר לַיְלָדִים הָאֲחֵרִים! זֶה חָשׁוּב!"
+    }
+  ],
+  "vocabulary": [
+    {
+      "part_of_speech": "noun",
+      "table": [
+        {"word": "יֶלֶד", "gloss": "child (masculine)"},
+        {"word": "יַלְדָּה", "gloss": "child (feminine)"},
+        {"word": "חַיָּה", "gloss": "animal"},
+        {"word": "דִּינוֹזַאר", "gloss": "dinosaur"},
+        {"word": "יַנְשׁוּף", "gloss": "owl"},
+        {"word": "קוֹאָלָה", "gloss": "koala"},
+        {"word": "פַּנְדָּה", "gloss": "panda"},
+        {"word": "כֶּלֶב", "gloss": "dog"},
+        {"word": "חָצֵר", "gloss": "courtyard"},
+        {"word": "מִדְבָּר", "gloss": "wilderness"},
+        {"word": "עֶבֶד", "gloss": "slave"},
+        {"word": "עֲבוֹדָה", "gloss": "work"},
+        {"word": "צוֹאָה", "gloss": "poop"},
+        {"word": "סֵפֶר", "gloss": "book"}
+      ]
+    },
+    {
+      "part_of_speech": "adjective",
+      "table": [
+        {"word": "שָׂמֵחַ", "gloss": "happy"},
+        {"word": "עָצֵב", "gloss": "sad"},
+        {"word": "רָע", "gloss": "evil"},
+        {"word": "גָּדוֹל", "gloss": "big"},
+        {"word": "קָטָן", "gloss": "small"},
+        {"word": "חָזָק", "gloss": "strong"},
+        {"word": "חָכָם", "gloss": "wise"},
+        {"word": "חָמוּד", "gloss": "cute"},
+        {"word": "רָחוֹק", "gloss": "far"},
+        {"word": "חָשׁוּב", "gloss": "important"}
+      ]
+    },
+    {
+      "part_of_speech": "verb",
+      "table": [
+        {"word": "שָׂחַק", "gloss": "to play"},
+        {"word": "אָהַב", "gloss": "to love"},
+        {"word": "בָּא", "gloss": "to come"},
+        {"word": "אָמַר", "gloss": "to say"},
+        {"word": "עָבַד", "gloss": "to work"},
+        {"word": "בָּכָה", "gloss": "to cry"},
+        {"word": "חָבַק", "gloss": "to hug"},
+        {"word": "גָּלָה", "gloss": "to discover"},
+        {"word": "שָׁנָה", "gloss": "to change"},
+        {"word": "יָכוֹל", "gloss": "to be able"},
+        {"word": "עוּף", "gloss": "to fly"},
+        {"word": "טִפֵּס", "gloss": "to climb"},
+        {"word": "בָּרַח", "gloss": "to escape"},
+        {"word": "רוּץ", "gloss": "to run"},
+        {"word": "חָזַר", "gloss": "to return"},
+        {"word": "חָשַׁב", "gloss": "to think"},
+        {"word": "רִיב", "gloss": "to argue"},
+        {"word": "כָּעַס", "gloss": "to be angry"},
+        {"word": "זָכַר", "gloss": "to remember"},
+        {"word": "קָרָא", "gloss": "to read"},
+        {"word": "עָזַר", "gloss": "to help"},
+        {"word": "חָלַט", "gloss": "to decide"}
+      ]
+    }
+  ],
+  "grammar": [
+    "Present tense verbs agree with subject in gender and number.",
+    "Adjectives follow nouns and agree in gender and number.",
+    "The prefix הַ makes nouns definite (the).",
+    "Simple coordinating conjunction וְ means 'and'."
+  ]
+}

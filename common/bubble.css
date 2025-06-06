@@ -1,0 +1,33 @@
+.word-container {
+  display: inline-block;
+  position: relative;
+}
+
+.word-hover-span:hover,
+/*.word-speech-bubble:hover,*/
+.word-container:hover .word-hover-span {
+  background: yellow;
+}
+
+.word-speech-bubble {
+  position: absolute;
+  top: 100%; /* Position right below the word */
+  left: 0;
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 5px 10px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  display: none;
+  z-index: 9999;
+  pointer-events: auto;
+  width: 20em;
+  word-wrap: break-word;
+  overflow: hidden;
+}
+
+/* Show bubble on hover of either word or bubble itself */
+.word-container:hover .word-speech-bubble {
+  display: block;
+}
+

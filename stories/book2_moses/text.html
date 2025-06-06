@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>text</title>
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    span.underline{text-decoration: underline;}
+    div.column{display: inline-block; vertical-align: top; width: 50%;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    ul.task-list{list-style: none;}
+  </style>
+  <style>.word-container {
+    display: inline-block;
+    position: relative;
+  }
+
+  .word-hover-span:hover,
+  /*.word-speech-bubble:hover,*/
+  .word-container:hover .word-hover-span {
+    background: yellow;
+  }
+
+  .word-speech-bubble {
+    position: absolute;
+    top: 100%; /* Position right below the word */
+    left: 0;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 5px 10px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    display: none;
+    z-index: 9999;
+    pointer-events: auto;
+    width: 20em;
+    word-wrap: break-word;
+    overflow: hidden;
+  }
+
+  /* Show bubble on hover of either word or bubble itself */
+  .word-container:hover .word-speech-bubble {
+    display: block;
+  }</style>
+  <script>(function() {
+    function initSpeechBubble() {
+      try {
+        // Create and append speech bubble element
+        const speechBubble = document.createElement('div');
+        speechBubble.id = 'word-speech-bubble';
+        document.body.appendChild(speechBubble);
+
+        // Track the currently active word span
+        let activeWordSpan = null;
+
+        // Process text nodes - wrap words in spans
+        function processTextNodes() {
+          // Get all text-containing elements
+          const textElements = document.querySelectorAll('p, h1, h2, h3, h4, h5, h6, span, div, a, li');
+
+          textElements.forEach(function(element) {
+            // Skip elements that already have been processed
+            if (element.getAttribute('data-word-hover-processed') === 'true') return;
+            if (element.closest('script, style')) return; // Skip script and style elements
+
+            element.setAttribute('data-word-hover-processed', 'true');
+
+            // Don't process if this is already a word span we created
+            if (element.classList.contains('word-hover-span')) return;
+
+            const text = element.textContent.trim();
+            if (!text) return;
+
+            // Don't process elements with no direct text nodes
+            let hasDirectTextNode = false;
+            for (let i = 0; i < element.childNodes.length; i++) {
+              if (element.childNodes[i].nodeType === Node.TEXT_NODE &&
+                  element.childNodes[i].textContent.trim()) {
+                hasDirectTextNode = true;
+                break;
+              }
+            }
+            if (!hasDirectTextNode) return;
+
+            // Replace text nodes with wrapped words
+            const childNodes = Array.from(element.childNodes);
+
+            childNodes.forEach(function(node) {
+              if (node.nodeType === Node.TEXT_NODE) {
+                const words = node.textContent.split(/(\s+)/); // Split by whitespace but keep separators
+                const fragment = document.createDocumentFragment();
+
+                words.forEach(function(word) {
+                  if (word.trim()) {
+                    // Create container for word and its bubble
+                    const container = document.createElement('span');
+                    container.classList.add('word-container');
+                    container.style.display = 'inline-block';
+                    container.style.position = 'relative';
+                    
+                    // Create span for the word
+                    const span = document.createElement('span');
+                    span.textContent = word;
+                    span.classList.add('word-hover-span');
+                    
+                    // Create bubble for this word
+                    const bubble = document.createElement('div');
+                    bubble.classList.add('word-speech-bubble');
+                    bubble.textContent = word.trim();
+                    
+                    // Append everything
+                    container.appendChild(span);
+                    container.appendChild(bubble);
+                    fragment.appendChild(container);
+                  } else {
+                    // Preserve whitespace
+                    fragment.appendChild(document.createTextNode(word));
+                  }
+                });
+
+                node.parentNode.replaceChild(fragment, node);
+              }
+            });
+          });
+        }
+
+        // Handle mouse leaving the word or bubble
+        document.addEventListener('mouseover', function(e) {
+          if (e.target.classList.contains('word-hover-span')) {
+            // Already handled by the mouseenter event
+          } else if (e.target !== speechBubble && !speechBubble.contains(e.target)) {
+            // Mouse is not over a word span or the bubble
+            speechBubble.style.display = 'none';
+            activeWordSpan = null;
+          }
+        });
+
+        // Add event listener to the bubble itself
+        speechBubble.addEventListener('mouseleave', function() {
+          if (!activeWordSpan) {
+            speechBubble.style.display = 'none';
+          }
+        });
+
+        // Initial setup
+        processTextNodes();
+
+        // Setup mutation observer to handle dynamically added content
+        const observer = new MutationObserver(function(mutations) {
+          processTextNodes();
+        });
+
+        observer.observe(document.body, {
+          childList: true,
+          subtree: true
+        });
+
+        console.log('Word speech bubble initialized successfully');
+      } catch (error) {
+        console.error('Error initializing word speech bubble:', error);
+      }
+    }
+
+    // Wait for DOM to be fully loaded before initializing
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initSpeechBubble);
+    } else {
+      // DOM is already ready
+      initSpeechBubble();
+    }
+  })();
+
+
+  function adjustBubblePosition() {
+    document.querySelectorAll('.word-speech-bubble').forEach(bubble => {
+      const rect = bubble.getBoundingClientRect();
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+
+      // Adjust horizontal position if needed
+      if (rect.right > viewportWidth) {
+        const overflow = rect.right - viewportWidth;
+        bubble.style.left = `-${overflow}px`;
+      }
+
+      // Adjust vertical position if needed
+      if (rect.bottom > viewportHeight) {
+        bubble.style.top = 'auto';
+        bubble.style.bottom = '100%';
+      }
+    });
+  }
+
+  // Add event listener to check positions on hover
+  document.addEventListener('mouseover', function(e) {
+    if (e.target.classList.contains('word-hover-span') ||
+        e.target.classList.contains('word-speech-bubble')) {
+      // Use requestAnimationFrame for performance
+      requestAnimationFrame(adjustBubblePosition);
+    }
+  });</script>
+  <style>body {
+    font-size: 40pt;
+    direction: rtl;
+    unicode-bidi: bidi-override;
+  }
+
+  h3 + p {
+    display: inline-block;
+    vertical-align: top;
+    width: 50%;
+    margin: 0;
+    box-sizing: border-box;
+  }
+
+  h3 + p + p {
+    display: inline-block;
+    vertical-align: top;
+    width: 45%;
+    margin: 0;
+    padding-left: 20px;
+    box-sizing: border-box;
+    text-align: right;
+  }
+
+  h3 + p img {
+    max-width: 100%;
+    height: auto;
+  }</style>
+  <script>document.addEventListener('keydown', function(event) {
+    // Check if arrow keys or page up/down were pressed
+    if (event.keyCode === 40 || event.key === 'ArrowDown' ||
+        event.keyCode === 38 || event.key === 'ArrowUp' ||
+        event.keyCode === 33 || event.key === 'PageUp' ||
+        event.keyCode === 34 || event.key === 'PageDown') {
+
+      // Prevent default scrolling behavior
+      event.preventDefault();
+
+      // Find the current position
+      const scrollPosition = window.scrollY;
+      let targetHeading = null;
+
+      // Handle arrow keys (all h tags)
+      if (event.keyCode === 40 || event.key === 'ArrowDown' ||
+          event.keyCode === 38 || event.key === 'ArrowUp') {
+        // Get all heading elements
+        const headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
+
+        if (event.keyCode === 40 || event.key === 'ArrowDown') {
+          // DOWN ARROW: Find the next heading to scroll to
+          for (let i = 0; i < headings.length; i++) {
+            const headingPosition = headings[i].getBoundingClientRect().top + window.scrollY;
+
+            // If this heading is below current position, scroll to it
+            if (headingPosition > scrollPosition + 10) {
+              targetHeading = headings[i];
+              break;
+            }
+          }
+        }
+        else if (event.keyCode === 38 || event.key === 'ArrowUp') {
+          // UP ARROW: Find the previous heading to scroll to
+          let previousHeading = null;
+
+          for (let i = 0; i < headings.length; i++) {
+            const headingPosition = headings[i].getBoundingClientRect().top + window.scrollY;
+
+            // If this heading is at or above current position (with small buffer)
+            if (headingPosition < scrollPosition - 10) {
+              previousHeading = headings[i];
+            } else {
+              break; // We've gone past the current position
+            }
+          }
+
+          // If we found a previous heading, use it
+          if (previousHeading) {
+            targetHeading = previousHeading;
+          }
+        }
+      }
+      // Handle Page Up/Down (only h2 tags)
+      else if (event.keyCode === 33 || event.key === 'PageUp' ||
+               event.keyCode === 34 || event.key === 'PageDown') {
+        // Get only h2 elements
+        const h2Headings = document.querySelectorAll('h2');
+
+        if (event.keyCode === 34 || event.key === 'PageDown') {
+          // PAGE DOWN: Find the next h2 to scroll to
+          for (let i = 0; i < h2Headings.length; i++) {
+            const headingPosition = h2Headings[i].getBoundingClientRect().top + window.scrollY;
+
+            // If this h2 is below current position, scroll to it
+            if (headingPosition > scrollPosition + 10) {
+              targetHeading = h2Headings[i];
+              break;
+            }
+          }
+        }
+        else if (event.keyCode === 33 || event.key === 'PageUp') {
+          // PAGE UP: Find the previous h2 to scroll to
+          let previousHeading = null;
+
+          for (let i = 0; i < h2Headings.length; i++) {
+            const headingPosition = h2Headings[i].getBoundingClientRect().top + window.scrollY;
+
+            // If this h2 is at or above current position (with small buffer)
+            if (headingPosition < scrollPosition - 10) {
+              previousHeading = h2Headings[i];
+            } else {
+              break; // We've gone past the current position
+            }
+          }
+
+          // If we found a previous h2, use it
+          if (previousHeading) {
+            targetHeading = previousHeading;
+          }
+        }
+      }
+
+      // Scroll to the target heading if one was found
+      if (targetHeading) {
+        //targetHeading.scrollIntoView({behavior: 'smooth'});
+        targetHeading.scrollIntoView({behavior: 'instant'});
+      }
+    }
+  });</script>
+</head>
+<body>
+<h2 id="chapter-0-העני-מתחיל">Chapter 0: הָעֹנִי מַתְחִיל</h2>
+<h3 id="section-0-ילדים-שמחים-משחקים">Section 0: יְלָדִים שְׂמֵחִים מְשַׂחֲקִים</h3>
+<p><img src="subscene/Center%20Courtyard.png" alt="Four children laugh and play together in the bright courtyard, tossing colorful balls and building with wooden blocks. Aaron holds a small dinosaur toy while Isaac waves a toy lightsaber playfully." /></p>
+<p>אַרְבָּעָה יְלָדִים שְׂמֵחִים מְשַׂחֲקִים בֶּחָצֵר. אַהֲרוֹן וְיִצְחָק וְאֵבֶן וְאוֹרֵלְיָה אוֹהֲבִים לְשַׂחֵק.</p>
+<h3 id="section-1-אהרון-אוהב-דינוזורים">Section 1: אַהֲרוֹן אוֹהֵב דִּינוֹזוֹרִים</h3>
+<p><img src="subscene/Center%20Courtyard.png" alt="Aaron sits on the marble floor holding up a small wooden dinosaur toy, making it ‘walk’ across the stones while his siblings watch with interest." /></p>
+<p>אַהֲרוֹן אוֹהֵב דִּינוֹזוֹרִים. הוּא מְשַׂחֵק עִם דִּינוֹזוֹר קָטָן.</p>
+<h3 id="section-2-יצחק-משחק-עם-חרב-אור">Section 2: יִצְחָק מְשַׂחֵק עִם חֶרֶב אוֹר</h3>
+<p><img src="subscene/Center%20Courtyard.png" alt="Isaac waves his toy lightsaber in wide arcs, creating whooshing sounds as he pretends to battle invisible enemies while standing in a shaft of golden sunlight." /></p>
+<p>יִצְחָק מְשַׂחֵק עִם חֶרֶב אוֹר. הוּא אוֹהֵב לְהִלָּחֵם.</p>
+<h3 id="section-3-אבן-עושה-ניר">Section 3: אֵבֶן עוֹשֶׂה נְיָר</h3>
+<p><img src="subscene/Center%20Courtyard.png" alt="Evan sits cross-legged folding pieces of papyrus into various shapes, his dark hair falling over his focused face as he creates paper animals and objects." /></p>
+<p>אֵבֶן עוֹשֶׂה דְּבָרִים מִנְּיָר. הוּא עוֹשֶׂה צִפּוֹר נְיָר.</p>
+<h3 id="section-4-אורליה-משחקת-עם-אכל">Section 4: אוֹרֵלְיָה מְשַׂחֶקֶת עִם אֹכֶל</h3>
+<p><img src="subscene/Center%20Courtyard.png" alt="Little Aurelia arranges wooden toy food pieces, pretending to cook and serve meals to her brothers with great concentration and joy." /></p>
+<p>אוֹרֵלְיָה מְשַׂחֶקֶת עִם אֹכֶל מִשְׂחָק. הִיא אוֹהֶבֶת לְבַשֵּׁל.</p>
+<h3 id="section-5-אויבים-חשכים-באים">Section 5: אוֹיְבִים חֲשֻׁכִים בָּאִים</h3>
+<p><img src="subscene/Center%20Courtyard.png" alt="Dark shadows suddenly fall across the courtyard as Bowser and his koopa troopas march between the pillars, their heavy footsteps echoing ominously off the marble." /></p>
+<p>פִּתְאֹם בָּאִים אוֹיְבִים רָעִים! בּוֹזֶר וְהַצְּבָבִים שֶׁלּוֹ בָּאִים לֶחָצֵר.</p>
+<h3 id="section-6-בוזר-מצוה-לעבד">Section 6: בּוֹזֶר מְצַוֶּה לַעֲבֹד</h3>
+<p><img src="subscene/Center%20Courtyard.png" alt="Bowser stands menacingly in the center of the courtyard, pointing at the frightened children while his koopa troops surround them, demanding they stop playing." /></p>
+<p>בּוֹזֶר אוֹמֵר: “אַל תְּשַׂחֲקוּ! אַתֶּם צְרִיכִים לַעֲבֹד!”</p>
+<h3 id="section-7-הילדים-נעשים-עצבים">Section 7: הַיְלָדִים נַעֲשִׂים עֲצֵבִים</h3>
+<p><img src="subscene/Center%20Courtyard.png" alt="The four children huddle together, tears beginning to form in their eyes as they look at their scattered toys, realizing their peaceful playtime is over." /></p>
+<p>הַיְלָדִים עֲצֵבִים מְאֹד. הֵם בּוֹכִים כִּי אֵין לָהֶם מִשְׂחָקִים.</p>
+<h3 id="section-8-שנזי-באה-לנחם">Section 8: שֶׁנְזִי בָּאָה לְנַחֵם</h3>
+<p><img src="subscene/Center%20Courtyard.png" alt="A friendly dog with warm brown eyes approaches the crying children, wagging her tail and gently nuzzling against them to provide comfort." /></p>
+<p>כֶּלֶב טוֹב בָּא. שְׁמָהּ שֶׁנְזִי. הִיא חוֹבֶקֶת אֶת הַיְלָדִים הָעֲצֵבִים.</p>
+<h3 id="section-9-הילדים-מרגישים-יותר-טוב">Section 9: הַיְלָדִים מַרְגִּישִׁים יוֹתֵר טוֹב</h3>
+<p><img src="subscene/Center%20Courtyard.png" alt="The children smile through their tears as Shenzi licks their faces and wags her tail, their sadness beginning to transform into determination." /></p>
+<p>אַחֲרֵי הַחִבּוּק, הַיְלָדִים שְׂמֵחִים יוֹתֵר. הֵם לֹא בּוֹכִים.</p>
+<h3 id="section-10-ההפיכה-הראשונה">Section 10: הַהֲפִיכָה הָרִאשׁוֹנָה</h3>
+<p><img src="subscene/Behind%20Pillars.png" alt="Aaron suddenly transforms into a small dinosaur, his human form shimmering and changing as he discovers his magical shapeshifting ability for the first time." /></p>
+<p>פִּתְאֹם אַהֲרוֹן הוֹפֵךְ לְדִינוֹזוֹר! הוּא בֶּן־חַיּוֹת!</p>
+<h3 id="section-11-כל-הילדים-הופכים">Section 11: כָּל הַיְלָדִים הוֹפְכִים</h3>
+<p><img src="subscene/Behind%20Pillars.png" alt="One by one, each child transforms into their favorite animal - Isaac becomes a koala, Evan transforms into an owl, and Aurelia shifts into a panda, all hiding between the pillars." /></p>
+<p>יִצְחָק הוֹפֵךְ לְקוֹאָלָה, אֵבֶן הוֹפֵךְ לְיַנְשׁוּף, וְאוֹרֵלְיָה הוֹפֶכֶת לְדֻב פַּנְדָּה.</p>
+<h3 id="section-12-בריחה-דרך-החצר">Section 12: בְּרִיחָה דֶּרֶךְ הֶחָצֵר</h3>
+<p><img src="subscene/Palace%20Courtyard.png" alt="The four animal-children dart between the marble columns and around the palm trees, using their new forms to evade the confused koopa troops who cannot catch them." /></p>
+<p>בְּנֵי־הַחַיּוֹת רָצִים מַהֵר בֵּין הָעַמּוּדִים. הַצְּבָבִים לֹא יְכוֹלִים לִתְפֹּס אוֹתָם.</p>
+<h3 id="section-13-בוזר-כועס">Section 13: בּוֹזֶר כּוֹעֵס</h3>
+<p><img src="subscene/Palace%20Courtyard.png" alt="Bowser roars with frustration as he watches the children escape in their animal forms, his koopa troops running around helplessly trying to catch creatures they’ve never seen before." /></p>
+<p>בּוֹזֶר כּוֹעֵס מְאֹד! הוּא צוֹעֵק: “תִּתְפְּסוּ אֶת בְּנֵי־הַחַיּוֹת!”</p>
+<h3 id="section-14-חרות-אבל-אשמה">Section 14: חֵרוּת אֲבָל אַשְׁמָה</h3>
+<p><img src="subscene/Palace%20Courtyard.png" alt="The four children, now back in human form, stand at the edge of the courtyard looking back at other ordinary children who remain trapped, feeling conflicted about their escape." /></p>
+<p>הַיְלָדִים חָפְשִׁיִּים אֲבָל עֲצֵבִים. יְלָדִים אֲחֵרִים עוֹד עֲבָדִים לְבוֹזֶר.</p>
+<h2 id="chapter-1-הקריאה-האלהית">Chapter 1: הַקְּרִיאָה הָאֱלֹהִית</h2>
+<h3 id="section-0-הילדים-מסתתרים-במערה">Section 0: הַיְלָדִים מִסְתַּתְּרִים בַּמְּעָרָה</h3>
+<p><img src="subscene/Cave%20Entrance.png" alt="The four children, back in their human forms, cautiously enter the cave opening while looking over their shoulders to make sure they weren’t followed by Bowser’s troops." /></p>
+<p>בְּנֵי־הַחַיּוֹת נִכְנָסִים לַמְּעָרָה. הֵם מִסְתַּתְּרִים מִבּוֹזֶר.</p>
+<h3 id="section-1-הם-יושבים-ונחים">Section 1: הֵם יוֹשְׁבִים וְנָחִים</h3>
+<p><img src="subscene/Cave%20Floor.png" alt="The children sit cross-legged on the soft sandy floor, breathing heavily from their escape, with patches of sunlight illuminating their tired faces." /></p>
+<p>הַיְלָדִים יוֹשְׁבִים עַל הַחוֹל. הֵם עֲיֵפִים מֵהָרִיצָה.</p>
+<h3 id="section-2-אהרן-עצב">Section 2: אַהֲרֹן עָצֵב</h3>
+<p><img src="subscene/Cave%20Floor.png" alt="Aaron sits with his head in his hands, his small shoulders shaking as tears begin to fall onto the sandy cave floor." /></p>
+<p>אַהֲרֹן עָצֵב מְאֹד. הוּא בּוֹכֶה כִּי הוּא פוֹחֵד.</p>
+<h3 id="section-3-שנזי-באה-לעזר">Section 3: שֶׁנְזִי בָּאָה לַעְזֹר</h3>
+<p><img src="subscene/Cave%20Floor.png" alt="The friendly dog Shenzi appears at the cave entrance, wagging her tail as she trots over to the crying boy with gentle, caring eyes." /></p>
+<p>שֶׁנְזִי הַכֶּלֶב הַטּוֹב בָּאָה. הִיא רוֹאָה אֶת אַהֲרֹן בּוֹכֶה.</p>
+<h3 id="section-4-שנזי-נותנת-חבוקים">Section 4: שֶׁנְזִי נוֹתֶנֶת חִבּוּקִים</h3>
+<p><img src="subscene/Cave%20Floor.png" alt="Shenzi nuzzles against Aaron and wraps her furry body around him in a warm embrace, licking his tears away while he holds onto her soft fur." /></p>
+<p>שֶׁנְזִי חוֹבֶקֶת אֶת אַהֲרֹן. הַחִבּוּק עוֹשֶׂה אוֹתוֹ שָׂמֵחַ.</p>
+<h3 id="section-5-קול-אלהים-קורא">Section 5: קוֹל אֱלֹהִים קוֹרֵא</h3>
+<p><img src="subscene/Deep%20Cave.png" alt="A bright, warm light fills the deepest part of the cave as a gentle but powerful voice echoes off the stone walls, causing all the children to look up in wonder." /></p>
+<p>פִּתְאֹם קוֹל אֱלֹהִים מְדַבֵּר מִן הַמְּעָרָה: “בְּנַי!”</p>
+<h3 id="section-6-אלהים-נותן-שליחות">Section 6: אֱלֹהִים נוֹתֵן שְׁלִיחוּת</h3>
+<p><img src="subscene/Deep%20Cave.png" alt="The children stand in reverent attention as the divine voice continues to speak, with the cave walls seeming to glow with holy light around them." /></p>
+<p>“לְכוּ וְהוֹצִיאוּ אֶת כָּל הַיְלָדִים מִיַּד בּוֹזֶר הָרָשָׁע!”</p>
+<h3 id="section-7-הילדים-פוחדים">Section 7: הַיְלָדִים פּוֹחֲדִים</h3>
+<p><img src="subscene/Deep%20Cave.png" alt="The four children huddle together, their eyes wide with fear as they contemplate the dangerous mission they’ve been given by God." /></p>
+<p>הַיְלָדִים פּוֹחֲדִים לָשׁוּב. בּוֹזֶר חָזָק וְרָע מְאֹד!</p>
+<h3 id="section-8-הם-צריכים-אמץ">Section 8: הֵם צְרִיכִים אֹמֶץ</h3>
+<p><img src="subscene/Deep%20Cave.png" alt="The children look at each other uncertainly, realizing they need special help and courage to face the powerful enemy they just escaped from." /></p>
+<p>יִצְחָק אוֹמֵר: “אֲנַחְנוּ צְרִיכִים עֶזְרָה וְאֹמֶץ לֵב!”</p>
+<h3 id="section-9-מיניונים-באים-עם-מתנות">Section 9: מִינְיוֹנִים בָּאִים עִם מַתָּנוֹת</h3>
+<p><img src="subscene/Cave%20Entrance.png" alt="Three yellow minions suddenly appear at the cave entrance, each carrying colorful wrapped packages and chattering excitedly in their gibberish language as they march toward the children." /></p>
+<p>פִּתְאֹם שְׁלֹשָׁה מִינְיוֹנִים בָּאִים! הֵם מְבִיאִים מַתָּנוֹת לַיְלָדִים.</p>
+<h3 id="section-10-המתנה-הראשונה-נפתחת">Section 10: הַמַּתָּנָה הָרִאשׁוֹנָה נִפְתַּחַת</h3>
+<p><img src="subscene/Cave%20Floor.png" alt="Aaron unwraps his gift to reveal a shining staff that glows with inner light, perfect for his small hands to hold and use in their mission." /></p>
+<p>אַהֲרֹן פּוֹתֵחַ מַתָּנָה. יֵשׁ שָׁם מַטֶּה מַבְרִיק לְמַעֲשֵׂה נִסִּים!</p>
+<h3 id="section-11-עוד-מתנות-נגלות">Section 11: עוֹד מַתָּנוֹת נִגְלוֹת</h3>
+<p><img src="subscene/Cave%20Floor.png" alt="The other children eagerly unwrap their packages, finding magical cloaks that shimmer and special sandals that will help them on their journey." /></p>
+<p>כֻּלָּם מְקַבְּלִים בְּגָדִים מְיֻחָדִים וְנַעֲלַיִם לַדֶּרֶךְ.</p>
+<h3 id="section-12-אבן-צריך-בית-כסא">Section 12: אֶבֶן צָרִיךְ בֵּית כִּסֵּא</h3>
+<p><img src="subscene/Cave%20Floor.png" alt="Evan suddenly stands up with an urgent expression, holding his stomach as he realizes he needs to use the bathroom right away." /></p>
+<p>אֶבֶן פִּתְאֹם צָרִיךְ לַעֲשׂוֹת צוֹאָה! הוּא רָץ מִן הַמְּעָרָה.</p>
+<h3 id="section-13-הפסקה-מהירה">Section 13: הַפְסָקָה מְהִירָה</h3>
+<p><img src="subscene/Cave%20Entrance.png" alt="Evan rushes outside the cave to find a private spot behind some rocks, while the others wait patiently with their new gifts." /></p>
+<p>אֶבֶן עוֹשֶׂה אֶת צָרְכָיו מְהֵר וְחוֹזֵר אֶל הַחֲבֵרִים.</p>
+<h3 id="section-14-אורליה-מוצאת-ספר">Section 14: אוֹרֶלְיָה מוֹצֵאת סֵפֶר</h3>
+<p><img src="subscene/Cave%20Floor.png" alt="Little Aurelia discovers an ancient book partially buried in the sand, brushing off the dust to reveal golden letters on its weathered cover." /></p>
+<p>אוֹרֶלְיָה מוֹצֵאת סֵפֶר יָשָׁן בַּחוֹל. הִיא קוֹרֵאת אוֹתוֹ.</p>
+<h3 id="section-15-הספר-נותן-חכמה">Section 15: הַסֵּפֶר נוֹתֵן חָכְמָה</h3>
+<p><img src="subscene/Cave%20Floor.png" alt="Aurelia reads aloud from the glowing pages while her brothers listen intently, the words seeming to give them strength and confidence." /></p>
+<p>הַסֵּפֶר אוֹמֵר: “אֱלֹהִים יַעְזֹר לַצַּדִּיקִים תָּמִיד!”</p>
+<h3 id="section-16-הילדים-מרגישים-אמיצים">Section 16: הַיְלָדִים מַרְגִּישִׁים אַמִּיצִים</h3>
+<p><img src="subscene/Cave%20Floor.png" alt="The four children stand together holding their magical gifts, their faces now showing determination instead of fear as they prepare for their mission." /></p>
+<p>אַחֲרֵי קְרִיאַת הַסֵּפֶר, הַיְלָדִים לֹא פּוֹחְדִים יוֹתֵר.</p>
+<h3 id="section-17-מוכנים-לשליחות">Section 17: מוּכָנִים לַשְּׁלִיחוּת</h3>
+<p><img src="subscene/Cave%20Entrance.png" alt="The children march toward the cave entrance wearing their magical cloaks and carrying their special items, ready to face Bowser and free the enslaved children." /></p>
+<p>הַיְלָדִים מוּכָנִים לָלֶכֶת. הֵם יַצִּילוּ אֶת כָּל הַיְלָדִים!</p>
+<h2 id="chapter-2-המפגש-הראשון">Chapter 2: המפגש הראשון</h2>
+<h3 id="section-0-הילדים-נכנסים-לחדר-הכסא">Section 0: הילדים נכנסים לחדר הכסא</h3>
+<p><img src="subscene/Entrance%20Hall.png" alt="The four children walk through the massive bronze doors wearing their magical cloaks, Aaron carrying his glowing staff as they enter the intimidating throne room together." /></p>
+<p>בני־החיות חוזרים לארמון. הם נכנסים לחדר הכסא הגדול.</p>
+<h3 id="section-1-בוזר-יושב-על-הכסא">Section 1: בוזר יושב על הכסא</h3>
+<p><img src="subscene/Throne%20Platform.png" alt="Bowser sits menacingly on the golden throne, his spiky shell and fierce expression illuminated by the flickering flames of the bronze braziers on either side." /></p>
+<p>בוזר המלך הרע יושב על כסא הזהב. הוא רואה את הילדים.</p>
+<h3 id="section-2-אהרן-מדבר-באמץ">Section 2: אהרן מדבר באמץ</h3>
+<p><img src="subscene/Throne%20Hall.png" alt="Aaron steps forward boldly, raising his glowing staff high as he addresses the tyrant king, his voice echoing through the vast throne room." /></p>
+<p>אהרן מדבר באמץ: “שלח את כל הילדים חפשיים!”</p>
+<h3 id="section-3-בוזר-מסרב">Section 3: בוזר מסרב</h3>
+<p><img src="subscene/Throne%20Platform.png" alt="Bowser leans forward on his throne with a cruel smile, shaking his head defiantly as he refuses the children’s demand for freedom." /></p>
+<p>בוזר צועק: “לא! הילדים יעבדו לי לעולם!”</p>
+<h3 id="section-4-הילדים-כועסים">Section 4: הילדים כועסים</h3>
+<p><img src="subscene/Throne%20Hall.png" alt="The four children stand together with determined expressions, their magical cloaks billowing as they prepare to demonstrate their divine power." /></p>
+<p>הילדים כועסים על בוזר הרשע. הם יעשו נס!</p>
+<h3 id="section-5-יצחק-צריך-בית-כסא">Section 5: יצחק צריך בית כסא</h3>
+<p><img src="subscene/Throne%20Hall.png" alt="Isaac suddenly grabs his stomach with an urgent expression, hopping from foot to foot as he realizes he needs to use the bathroom immediately." /></p>
+<p>פתאם יצחק צריך לעשות צואה מהר! הוא רץ החוצה.</p>
+<h3 id="section-6-הפסקה-מהירה">Section 6: הפסקה מהירה</h3>
+<p><img src="subscene/Entrance%20Hall.png" alt="Isaac rushes out of the throne room to find a bathroom, while Bowser and the other children wait awkwardly in the tense silence." /></p>
+<p>יצחק עושה את צרכיו ורץ בחזרה מהר מאד.</p>
+<h3 id="section-7-המכה-הראשונה-מתחילה">Section 7: המכה הראשונה מתחילה</h3>
+<p><img src="subscene/Throne%20Hall.png" alt="Aaron raises his staff high and points it toward Bowser, causing a bright light to emanate from the rod as the first supernatural plague begins." /></p>
+<p>אהרן מרים את המטה. הנס הראשון מתחיל!</p>
+<h3 id="section-8-האכל-הופך-לירקות">Section 8: האכל הופך לירקות</h3>
+<p><img src="subscene/Throne%20Platform.png" alt="All the delicious food on golden platters around Bowser’s throne suddenly transforms into green vegetables - broccoli, spinach, and Brussels sprouts." /></p>
+<p>כל האכל הטוב הופך לירקות! בוזר צריך לאכל ברוקולי!</p>
+<h3 id="section-9-בוזר-שונא-ירקות">Section 9: בוזר שונא ירקות</h3>
+<p><img src="subscene/Throne%20Platform.png" alt="Bowser makes a disgusted face as he tries to eat the vegetables, spitting them out and making gagging sounds while the children watch with satisfaction." /></p>
+<p>בוזר שונא ירקות! הוא אומר: “זה טעם נורא!”</p>
+<h3 id="section-10-הירקות-טעמים-נורא">Section 10: הירקות טעמים נורא</h3>
+<p><img src="subscene/Throne%20Platform.png" alt="Bowser continues to struggle with the bitter vegetables, his face turning green as he tries to force himself to eat the unpalatable food." /></p>
+<p>כל הירקות טעמים מר ונורא. בוזר לא יכול לאכל!</p>
+<h3 id="section-11-בוזר-עוד-מסרב">Section 11: בוזר עוד מסרב</h3>
+<p><img src="subscene/Throne%20Platform.png" alt="Despite his discomfort, Bowser sits stubbornly on his throne, crossing his arms defiantly as he continues to refuse the children’s demand." /></p>
+<p>אבל בוזר עוד אומר: “לא אשלח את הילדים!”</p>
+<h3 id="section-12-עוד-מכות-באות">Section 12: עוד מכות באות</h3>
+<p><img src="subscene/Throne%20Hall.png" alt="The children look at each other with determination, realizing they will need to bring more plagues to convince the stubborn tyrant to free the enslaved children." /></p>
+<p>הילדים יודעים: צריכים עוד מכות לבוזר הרע!</p>
+<h3 id="section-13-הילדים-יוצאים-מחדר-הכסא">Section 13: הילדים יוצאים מחדר הכסא</h3>
+<p><img src="subscene/Entrance%20Hall.png" alt="The four children walk out through the bronze doors with their heads held high, their magical cloaks flowing behind them as they prepare for the next phase of their mission." /></p>
+<p>בני־החיות יוצאים מן הארמון. הם יחזרו עם מכות יותר!</p>
+<h2 id="chapter-3-המכות-המשעשעות">Chapter 3: הַמַּכּוֹת הַמְּשַׁעֲשָׁעוֹת</h2>
+<h3 id="section-0-המכה-השניה-מתחילה">Section 0: הַמַּכָּה הַשְּׁנִיָּה מַתְחִילָה</h3>
+<p><img src="subscene/Village%20Center.png" alt="The children stand in the village square as Aaron raises his staff again, causing Bowser’s distant castle to suddenly fill with thousands of squeaky rubber toys that bounce and squeak loudly." /></p>
+<p>בְּנֵי־הַחַיּוֹת עוֹשִׂים מַכָּה שְׁנִיָּה. אַרְמוֹן בּוֹזֶר מָלֵא צַעֲצוּעִים צוֹעֲקִים!</p>
+<h3 id="section-1-צעצועים-צועקים-בכלמקום">Section 1: צַעֲצוּעִים צוֹעֲקִים בְּכׇל־מָקוֹם</h3>
+<p><img src="subscene/Village%20Center.png" alt="The children laugh as they watch Bowser’s koopa troops slipping and sliding on squeaky toys, unable to walk without making loud honking and squeaking sounds with every step." /></p>
+<p>הַצְּבָבִים לֹא יְכוֹלִים לָלֶכֶת! כׇּל־הַצַּעֲצוּעִים עוֹשִׂים קוֹל צוֹעֵק!</p>
+<h3 id="section-2-המכה-השלישית-מכה">Section 2: הַמַּכָּה הַשְּׁלִישִׁית מַכָּה</h3>
+<p><img src="subscene/Village%20Center.png" alt="Isaac transforms into his koala form and points toward the castle, causing all of Bowser’s troops to suddenly speak in high-pitched squeaky voices like cartoon characters." /></p>
+<p>יִצְחָק עוֹשֶׂה נֵס שְׁלִישִׁי. כׇּל־הַצְּבָבִים מְדַבְּרִים בְּקוֹל מְשֻׁנֶּה!</p>
+<h3 id="section-3-קולות-מצחקים-בכלמקום">Section 3: קוֹלוֹת מְצַחֲקִים בְּכׇל־מָקוֹם</h3>
+<p><img src="subscene/Village%20Center.png" alt="The children giggle as they hear Bowser’s army trying to give orders in squeaky, high-pitched voices that sound completely ridiculous and non-threatening." /></p>
+<p>הַקּוֹלוֹת הַמְּשֻׁנִּים מְצַחֲקִים מְאֹד! בּוֹזֶר כּוֹעֵס עַל הַקּוֹלוֹת!</p>
+<h3 id="section-4-המכה-הרביעית-באה">Section 4: הַמַּכָּה הָרְבִיעִית בָּאָה</h3>
+<p><img src="subscene/Village%20Center.png" alt="Evan transforms into his owl form and spreads his wings, causing everything in Bowser’s castle to turn bright pink - the walls, furniture, and even Bowser himself." /></p>
+<p>אֶבֶן עוֹשֶׂה מַכָּה רְבִיעִית. הַכֹּל הוֹפֵךְ לְצֶבַע וָרֹד!</p>
+<h3 id="section-5-הכל-הופך-לורד">Section 5: הַכֹּל הוֹפֵךְ לְוָרֹד</h3>
+<p><img src="subscene/Village%20Center.png" alt="The children burst into laughter as they see Bowser’s mighty fortress transformed into a bright pink castle, making the fearsome tyrant look completely ridiculous." /></p>
+<p>הָאַרְמוֹן הַגָּדוֹל וָרֹד! בּוֹזֶר גַּם וָרֹד וּמְצַחֵק מְאֹד!</p>
+<h3 id="section-6-הילדים-מתחילים-להלחם">Section 6: הַיְלָדִים מַתְחִילִים לְהִלָּחֵם</h3>
+<p><img src="subscene/Village%20Center.png" alt="Aaron and Isaac begin to argue loudly about whose plague was the most effective, pointing fingers at each other while their faces grow red with anger." /></p>
+<p>אַהֲרֹן וְיִצְחָק מִתְרַגְּשִׁים. הֵם אוֹמְרִים: “הַמַּכָּה שֶׁלִּי יוֹתֵר טוֹבָה!”</p>
+<h3 id="section-7-כלהילדים-מתוכחים">Section 7: כׇּל־הַיְלָדִים מִתְוַכְּחִים</h3>
+<p><img src="subscene/Village%20Center.png" alt="Soon all four children are arguing loudly, each claiming their plague is the best, their voices rising as they forget about their mission and focus on their disagreement." /></p>
+<p>כֻּלָּם מִתְוַכְּחִים וְצוֹעֲקִים. הֵם שׁוֹכְחִים לֶאֱהֹב זֶה אֶת זֶה!</p>
+<h3 id="section-8-אבן-זוכר-אהבה">Section 8: אֶבֶן זוֹכֵר אַהֲבָה</h3>
+<p><img src="subscene/Village%20Center.png" alt="Evan suddenly stops arguing and looks sadly at his fighting siblings, remembering the importance of love and unity in their mission." /></p>
+<p>אֶבֶן עוֹצֵר וְאוֹמֵר: “זֶה לֹא טוֹב! אָנוּ צְרִיכִים לֶאֱהֹב!”</p>
+<h3 id="section-9-הילדים-מתנצלים">Section 9: הַיְלָדִים מִתְנַצְּלִים</h3>
+<p><img src="subscene/Village%20Center.png" alt="The children look ashamed of their fighting and each one says sorry to the others, their anger melting away as they remember their brotherly love." /></p>
+<p>כֻּלָּם אוֹמְרִים: “סְלִיחָה!” הֵם מִתְנַצְּלִים לְכׇל־הַחֲבֵרִים.</p>
+<h3 id="section-10-חבוק-גדול-יחד">Section 10: חִבּוּק גָּדוֹל יַחַד</h3>
+<p><img src="subscene/Village%20Center.png" alt="All four children come together in a warm group hug, their arms wrapped around each other as they smile and make up from their argument." /></p>
+<p>בְּנֵי־הַחַיּוֹת חוֹבְקִים זֶה אֶת זֶה. הֵם אוֹהֲבִים יַחַד שׁוּב!</p>
+<h3 id="section-11-אורליה-מוצאת-ספר-אחר">Section 11: אוֹרְלִיָּה מוֹצֵאת סֵפֶר אַחֵר</h3>
+<p><img src="subscene/House%20Interior.png" alt="Aurelia discovers an old scroll tucked behind a clay jar in the house, unrolling it carefully to reveal ancient wisdom written in golden letters." /></p>
+<p>אוֹרְלִיָּה מוֹצֵאת סֵפֶר חָכְמָה בַּבַּיִת. הִיא קוֹרֵאת אוֹתוֹ בְּקוֹל.</p>
+<h3 id="section-12-הספר-מלמד-סבלנות">Section 12: הַסֵּפֶר מְלַמֵּד סַבְלָנוּת</h3>
+<p><img src="subscene/House%20Interior.png" alt="Aurelia reads the scroll’s message about patience and perseverance, her voice growing stronger as she shares the wisdom with her brothers." /></p>
+<p>הַסֵּפֶר אוֹמֵר: “סַבְלָנוּת חָזְקָה מִכֹּחַ. הַמַּמְתִּינִים יִנְצְחוּ!”</p>
+<h3 id="section-13-הילדים-לומדים-חכמה">Section 13: הַיְלָדִים לוֹמְדִים חָכְמָה</h3>
+<p><img src="subscene/House%20Interior.png" alt="The children sit in a circle listening intently to the scroll’s wisdom, their faces showing understanding as they learn about patience and working together." /></p>
+<p>הַיְלָדִים לוֹמְדִים: צָרִיךְ לְהַמְתִּין וְלַעֲבֹד יַחַד בְּסַבְלָנוּת.</p>
+<h3 id="section-14-הכנה-למכה-החמישית">Section 14: הַכָנָה לַמַּכָּה הַחֲמִישִׁית</h3>
+<p><img src="subscene/Village%20Outskirts.png" alt="The children stand together at the edge of the village, looking toward Bowser’s pink castle in the distance as they prepare for one final plague." /></p>
+<p>בְּנֵי־הַחַיּוֹת עוֹמְדִים יַחַד. הֵם מְכִינִים מַכָּה אַחֲרוֹנָה גְּדוֹלָה!</p>
+<h2 id="chapter-4-הבריחה-הגדולה">Chapter 4: הבריחה הגדולה</h2>
+<h3 id="section-0-בוזר-סוף-סוף-מוותר">Section 0: בוזר סוף סוף מוותר</h3>
+<p><img src="subscene/Village%20Center.png" alt="Bowser sits exhausted on his bright pink throne, surrounded by squeaky toys and speaking in a high-pitched voice as he finally waves his hand in defeat." /></p>
+<p>אחרי כל המכות, בוזר עיף מאד. הוא אומר: “לכו! קחו את כל הילדים!”</p>
+<h3 id="section-1-כל-הילדים-רצים-חפשיים">Section 1: כל הילדים רצים חפשיים</h3>
+<p><img src="subscene/Village%20Center.png" alt="Hundreds of children burst out of houses and courtyards, laughing and cheering as they run toward the shapeshifting children who have freed them from slavery." /></p>
+<p>כל הילדים רצים מן הבתים! הם שמחים מאד להיות חפשיים!</p>
+<h3 id="section-2-הבריחה-הגדולה-מתחילה">Section 2: הבריחה הגדולה מתחילה</h3>
+<p><img src="subscene/Village%20Outskirts.png" alt="The four shapeshifting children lead a massive procession of freed children walking along the dusty desert paths toward the distant sea." /></p>
+<p>בניהחיות מובילים את כל הילדים. הם הולכים אל הים הגדול.</p>
+<h3 id="section-3-מסע-ארוך-אל-הים">Section 3: מסע ארוך אל הים</h3>
+<p><img src="subscene/Desert%20Wilderness.png" alt="The long line of children walks across sandy dunes and rocky outcroppings, with the shapeshifting children taking turns transforming into their animal forms to scout ahead." /></p>
+<p>המסע ארוך מאד. הילדים הולכים ימים רבים במדבר.</p>
+<h3 id="section-4-הם-מגיעים-אל-הים">Section 4: הם מגיעים אל הים</h3>
+<p><img src="subscene/Sandy%20Shore.png" alt="The exhausted children arrive at the vast beach and stare in wonder at the endless blue waters stretching to the horizon." /></p>
+<p>סוף סוף הילדים מגיעים אל הים הגדול והעמק!</p>
+<h3 id="section-5-בוזר-משנה-דעה">Section 5: בוזר משנה דעה</h3>
+<p><img src="subscene/Desert%20Wilderness.png" alt="Back in the desert, Bowser sits on his throne looking angry as he realizes he wants his slave workers back, pointing toward the sea." /></p>
+<p>בוזר משנה את דעתו! הוא אומר: “אני רוצה את הילדים בחזרה!”</p>
+<h3 id="section-6-צבא-רודף-אחרי-הילדים">Section 6: צבא רודף אחרי הילדים</h3>
+<p><img src="subscene/Desert%20Wilderness.png" alt="Bowser’s koopa troops march quickly across the desert, raising clouds of dust as they pursue the escaped children toward the sea." /></p>
+<p>צבא הצבבים רודף אחרי הילדים. הם קרבים מהר!</p>
+<h3 id="section-7-לכודים-ליד-המים">Section 7: לכודים ליד המים</h3>
+<p><img src="subscene/Sandy%20Shore.png" alt="The children stand at the water’s edge looking frightened, with the vast sea before them and the sound of approaching enemies behind them." /></p>
+<p>הילדים לכודים! הים לפניהם והאויבים מאחריהם!</p>
+<h3 id="section-8-אורליה-מאבדת-שמיכה">Section 8: אורליה מאבדת שמיכה</h3>
+<p><img src="subscene/Sandy%20Shore.png" alt="Little Aurelia looks around frantically, tears forming in her eyes as she realizes her favorite blanket is missing from her small bundle." /></p>
+<p>אורליה בוכה! היא מאבדת את השמיכה שלה!</p>
+<h3 id="section-9-כולם-מחפשים-בחפזה">Section 9: כולם מחפשים בחפזה</h3>
+<p><img src="subscene/Sandy%20Shore.png" alt="All the children spread out across the beach, looking under driftwood, behind rocks, and in the sand as they search desperately for the lost blanket." /></p>
+<p>כל הילדים מבקשים את השמיכה! הם מחפשים בכל מקום!</p>
+<h3 id="section-10-יצחק-צריך-בית-כסא">Section 10: יצחק צריך בית כסא</h3>
+<p><img src="subscene/Sandy%20Shore.png" alt="Even in this crisis moment, Isaac suddenly grabs his stomach and hops from foot to foot, needing to use the bathroom urgently." /></p>
+<p>גם עכשיו יצחק צריך לעשות צואה! הוא רץ מאחורי הסלע.</p>
+<h3 id="section-11-השמיכה-נמצאת-בחול">Section 11: השמיכה נמצאת בחול</h3>
+<p><img src="subscene/Sandy%20Shore.png" alt="Aaron suddenly spots a corner of the blanket partially buried in the sand near some seaweed, calling out excitedly to the others." /></p>
+<p>אהרן מוצא את השמיכה בחול! הוא צועק: “מצאתי אותה!”</p>
+<h3 id="section-12-פגישה-שמחה-עם-השמיכה">Section 12: פגישה שמחה עם השמיכה</h3>
+<p><img src="subscene/Sandy%20Shore.png" alt="Aurelia hugs her blanket tightly to her chest, smiling through her tears as the other children cheer with relief at finding the precious item." /></p>
+<p>אורליה חובקת את השמיכה. היא אומרת: “תודה שמצאתם!”</p>
+<h3 id="section-13-מיניונים-מביאים-עזרה">Section 13: מיניונים מביאים עזרה</h3>
+<p><img src="subscene/Water&#39;s%20Edge.png" alt="Three yellow minions suddenly appear from behind a large piece of driftwood, carrying a strange glowing conch shell as their gift to help the children." /></p>
+<p>המיניונים באים עם מתנה מיוחדת! הם נותנים צדף קסום!</p>
+<h3 id="section-14-הצדף-הקסום-עובד">Section 14: הצדף הקסום עובד</h3>
+<p><img src="subscene/Water&#39;s%20Edge.png" alt="Aaron blows into the magical conch shell, causing the sea waters to begin parting with a great rushing sound, creating walls of water on both sides." /></p>
+<p>אהרן תוקע בצדף. המים נבקעים לשני צדדים!</p>
+<h3 id="section-15-הילדים-הופכים-לעזור">Section 15: הילדים הופכים לעזור</h3>
+<p><img src="subscene/Water&#39;s%20Edge.png" alt="The four shapeshifting children transform into their animal forms - dinosaur, koala, owl, and panda - to help guide the hundreds of children through the parted waters." /></p>
+<p>בניהחיות הופכים לחיות. הם עוזרים לכל הילדים לעבור!</p>
+<h3 id="section-16-חציית-הים">Section 16: חציית הים</h3>
+<p><img src="subscene/Water&#39;s%20Edge.png" alt="Hundreds of children walk through the dry seabed between towering walls of water, with the animal-children guiding them safely across to the other side." /></p>
+<p>כל הילדים עוברים בתוך הים! הם הולכים על יבשה!</p>
+<h3 id="section-17-צבא-בוזר-מגיע">Section 17: צבא בוזר מגיע</h3>
+<p><img src="subscene/Sandy%20Shore.png" alt="Bowser and his koopa troops arrive at the beach just as the last children are crossing through the parted waters." /></p>
+<p>בוזר והצבא מגיעים אל החוף. הם רואים את הילדים עוברים!</p>
+<h3 id="section-18-האויבים-מנסים-לעקוב">Section 18: האויבים מנסים לעקוב</h3>
+<p><img src="subscene/Water&#39;s%20Edge.png" alt="Bowser’s army rushes into the parted sea, trying to catch the children, but the water walls begin to tremble and shake ominously." /></p>
+<p>הצבבים נכנסים למים. אבל המים מתחילים לחזור!</p>
+<h3 id="section-19-המים-נסגרים-על-האויבים">Section 19: המים נסגרים על האויבים</h3>
+<p><img src="subscene/Water&#39;s%20Edge.png" alt="The walls of water come crashing down on Bowser’s army, while the children safely reach the far shore and look back at their complete victory." /></p>
+<p>המים נסגרים על בוזר! הילדים בטוחים בצד השני!</p>
+<h3 id="section-20-חירות-שלמה-מושגת">Section 20: חירות שלמה מושגת</h3>
+<p><img src="subscene/Cliff%20Overlook.png" alt="All the children stand on the high cliffs overlooking the sea, cheering and celebrating their complete freedom from slavery as the sun sets behind them." /></p>
+<p>כל הילדים חופשיים לגמרי! הם שמחים וחוגגים על ההר!</p>
+</body>
+</html>

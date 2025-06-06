@@ -1,0 +1,28 @@
+body {
+  font-size: 40pt;
+  direction: rtl;
+  unicode-bidi: bidi-override;
+}
+
+h3 + p {
+  display: inline-block;
+  vertical-align: top;
+  width: 50%;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+h3 + p + p {
+  display: inline-block;
+  vertical-align: top;
+  width: 45%;
+  margin: 0;
+  padding-left: 20px;
+  box-sizing: border-box;
+  text-align: right;
+}
+
+h3 + p img {
+  max-width: 100%;
+  height: auto;
+}

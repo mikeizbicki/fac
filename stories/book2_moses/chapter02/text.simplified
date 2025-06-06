@@ -1,0 +1,202 @@
+{
+  "chapter": "הקריאה האלהית",
+  "subscenes": [
+    {
+      "name": "Cave Entrance",
+      "description": "The mouth of the mountain cave opens wide, with smooth stone walls worn by centuries of wind and weather. Shafts of golden sunlight pierce through the opening, creating dramatic patterns of light and shadow on the sandy floor inside. The entrance is large enough for children to enter easily, with scattered rocks and desert plants growing near the opening."
+    },
+    {
+      "name": "Deep Cave",
+      "description": "Deep within the rocky cavern, the walls curve upward into darkness, carved smooth by ancient waters and wind. Thin beams of light filter down through cracks in the ceiling high above, illuminating patches of fine sand on the cave floor. The air is cool and still, creating an atmosphere of mystery and reverence."
+    },
+    {
+      "name": "Cave Floor",
+      "description": "The sandy floor of the cave is soft and comfortable, covered with fine desert sand that has blown in over many years. Smooth stone walls rise up on all sides, while beams of sunlight from ceiling cracks create circular patches of warm light. Small pebbles and bits of desert vegetation are scattered across the sand."
+    }
+  ],
+  "sections": [
+    {
+      "title_english": "Children Hide in Cave",
+      "title_target": "הילדים מסתתרים במערה",
+      "subscene": "Cave Entrance",
+      "image_description": "The four children, back in their human forms, cautiously enter the cave opening while looking over their shoulders to make sure they weren't followed by Bowser's troops.",
+      "text": "בניהחיות נכנסים למערה. הם מסתתרים מבוזר."
+    },
+    {
+      "title_english": "They Sit and Rest",
+      "title_target": "הם יושׁבים ונחים",
+      "subscene": "Cave Floor",
+      "image_description": "The children sit cross-legged on the soft sandy floor, breathing heavily from their escape, with patches of sunlight illuminating their tired faces.",
+      "text": "הילדים יושׁבים על החול. הם עיפים מהריצה."
+    },
+    {
+      "title_english": "Aaron Feels Sad",
+      "title_target": "אהרן עצב",
+      "subscene": "Cave Floor",
+      "image_description": "Aaron sits with his head in his hands, his small shoulders shaking as tears begin to fall onto the sandy cave floor.",
+      "text": "אהרן עצב מאד. הוא בוכה כי הוא פוחד."
+    },
+    {
+      "title_english": "Shenzi Comes to Help",
+      "title_target": "שׁנזי באה לעזר",
+      "subscene": "Cave Floor",
+      "image_description": "The friendly dog Shenzi appears at the cave entrance, wagging her tail as she trots over to the crying boy with gentle, caring eyes.",
+      "text": "שׁנזי הכלב הטוב באה. היא רואה את אהרן בוכה."
+    },
+    {
+      "title_english": "Shenzi Gives Hugs",
+      "title_target": "שׁנזי נותנת חבוקים",
+      "subscene": "Cave Floor",
+      "image_description": "Shenzi nuzzles against Aaron and wraps her furry body around him in a warm embrace, licking his tears away while he holds onto her soft fur.",
+      "text": "שׁנזי חובקת את אהרן. החבוק עושׂה אותו שׂמח."
+    },
+    {
+      "title_english": "God's Voice Calls",
+      "title_target": "קול אלהים קורא",
+      "subscene": "Deep Cave",
+      "image_description": "A bright, warm light fills the deepest part of the cave as a gentle but powerful voice echoes off the stone walls, causing all the children to look up in wonder.",
+      "text": "פתאם קול אלהים מדבר מן המערה: \"בני!\""
+    },
+    {
+      "title_english": "God Gives Mission",
+      "title_target": "אלהים נותן שׁליחות",
+      "subscene": "Deep Cave",
+      "image_description": "The children stand in reverent attention as the divine voice continues to speak, with the cave walls seeming to glow with holy light around them.",
+      "text": "\"לכו והוציאו את כל הילדים מיד בוזר הרשׁע!\""
+    },
+    {
+      "title_english": "Children Are Afraid",
+      "title_target": "הילדים פוחדים",
+      "subscene": "Deep Cave",
+      "image_description": "The four children huddle together, their eyes wide with fear as they contemplate the dangerous mission they've been given by God.",
+      "text": "הילדים פוחדים לשׁוב. בוזר חזק ורע מאד!"
+    },
+    {
+      "title_english": "They Need Courage",
+      "title_target": "הם צריכים אמץ",
+      "subscene": "Deep Cave",
+      "image_description": "The children look at each other uncertainly, realizing they need special help and courage to face the powerful enemy they just escaped from.",
+      "text": "יצחק אומר: \"אנחנו צריכים עזרה ואמץ לב!\""
+    },
+    {
+      "title_english": "Minions Arrive with Gifts",
+      "title_target": "מיניונים באים עם מתנות",
+      "subscene": "Cave Entrance",
+      "image_description": "Three yellow minions suddenly appear at the cave entrance, each carrying colorful wrapped packages and chattering excitedly in their gibberish language as they march toward the children.",
+      "text": "פתאם שׁלשׁה מיניונים באים! הם מביאים מתנות לילדים."
+    },
+    {
+      "title_english": "First Gift Opens",
+      "title_target": "המתנה הראשׁונה נפתחת",
+      "subscene": "Cave Floor",
+      "image_description": "Aaron unwraps his gift to reveal a shining staff that glows with inner light, perfect for his small hands to hold and use in their mission.",
+      "text": "אהרן פותח מתנה. ישׁ שׁם מטה מבריק למעשׂה נסים!"
+    },
+    {
+      "title_english": "More Gifts Revealed",
+      "title_target": "עוד מתנות נגלות",
+      "subscene": "Cave Floor",
+      "image_description": "The other children eagerly unwrap their packages, finding magical cloaks that shimmer and special sandals that will help them on their journey.",
+      "text": "כֻלם מקבלים בגדים מיֻחדים ונעלים לדרך."
+    },
+    {
+      "title_english": "Evan Needs Bathroom",
+      "title_target": "אבן צריך בית כסא",
+      "subscene": "Cave Floor",
+      "image_description": "Evan suddenly stands up with an urgent expression, holding his stomach as he realizes he needs to use the bathroom right away.",
+      "text": "אבן פתאם צריך לעשׂות צואה! הוא רץ מן המערה."
+    },
+    {
+      "title_english": "Quick Bathroom Break",
+      "title_target": "הפסקה מהירה",
+      "subscene": "Cave Entrance",
+      "image_description": "Evan rushes outside the cave to find a private spot behind some rocks, while the others wait patiently with their new gifts.",
+      "text": "אבן עושׂה את צרכיו מהר וחוזר אל החברים."
+    },
+    {
+      "title_english": "Aurelia Finds Book",
+      "title_target": "אורליה מוצאת ספר",
+      "subscene": "Cave Floor",
+      "image_description": "Little Aurelia discovers an ancient book partially buried in the sand, brushing off the dust to reveal golden letters on its weathered cover.",
+      "text": "אורליה מוצאת ספר ישׁן בחול. היא קוראת אותו."
+    },
+    {
+      "title_english": "Book Gives Wisdom",
+      "title_target": "הספר נותן חכמה",
+      "subscene": "Cave Floor",
+      "image_description": "Aurelia reads aloud from the glowing pages while her brothers listen intently, the words seeming to give them strength and confidence.",
+      "text": "הספר אומר: \"אלהים יעזר לצדיקים תמיד!\""
+    },
+    {
+      "title_english": "Children Feel Brave",
+      "title_target": "הילדים מרגישׁים אמיצים",
+      "subscene": "Cave Floor",
+      "image_description": "The four children stand together holding their magical gifts, their faces now showing determination instead of fear as they prepare for their mission.",
+      "text": "אחרי קריאת הספר, הילדים לא פוחדים יותר."
+    },
+    {
+      "title_english": "Ready for Mission",
+      "title_target": "מוכנים לשׁליחות",
+      "subscene": "Cave Entrance",
+      "image_description": "The children march toward the cave entrance wearing their magical cloaks and carrying their special items, ready to face Bowser and free the enslaved children.",
+      "text": "הילדים מוכנים ללכת. הם יצילו את כל הילדים!"
+    }
+  ],
+  "vocabulary": [
+    {
+      "part_of_speech": "nouns",
+      "table": [
+        {"word": "מערה", "gloss": "cave"},
+        {"word": "חול", "gloss": "sand"},
+        {"word": "קול", "gloss": "voice"},
+        {"word": "שׁליחות", "gloss": "mission"},
+        {"word": "מתנה", "gloss": "gift/present"},
+        {"word": "מטה", "gloss": "staff/rod"},
+        {"word": "נס", "gloss": "miracle"},
+        {"word": "בגד", "gloss": "clothing"},
+        {"word": "נעל", "gloss": "shoe"},
+        {"word": "ספר", "gloss": "book"},
+        {"word": "חכמה", "gloss": "wisdom"},
+        {"word": "אמץ", "gloss": "courage"},
+        {"word": "צרך", "gloss": "need"},
+        {"word": "צואה", "gloss": "poop"}
+      ]
+    },
+    {
+      "part_of_speech": "verbs",
+      "table": [
+        {"word": "סתר", "gloss": "to hide"},
+        {"word": "נוח", "gloss": "to rest"},
+        {"word": "פחד", "gloss": "to fear"},
+        {"word": "דבר", "gloss": "to speak"},
+        {"word": "קרא", "gloss": "to call/read"},
+        {"word": "יצא", "gloss": "to go out"},
+        {"word": "הביא", "gloss": "to bring"},
+        {"word": "פתח", "gloss": "to open"},
+        {"word": "קבל", "gloss": "to receive"},
+        {"word": "מצא", "gloss": "to find"},
+        {"word": "עזר", "gloss": "to help"},
+        {"word": "הציל", "gloss": "to save/rescue"}
+      ]
+    },
+    {
+      "part_of_speech": "adjectives",
+      "table": [
+        {"word": "עיף", "gloss": "tired"},
+        {"word": "חזק", "gloss": "strong"},
+        {"word": "רשׁע", "gloss": "wicked"},
+        {"word": "מיֻחד", "gloss": "special"},
+        {"word": "ישׁן", "gloss": "old"},
+        {"word": "מוכן", "gloss": "ready"},
+        {"word": "אמיץ", "gloss": "brave"}
+      ]
+    }
+  ],
+  "grammar": [
+    "The imperative form uses לכו (go!) for commands to multiple people.",
+    "Divine speech is introduced with special phrasing like קול אלהים מדבר (God's voice speaks).",
+    "Object suffixes attach to verbs, like עושׂה אותו (makes him).",
+    "The construct state links nouns, like אומץ לב (courage of heart).",
+    "Sequential actions use ו (and) to connect verbs in narrative."
+  ]
+}

@@ -2,5 +2,6 @@
 venv
 tmp
 
+*.png
 *.sw?
 *.text*

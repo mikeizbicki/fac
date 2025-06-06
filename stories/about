@@ -1,28 +1,35 @@
 The purpose of these books is to teach biblical hebrew to children in a fun and engaging way.
 Some highlights include:
-1. The main characters are a family and all "shape shifters" (בְּנֵי־חַיּוֹת in Hebrew, μεταμορφούμενος in Greek, and transformator in Latin); they are able to change from their human form into the form of their favorite animal. They use their transformed forms in different ways throughout the story to advance the plot in ways that would be funny to young children.  No one else in the stories are able to shapeshift.
-2. The stories use magical realism.  They are always told from the child's perspective and emphasize immagination.  Transformations are always presented as what is "really" happening and never as something "pretend".
+1. The main characters are a family and all "shape shifters" (בְּנֵי־חַיּוֹת in Hebrew, μεταμορφούμενος in Greek, and transformator in Latin).
+    1. They are able to change from their human form into the form of their favorite animal.
+    2. They use their transformed forms in different ways throughout the story to advance the plot in ways that would be funny to young children.
+    3. No one else in the stories are able to shapeshift.
+2. The stories use magical realism.
+    1. They are always told from the child's perspective and emphasize immagination.
+    2. Transformations are always presented as what is "really" happening and never as something "pretend".
 3. The stories are written in Biblical Hebrew.
     1. They use Biblical Hebrew idioms over modern idioms whenever possible.
-    2. They include niqqud.
+    2. They always include niqqud (even if there is input text without niqqud).
+    3. They use simple vocabulary and lots of repetition.  Whenever possible, the same word is used many times in many different contexts in order to reinforce the meaning.  No new vocabulary is introduced unless it is absolutely necessary for the story.
+    4. The scenes that the stories take place in are all designed to reflect biblical hebrew vocabulary and themes.  They can be inspired by modern life, but they must include biblical hebrew themes.  The description of the scenes makes the connection to biblical hebrew explicit.
 4. There are gimics that appear in every story.
-    Each gimic appears in every story, but they are generally spaced out.
-    1. Near the end of the story, a child loses their blanket.  Everyone has to go back through the previous scenes (very quickly) looking for the blanket; the search causes the children to review some of the important vocabulary from the story.
-    2. At some point in the middle of the story the children will need something.  The minions (from Dispicable Me) will bring the needed item to the children in a humorous fashion.
-    3. Every story, someone will get sad and cry.  A dog "Shenzi" will come and give them a hug to make them happy.
-    4. There are never any adults in any of the stories.
-    5. Every story, the kids will get into a squabble amongst themselves.  One of the kids remembers that fighting is not good and we should love each other.  They all appolagize and hug.
-    6. Every story, one of the kids will suddenly have to go poop.  The kid will run away from the scene to the bathroom, do their poop, then return to the action with the other characters.  This will generally be very quick and not fill a whole scene.
-    7. Every story, one of the kids will read a book and find helpful advice in the book.
-
+    1. Each gimic appears in every story, but they are generally spaced out.
+    2. The gimics must be present in the JSON outline of the story.
+    3. The gimics are used to repeat the same vocabulary in many different contexts to reinforce the vocabulary's meaning.
+    3. The gimics are:
+        1. Near the end of the story, a child loses their blanket (שְׂמִיכָה).  Everyone has to search (בָּקַשׁ) for the blanket; the search causes the children to review some of the important vocabulary from the story.  When the children find the blanket, use the word מָצָא.
+        2. At some point in the middle of the story the children will need something (צֹרֶךְ).  The minions (from Dispicable Me) will bring (הֵבִיא) the needed item as a present (מַתָּנָה) to the children in a humorous fashion.
+        3. Every story, someone will get sad (עָצֵב) and cry (בָּכָה).  A dog "Shenzi" (female) will come and give them a hug (חָבַק) to make them happy (שָׂמֵחַ).
+        4. There are never any adults in any of the stories.
+        5. Every story, the kids will get into a squabble amongst themselves.  One of the kids remembers that fighting is not good and we should love each other.  They all appolagize and hug.
+        6. Every story, one of the kids will suddenly have to go poop (צוֹאָה).  The kid will run away from the scene to the bathroom, do their poop, then return to the action with the other characters.  This will generally be very quick and not fill a whole scene.
+        7. Every story, one of the kids will read a book and find helpful advice in the book.
 
 IMPORTANT:
-1. The vocabulary/grammar/idioms start simple in the earliest books/chapters and then grow more complicated.  Every chapter introduces new idioms and 
+1. The vocabulary/grammar/idioms start simple in the earliest books/chapters and then grow more complicated.  Every chapter introduces new idioms.
 2. You are trying to create a story that teaches Biblical Hebrew through simple examples with a target audience of 4-7 year olds. You take inspiration from the "natural method" for language teaching as illustrated by works such as: Lingua Latina per se Illustrata (textbook for teaching Latin using only latin), Aleph with Beth (youtube channel for teaching biblical hebrew via pictures and examples), and Muzzy (movie series for teaching English/French/Spanish via fun examples).
 3. The story must contain lots of repetition. Repeat vocabulary and grammar constructs many times in many contexts. Do not introduce too much new material in a single chapter; focus on repetition.
 
 IMPORTANT:
 You must always include the niqqud when generating Hebrew text,
 even if some of your input text does not contain niqqud.
-
-

@@ -1,36 +1,48 @@
-The output should have the following sections (##):
+The output should be in JSON format (do not include markdown code blocks) with the following schema:
+{ "chapter": ""
+, "subscenes": []
+, "sections": []
+, "vocabulary": []
+, "grammar": []
+}
 
-## Story
+The "chapter" should be the name of the chapter.
 
-Divide the story into 5-20 subsections (###) using markdown.
-Each subsection should:
-1. Have a title in the target language (with English translation in parentheses).
-2. Begin with a markdown image.
-    a. The alt-text should describe what happens in the section in English.
-    b. The img url should be sectionXXX.png, where XXX is the section number.
-3. Contain 10-30 words in the target language.
-4. Contain action that progresses the story.
+The "subscenes" list will contain up to 5 newly created subscenes.
+Each subscene must be related to the overall scene and should be a "smaller component" of it.
+Whenever possible, previously existing subscenes should be used,
+and it is okay for the subscenes list to be empty if no new subscenes are needed.
+For example:
+- if the scene is a "room", the subscenes might be a "view of the whole room", "inside a toy box", "in the corner of the room", and "under the table".
+- if the scene is a "house", the subscenes might be a "living room", "the front door", and "the kitchen"
+- if the scene is a "park", the subscenes might be "on the slide", "on the swings", "under a tree", "a full view of the park", and "the path to the park"
+Each subscene in the list will be a JSON dictionary with the following keys:
+- "name": a 1-3 word English name for the subscene
+- "description": 3-5 detailed English sentences that describe what is visible in the background of the scene, and explicitly mention any objects that are related to the story; the description will repeat parts of the descriptions of other subscenes so that there is consistency; the description will tie into the description of the overall scene
 
-## Vocabulary
+The "sections" list will contain a list of 5-20 plot sections that describe the buildup of the plot.
+Each section in the "chapters" list should be a JSON dictionary with the following keys:
+- "title_english"
+- "title_target"
+- "subscene": this should exactly match the "name" field of one of the subscenes (either from this "subscenes" list or another one; whenever possible, a subscene from a previous file should be used)
+- "image_description": a detailed 2-3 sentence description of how the action in the "text" field is interacting with the subscene; it should fully describe whatever actions are taking place
+- "text": 10-30 words in the target language; the text of the story should advance the plot and demonstrate the vocabulary/grammar
 
-Create a markdown table for each part of speech.
-1. Each table should have two columns:
-    1. "Word" provides the dictionary form of the word in target language.
-    2. "Gloss" provides an English-language gloss
-3. Only list vocabulary new to the chapter.
-    DO NOT LIST VOCABULARY PREVIOUSLY USED IN ANOTHER CHAPTER.
-
+The "vocabulary" list will include all vocabulary introduced in this chapter (but not vocabulary introduced in previous chapters).
+Each entry in the "vocabulary" list should be a JSON dictionary with the following keys:
+- "part_of_speech"
+- "table": a JSON list, where each entry is a dictionary with the following keys:
+    - "word": the word in the target language; only list dictionary forms, do not list all possible conjugations
+    - "gloss": an English-language gloss
 Whenever possible:
 1. Introduce a word and its opposite in the same story; use repetition to illustrate that the words are opposites
 2. Introduce etymologically related words in the same story, and use repetition to illustrate the relationship.
 3. Focus the new vocabulary around a single theme.
 
-## Grammar
-
-Create a list of 1 sentence English descriptions of the grammar introduced in the chapter.
+Each entry in the "grammar" list will be a string.
+1. The string will contain a 1 sentence English descriptions of a grammar point introduced in the chapter.
 1. The items should not be detailed enough for learning.
 2. They should be useful for a teacher to skim to see what material is introduced, or for a light review of the material.
-
 IMPORTANT:
 1. You should minimize the new grammar introduced.
 2. Only intoduce a new concept if it is absolutely required for the story.

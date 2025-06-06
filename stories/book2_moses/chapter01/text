@@ -1,0 +1,187 @@
+{
+  "chapter": "הָעֹנִי מַתְחִיל",
+  "subscenes": [
+    {
+      "name": "Palace Courtyard",
+      "description": "A magnificent stone courtyard spreads before tall marble columns decorated with colorful hieroglyphic carvings. Golden sunlight streams between the massive pillars, casting dramatic shadows across the polished floor where children play with wooden toys and colorful balls. Palm trees stand in large pottery vessels around the edges of the courtyard, their fronds swaying gently in the warm breeze."
+    },
+    {
+      "name": "Behind Pillars",
+      "description": "The space between the towering marble columns creates shadowy hiding spots where children can crouch unseen. The hieroglyphic decorations on the stone walls tell ancient stories in colorful paint, while golden sunlight filters through, creating patterns of light and shadow on the polished floor. Scattered wooden toys and abandoned balls reveal where children were recently playing."
+    },
+    {
+      "name": "Center Courtyard",
+      "description": "The open center of the grand courtyard features a large circular area of polished marble surrounded by tall columns with hieroglyphic decorations. Here children gather to play with their favorite toys - wooden blocks, colorful balls, and simple games. Palm trees in ornate pottery vessels provide patches of shade around the edges, while golden sunlight illuminates the entire space."
+    }
+  ],
+  "sections": [
+    {
+      "title_english": "Happy Children Playing",
+      "title_target": "יְלָדִים שְׂמֵחִים מְשַׂחֲקִים",
+      "subscene": "Center Courtyard",
+      "image_description": "Four children laugh and play together in the bright courtyard, tossing colorful balls and building with wooden blocks. Aaron holds a small dinosaur toy while Isaac waves a toy lightsaber playfully.",
+      "text": "אַרְבָּעָה יְלָדִים שְׂמֵחִים מְשַׂחֲקִים בֶּחָצֵר. אַהֲרוֹן וְיִצְחָק וְאֵבֶן וְאוֹרֵלְיָה אוֹהֲבִים לְשַׂחֵק."
+    },
+    {
+      "title_english": "Aaron Loves Dinosaurs",
+      "title_target": "אַהֲרוֹן אוֹהֵב דִּינוֹזוֹרִים",
+      "subscene": "Center Courtyard",
+      "image_description": "Aaron sits on the marble floor holding up a small wooden dinosaur toy, making it 'walk' across the stones while his siblings watch with interest.",
+      "text": "אַהֲרוֹן אוֹהֵב דִּינוֹזוֹרִים. הוּא מְשַׂחֵק עִם דִּינוֹזוֹר קָטָן."
+    },
+    {
+      "title_english": "Isaac Plays with Lightsaber",
+      "title_target": "יִצְחָק מְשַׂחֵק עִם חֶרֶב אוֹר",
+      "subscene": "Center Courtyard",
+      "image_description": "Isaac waves his toy lightsaber in wide arcs, creating whooshing sounds as he pretends to battle invisible enemies while standing in a shaft of golden sunlight.",
+      "text": "יִצְחָק מְשַׂחֵק עִם חֶרֶב אוֹר. הוּא אוֹהֵב לְהִלָּחֵם."
+    },
+    {
+      "title_english": "Evan Makes Paper",
+      "title_target": "אֵבֶן עוֹשֶׂה נְיָר",
+      "subscene": "Center Courtyard",
+      "image_description": "Evan sits cross-legged folding pieces of papyrus into various shapes, his dark hair falling over his focused face as he creates paper animals and objects.",
+      "text": "אֵבֶן עוֹשֶׂה דְּבָרִים מִנְּיָר. הוּא עוֹשֶׂה צִפּוֹר נְיָר."
+    },
+    {
+      "title_english": "Aurelia Plays with Food",
+      "title_target": "אוֹרֵלְיָה מְשַׂחֶקֶת עִם אֹכֶל",
+      "subscene": "Center Courtyard",
+      "image_description": "Little Aurelia arranges wooden toy food pieces, pretending to cook and serve meals to her brothers with great concentration and joy.",
+      "text": "אוֹרֵלְיָה מְשַׂחֶקֶת עִם אֹכֶל מִשְׂחָק. הִיא אוֹהֶבֶת לְבַשֵּׁל."
+    },
+    {
+      "title_english": "Dark Enemies Arrive",
+      "title_target": "אוֹיְבִים חֲשֻׁכִים בָּאִים",
+      "subscene": "Center Courtyard",
+      "image_description": "Dark shadows suddenly fall across the courtyard as Bowser and his koopa troopas march between the pillars, their heavy footsteps echoing ominously off the marble.",
+      "text": "פִּתְאֹם בָּאִים אוֹיְבִים רָעִים! בּוֹזֶר וְהַצְּבָבִים שֶׁלּוֹ בָּאִים לֶחָצֵר."
+    },
+    {
+      "title_english": "Bowser Commands Work",
+      "title_target": "בּוֹזֶר מְצַוֶּה לַעֲבֹד",
+      "subscene": "Center Courtyard",
+      "image_description": "Bowser stands menacingly in the center of the courtyard, pointing at the frightened children while his koopa troops surround them, demanding they stop playing.",
+      "text": "בּוֹזֶר אוֹמֵר: \"אַל תְּשַׂחֲקוּ! אַתֶּם צְרִיכִים לַעֲבֹד!\""
+    },
+    {
+      "title_english": "Children Become Sad",
+      "title_target": "הַיְלָדִים נַעֲשִׂים עֲצֵבִים",
+      "subscene": "Center Courtyard",
+      "image_description": "The four children huddle together, tears beginning to form in their eyes as they look at their scattered toys, realizing their peaceful playtime is over.",
+      "text": "הַיְלָדִים עֲצֵבִים מְאֹד. הֵם בּוֹכִים כִּי אֵין לָהֶם מִשְׂחָקִים."
+    },
+    {
+      "title_english": "Shenzi Comes to Comfort",
+      "title_target": "שֶׁנְזִי בָּאָה לְנַחֵם",
+      "subscene": "Center Courtyard",
+      "image_description": "A friendly dog with warm brown eyes approaches the crying children, wagging her tail and gently nuzzling against them to provide comfort.",
+      "text": "כֶּלֶב טוֹב בָּא. שְׁמָהּ שֶׁנְזִי. הִיא חוֹבֶקֶת אֶת הַיְלָדִים הָעֲצֵבִים."
+    },
+    {
+      "title_english": "Children Feel Better",
+      "title_target": "הַיְלָדִים מַרְגִּישִׁים יוֹתֵר טוֹב",
+      "subscene": "Center Courtyard",
+      "image_description": "The children smile through their tears as Shenzi licks their faces and wags her tail, their sadness beginning to transform into determination.",
+      "text": "אַחֲרֵי הַחִבּוּק, הַיְלָדִים שְׂמֵחִים יוֹתֵר. הֵם לֹא בּוֹכִים."
+    },
+    {
+      "title_english": "First Transformation",
+      "title_target": "הַהֲפִיכָה הָרִאשׁוֹנָה",
+      "subscene": "Behind Pillars",
+      "image_description": "Aaron suddenly transforms into a small dinosaur, his human form shimmering and changing as he discovers his magical shapeshifting ability for the first time.",
+      "text": "פִּתְאֹם אַהֲרוֹן הוֹפֵךְ לְדִינוֹזוֹר! הוּא בֶּן־חַיּוֹת!"
+    },
+    {
+      "title_english": "All Children Transform",
+      "title_target": "כָּל הַיְלָדִים הוֹפְכִים",
+      "subscene": "Behind Pillars",
+      "image_description": "One by one, each child transforms into their favorite animal - Isaac becomes a koala, Evan transforms into an owl, and Aurelia shifts into a panda, all hiding between the pillars.",
+      "text": "יִצְחָק הוֹפֵךְ לְקוֹאָלָה, אֵבֶן הוֹפֵךְ לְיַנְשׁוּף, וְאוֹרֵלְיָה הוֹפֶכֶת לְדֻב פַּנְדָּה."
+    },
+    {
+      "title_english": "Escape Through Courtyard",
+      "title_target": "בְּרִיחָה דֶּרֶךְ הֶחָצֵר",
+      "subscene": "Palace Courtyard",
+      "image_description": "The four animal-children dart between the marble columns and around the palm trees, using their new forms to evade the confused koopa troops who cannot catch them.",
+      "text": "בְּנֵי־הַחַיּוֹת רָצִים מַהֵר בֵּין הָעַמּוּדִים. הַצְּבָבִים לֹא יְכוֹלִים לִתְפֹּס אוֹתָם."
+    },
+    {
+      "title_english": "Bowser Gets Angry",
+      "title_target": "בּוֹזֶר כּוֹעֵס",
+      "subscene": "Palace Courtyard",
+      "image_description": "Bowser roars with frustration as he watches the children escape in their animal forms, his koopa troops running around helplessly trying to catch creatures they've never seen before.",
+      "text": "בּוֹזֶר כּוֹעֵס מְאֹד! הוּא צוֹעֵק: \"תִּתְפְּסוּ אֶת בְּנֵי־הַחַיּוֹת!\""
+    },
+    {
+      "title_english": "Freedom but Guilt",
+      "title_target": "חֵרוּת אֲבָל אַשְׁמָה",
+      "subscene": "Palace Courtyard",
+      "image_description": "The four children, now back in human form, stand at the edge of the courtyard looking back at other ordinary children who remain trapped, feeling conflicted about their escape.",
+      "text": "הַיְלָדִים חָפְשִׁיִּים אֲבָל עֲצֵבִים. יְלָדִים אֲחֵרִים עוֹד עֲבָדִים לְבוֹזֶר."
+    }
+  ],
+  "vocabulary": [
+    {
+      "part_of_speech": "nouns",
+      "table": [
+        {"word": "יֶלֶד", "gloss": "child"},
+        {"word": "חָצֵר", "gloss": "courtyard"},
+        {"word": "מִשְׂחָק", "gloss": "toy/game"},
+        {"word": "דִּינוֹזוֹר", "gloss": "dinosaur"},
+        {"word": "חֶרֶב", "gloss": "sword"},
+        {"word": "אוֹר", "gloss": "light"},
+        {"word": "נְיָר", "gloss": "paper"},
+        {"word": "אֹכֶל", "gloss": "food"},
+        {"word": "אוֹיֵב", "gloss": "enemy"},
+        {"word": "כֶּלֶב", "gloss": "dog"},
+        {"word": "בֶּן־חַיּוֹת", "gloss": "shapeshifter"},
+        {"word": "עֶבֶד", "gloss": "slave"},
+        {"word": "חֵרוּת", "gloss": "freedom"}
+      ]
+    },
+    {
+      "part_of_speech": "verbs",
+      "table": [
+        {"word": "שָׂחַק", "gloss": "to play"},
+        {"word": "אָהַב", "gloss": "to love"},
+        {"word": "עָשָׂה", "gloss": "to make/do"},
+        {"word": "בּוֹא", "gloss": "to come"},
+        {"word": "עָבַד", "gloss": "to work"},
+        {"word": "בָּכָה", "gloss": "to cry"},
+        {"word": "חָבַק", "gloss": "to hug"},
+        {"word": "הָפַךְ", "gloss": "to transform"},
+        {"word": "רוּץ", "gloss": "to run"},
+        {"word": "תָּפַס", "gloss": "to catch"},
+        {"word": "כָּעַס", "gloss": "to be angry"},
+        {"word": "צָעַק", "gloss": "to shout"}
+      ]
+    },
+    {
+      "part_of_speech": "adjectives",
+      "table": [
+        {"word": "שָׂמֵחַ", "gloss": "happy"},
+        {"word": "עָצֵב", "gloss": "sad"},
+        {"word": "קָטָן", "gloss": "small"},
+        {"word": "רַע", "gloss": "evil/bad"},
+        {"word": "טוֹב", "gloss": "good"},
+        {"word": "חָפְשִׁי", "gloss": "free"}
+      ]
+    },
+    {
+      "part_of_speech": "animals",
+      "table": [
+        {"word": "קוֹאָלָה", "gloss": "koala"},
+        {"word": "יַנְשׁוּף", "gloss": "owl"},
+        {"word": "דֻב פַּנְדָּה", "gloss": "panda"}
+      ]
+    }
+  ],
+  "grammar": [
+    "Present tense verbs are formed with participle patterns like מְשַׂחֲקִים (playing).",
+    "Simple sentences use subject-verb-object order like יְלָדִים מְשַׂחֲקִים (children play).",
+    "The definite article הַ attaches directly to nouns like הַיְלָדִים (the children).",
+    "Possession is shown with שֶׁל like הַצְּבָבִים שֶׁלּוֹ (his troops).",
+    "Direct speech is introduced with אוֹמֵר (says) followed by a colon."
+  ]
+}
