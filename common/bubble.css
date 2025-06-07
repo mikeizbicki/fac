@@ -21,7 +21,7 @@
   display: none;
   z-index: 9999;
   pointer-events: auto;
-  width: 20em;
+  max-width: 20em;
   word-wrap: break-word;
   overflow: hidden;
 }

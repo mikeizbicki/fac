@@ -33,7 +33,7 @@ if __name__ == '__main__':
             fout.write(f"## Chapter {chapter_num}: {chapter_json['chapter']} \n\n")
             for section_num, section in enumerate(chapter_json['sections']):
                 fout.write(f"### Section {section_num}: {section['title_target']} \n\n")
-                fout.write(f"![{section['image_description']}](subscene/{section['subscene']}.png) \n\n")
+                fout.write(f"![{section['image_description']}](subscene/{section['subscene']}.png \"{section['image_description']}\") \n\n")
                 fout.write(f"{section['text']} \n\n")
 
             fout.flush()

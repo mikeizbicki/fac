@@ -27,7 +27,7 @@ fi
 ########################################
 
 files_for_prompt="
-    characters
+    $(ls $story_dir/../characters/*/about.json)
     $story_about_file
     $(dirname $story_dir)/about
 "
@@ -41,5 +41,6 @@ $(cat prompts/outline)
 
 $(files-to-prompt -c $files_for_prompt)
 "
+#echo "$prompt"
 
 scripts/internal/llm.sh "$story_dir/outline" "$prompt"

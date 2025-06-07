@@ -62,7 +62,7 @@
                   // Create bubble for this word
                   const bubble = document.createElement('div');
                   bubble.classList.add('word-speech-bubble');
-                  bubble.textContent = word.trim();
+                  bubble.innerHTML = `<a href="https://www.morfix.co.il/en/${word.trim()}">lookup on morfix.co.il</a>`;
                   
                   // Append everything
                   container.appendChild(span);

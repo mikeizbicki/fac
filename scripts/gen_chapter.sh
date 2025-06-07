@@ -20,7 +20,7 @@ text_file="$chapter_dir"/text
 ########################################
 
 files_for_prompt="
-    characters
+    $(ls $story_dir/../characters/*/about.json)
     $(dirname $story_dir)/about
     $story_dir/outline
 "

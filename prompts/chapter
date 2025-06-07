@@ -27,6 +27,17 @@ Each section in the "chapters" list should be a JSON dictionary with the followi
 - "subscene": this should exactly match the "name" field of one of the subscenes (either from this "subscenes" list or another one; whenever possible, a subscene from a previous file should be used)
 - "image_description": a detailed 2-3 sentence description of how the action in the "text" field is interacting with the subscene; it should fully describe whatever actions are taking place
 - "text": 10-30 words in the target language; the text of the story should advance the plot and demonstrate the vocabulary/grammar
+- "stage_directions": a JSON list that describes the actions the characters are taking in the subscene; only characters present should be in the list; it will be used to render an animation of the section; each entry in the list is a JSON dictionary with the following fields:
+  - "character"
+  - "action": one of:
+    - "sitting"
+    - "standing"
+    - "speaking"
+    - "enter_stage_left"
+    - "enter_stage_right"
+    - "leave_stage_left"
+    - "leave_stage_right"
+  - "animation_prompt": a one sentence description that tells the animator how to draw the action the character is performing
 
 The "vocabulary" list will include all vocabulary introduced in this chapter (but not vocabulary introduced in previous chapters).
 Each entry in the "vocabulary" list should be a JSON dictionary with the following keys:

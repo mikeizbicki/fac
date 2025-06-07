@@ -13,5 +13,5 @@ filename="${1%.*}"
 pandoc -s -o "${filename}.html" "$1" -f markdown-implicit_figures \
     --include-in-header=<(echo "<style>$(cat common/bubble.css)</style>") \
     --include-in-header=<(echo "<script>$(cat common/bubble.js)</script>")\
-    --include-in-header=<(echo "<style>$(cat common/book.css)</style>") \
-    --include-in-header=<(echo "<script>$(cat common/book.js)</script>")
+    --include-in-header=<(echo "<style>$(cat common/scroll.css)</style>") \
+    --include-in-header=<(echo "<script>$(cat common/scroll.js)</script>")
