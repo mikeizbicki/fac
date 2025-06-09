@@ -1,73 +1,10 @@
-The output should be in JSON format (do not include markdown code blocks) with the following schema:
-{ "scenes": []
+The output should be a JSON dict (do not include markdown code blocks).
+{ "story_structure": String
 , "chapters": []
-, "story_structure": String
 }
 
-Each scene in the "scenes" list should be a JSON dictionary with the following keys:
-- "name": the name of the scene
-- "description": a 2-3 sentence description of the background imagery in the scene; it should not contain any description of the characters in the scene or any objects that the characters will interact with
-
 The "chapters" list will contain the outline of the plot.
-All of the story's gimics must be mentioned somewhere in the plot.
 Each chapter in the "chapters" list should be a JSON dictionary with the following keys:
-- "name_english": the name of the chapter in English
-- "name_target": the name of the chapter in the target language
+- "name": the name of the chapter in English
 - "element": the name of the element in the story structure
-- "scene": must match one of the "name" elements from the "scenes" list
-- "plot": a JSON dictionary with the following keys:
-    - "description": a 2-3 sentence plot description that should internally follow a 3-act structure
-    - "setup": a 1 sentence description of the setup of the 3-act structure
-    - "confrontation": a 1 sentence description of the confrontation of the 3-act structure
-    - "resolution": a 1 sentence description of the resolution of the 3-act structure
-- "grammar_concepts": a list of strings, where each string is a short description of grammar concepts that will be included in the chapter
-- "vocabulary_themes": a list of strings, where each string is a vocabulary theme that will be covered in the chapter
-
-The "story_structure" should contain one of the following strings.
-The chapters in the "chapters" list should reflect the "story_structure" selected.
-1. "Freytag's pyramid"
-    1. Introduction: Establish the characters and stakes.
-    2. Rise, or rising action: Things seem to be on the up.
-    3. Climax: The world is turned upside-down.
-    4. Return, or fall: We’re heading for tragedy.
-    5. Catastrophe: The inevitable becomes true.
-
-2. "Dan Harmond's story cycle"
-    1. A character is in a zone of comfort. Everyday life is mundane and unchallenging.
-    2. But they want something. The protagonist’s desire compels them to take action.
-    3. They enter an unfamiliar situation. The character crosses the threshold to pursue what they want.
-    4. Adapt to it. They acquire skills and learn how to survive in this new world.
-    5. Get what they wanted. The character achieves their goal, but at a cost.
-    6. Pay a heavy price for it. New and unexpected losses follow the victory.
-    7. Then return to their familiar situation. The character goes back to where they started.
-    8. Having changed. The story’s resolution; the lessons they’ve learned stay with them, and the character has grown.
-
-3. "The Hero's Journey"
-    1. The Ordinary World: We meet our hero.
-    2. Call to Adventure: Will they meet the challenge?
-    3. Refusal of the Call: They resist the adventure.
-    4. Meeting the Mentor: A teacher arrives.
-    5. Crossing the First Threshold: The hero leaves their comfort zone.
-    6. Tests, Allies, Enemies: Making friends and facing roadblocks.
-    7. Approach to the Inmost Cave: Getting closer to our goal.
-    8. Ordeal: The hero’s biggest test yet!
-    9. Reward (Seizing the Sword): Light at the end of the tunnel
-    10. The Road Back: We aren’t safe yet.
-    11. Resurrection: The final hurdle is reached.
-    12. Return with the Elixir: The hero heads home, triumphant.
-
-4. "Seven Point Story Structure"
-    1. The Hook: a compelling introduction to the story’s intriguing world and/or characters
-    2. Plot Turn 1: an inciting incident that brings the protagonist into an adventure
-    3. Pinch 1: the stakes are raised with the introduction of the antagonist or the major conflict or challenge
-    4. Midpoint: a turning point in the story where the protagonist goes from reaction to action
-    5. Pinch 2: the major conflict takes a turn for the worse, and all appears lost for the protagonist
-    6. Plot Turn 2: the protagonist discovers something that helps them resolve the major conflict or defeat the antagonist
-    7. Resolution: the major conflict is resolved, and the antagonist is defeated
-
-5. "The Fichtean curve"
-    1. Rising Action: a series of increasingly troublesome crises that the hero is able to overcome.
-        (Each crisis should be its own chapter; there should be 3-8 crises.)
-    2. Climax: a final, larger crisis that is either catastrophic or redeeming for the protagonist.
-    3. Falling Action: the story will be resolved in some way.
-
+- "plot": a 2-5 sentence plot description that is guided by the element from the story_structure; the description should be specific (for example, don't say "the characters face challenges", describe exactly which characters face challenges and what they are and why they are important

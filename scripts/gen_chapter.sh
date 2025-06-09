@@ -23,6 +23,7 @@ files_for_prompt="
     $(ls $story_dir/../characters/*/about.json)
     $(dirname $story_dir)/about
     $story_dir/outline
+    $story_dir/locations.json
 "
 for chapter in $(ls "$story_dir" | grep '^chapter' | sort -n); do
     text="$story_dir/$chapter/text"

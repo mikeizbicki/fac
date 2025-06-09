@@ -1,0 +1,61 @@
+{
+  "name": "Freytag's Pyramid",
+  "advantages": [
+    "Provides a time-tested and infinitely adaptable framework that works across different genres and media",
+    "Creates a naturally satisfying story arc that builds tension effectively toward a climactic moment",
+    "Offers clear structure for writers who need guidance in organizing their narrative elements",
+    "Works well for mainstream storytelling and is easily understood by audiences familiar with Western narrative traditions"
+  ],
+  "disadvantages": [
+    "Represents a euro-centric view of storytelling that may not suit all cultural approaches to narrative",
+    "May feel formulaic or restrictive for avant-garde or experimental storytelling",
+    "The falling action section can be particularly challenging to write effectively while maintaining reader interest",
+    "Modern interpretations often place the climax near the end rather than at the midpoint, creating potential confusion about structure"
+  ],
+  "elements": [
+    {
+      "name": "Exposition",
+      "description": "Introduce the main character, establish the setting, and provide necessary background information. This phase can range from extensive world-building to minimal setup depending on your approach. The most crucial element is the inciting incident (also called the exciting force or complication) - the moment that calls the hero to action and sets the protagonist's journey into motion. You can start in medias res and circle back with flashbacks, or provide a more traditional introduction. Focus on capturing the audience's attention while laying the groundwork for the story to come.",
+      "relative_length": 15,
+      "examples": [
+        "We see young Harry living a miserable life with the Dursleys, his bedroom a cupboard under the stairs and his cousin a constant antagonist. We get a glimpse of his powers and potential when they visit a local zoo and Harry uses his magic to talk to a snake and remove the glass that holds it captive. The exciting force begins as owls start to arrive, each carrying a letter addressed to Harry Potter.",
+        "In this exposition, we meet the main cast of characters, including Jay Gatsby and his love interest Daisy, and we are introduced to the setting: 1920's New York. We learn that Gatsby and Daisy used to be lovers, though they had to split up because Gatsby had no money at the time. The exciting force comes when we find out that Daisy is unhappy in her current marriage because her husband, Tom, is cheating on her."
+      ]
+    },
+    {
+      "name": "Rising Action",
+      "description": "This is usually the lengthiest part of your story where the protagonist moves toward the climax and tension builds for the audience. Show your characters facing setbacks, overcoming obstacles, meeting other characters, and learning more about their adversary. Give readers more reasons to care about the outcome, demonstrate what's at stake, and provide opportunities for character development. The tension should gradually escalate through this section, with each scene building upon the previous one to create momentum toward the climax.",
+      "relative_length": 45,
+      "examples": [
+        "While Harry is exploring the wizarding world, making friends, learning to fly a broomstick, and taking classes at Hogwarts, the tension of the mystery surrounding the Sorcerer's Stone begins to build. The protagonists learn more about the stone and the evil wizard Voldemort, going so far as to even have a direct encounter with him in the forest outside the school.",
+        "The action rises as we view lavish parties at Gatsby's house, and we meet Tom's mistress, Myrtle. Tension rises as Gatsby is able to arrange a private teatime between himself and Daisy. He shows her his extravagant shirt collection, a symbol of his wealth, and she tells him how much she loves them. They begin to have an affair."
+      ]
+    },
+    {
+      "name": "Climax",
+      "description": "This is the at-the-edge-of-your-seat moment - the final clash, the scene where everything is on the line, or when the tragic hero realizes their error but it's too late. According to Freytag, this serves as a reflection point in the story where fates take a turn. If things have been going well, they'll turn for the worst, or vice versa. This is your story's main turning point and should be the most intense, dramatic moment. Modern stories often place this near the end rather than at the midpoint as Freytag originally conceived.",
+      "relative_length": 15,
+      "examples": [
+        "The action rises until Harry eventually finds himself face-to-face with Voldemort himself. In this climactic moment, Harry prevents his nemesis from possessing the stone and defeats him in the first of what will be many encounters over the course of the series.",
+        "Eventually, we reach a climactic moment when the truth comes out. Gatsby and Tom have a showdown over Daisy's love, and ultimately Daisy admits that she loves Tom, not Gatsby. Thinking that he's won the ordeal, Tom agrees to let Daisy drive Gatsby home in his car. On the way, they have an accident, and she kills Myrtle, Tom's mistress."
+      ]
+    },
+    {
+      "name": "Falling Action",
+      "description": "Begin wrapping up the story by spelling out the consequences that result from the climactic conflict. In tragedy, things continue to worsen for the protagonist; in comedy, they improve. This is often the hardest section to write as you must tie up loose ends, expand into broader themes, and steer toward conclusion. Follow Freytag's rules: limit the number of characters involved and use fewer scenes than in rising action. There may still be some suspense, such as the possibility of a reversal of fortunes, but tension should generally be decreasing.",
+      "relative_length": 15,
+      "examples": [
+        "After the climax, we have a brief period of falling action. Dumbledore, Hogwart's wise headmaster, speaks to Harry while he recovers in the hospital. He answers questions for both the hero and the audience. The effect is a tying of loose ends and an easing of tension."
+      ]
+    },
+    {
+      "name": "Resolution",
+      "description": "This is the final stage where tensions are finally released, justice is served, or the ultimate consequences are fulfilled, leaving the audience with catharsis. Freytag called this the 'catastrophe' since he focused on tragedy, but modern usage applies it to all story types. Some prefer the term 'denouement' for this final untangling or resolution of the plot. Tie up remaining loose ends, answer the audience's questions, and leave them with a sense of fulfillment and closure. This should provide a satisfying conclusion to the journey you've taken your readers on.",
+      "relative_length": 10,
+      "examples": [
+        "Finally, we have the resolution. At the year-end feast, Dumbledore awards a generous amount of points to Gryffindor for the heroics displayed by Harry and his friends, earning them the house cup. This moment of resolution and triumph lingers as Harry bids goodbye to his friends and heads onto the train to go home for summer.",
+        "The resolution—in this case, the catastrophe—comes shortly after. Myrtle's husband tracks down Gatsby's car, finds the man floating in his pool, and shoots him dead on the spot. Hardly anyone shows up to Gatsby's funeral, showing just how futile his shallow attempts at grandeur really were."
+      ]
+    }
+  ]
+}

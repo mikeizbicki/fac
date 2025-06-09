@@ -27,9 +27,10 @@ fi
 ########################################
 
 files_for_prompt="
-    $(ls $story_dir/../characters/*/about.json)
-    $story_about_file
-    $(dirname $story_dir)/about
+$(ls $story_dir/../characters/*/about.json)
+$story_about_file
+$(dirname $story_dir)/about
+prompts/story_structures/freytag
 "
 echo "files_for_prompt=$files_for_prompt"
 
