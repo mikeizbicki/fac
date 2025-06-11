@@ -5,3 +5,5 @@ tmp
 *.png
 *.sw?
 *.text*
+__pycache__
+*.pyc

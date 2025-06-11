@@ -1,4 +1,5 @@
 "$SERIES/$STORY/outline.json":
+  prompt_file: prompts/outline
   dependencies: |
     prompts/story_structures/freytag
     $SERIES/about
@@ -20,7 +21,6 @@
     $SERIES/$STORY/outline.json
     $SERIES/$STORY/locations.json
     $SERIES/characters/*/about.json
-    $SERIES/$STORY/chapter*/chapter.json
   variables:
     NUM_CHAPTERS: |
       jq '.chapters | length' $SERIES/$STORY/outline.json
@@ -37,7 +37,7 @@
     $SERIES/$STORY/outline.json
     $SERIES/$STORY/locations.json
     $SERIES/characters/*/about.json
-    $SERIES/$STORY/chapter*/chapter.json
+    $SERIES/$STORY/chapter$CHAPTER/chapter.json
   variables:
     NUM_CHAPTERS: |
       jq '.chapters | length' $SERIES/$STORY/outline.json
@@ -57,9 +57,9 @@
 "$SERIES/$STORY/text.md":
   cmd: ./scripts/gen_markdown.py "$SERIES/$STORY/"
   dependencies: |
-    "$SERIES/$STORY/chapter$CHAPTER/section$SECTION/blocking.json"
+    $SERIES/$STORY/chapter$CHAPTER/section$SECTION/blocking.json
 
 "$SERIES/$STORY/text.html":
   cmd: ./scripts/gen_html.sh "$SERIES/$STORY/text.md"
   dependencies: |
-    "$SERIES/$STORY/text.md"
+    $SERIES/$STORY/text.md
