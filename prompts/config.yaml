@@ -1,0 +1,65 @@
+"$SERIES/$STORY/outline.json":
+  dependencies: |
+    prompts/story_structures/freytag
+    $SERIES/about
+    $SERIES/$STORY/about
+    $SERIES/characters/*/about.json
+
+"$SERIES/$STORY/locations.json":
+  dependencies: |
+    prompts/story_structures/freytag
+    $SERIES/about
+    $SERIES/$STORY/about
+    $SERIES/$STORY/outline.json
+    $SERIES/characters/*/about.json
+
+"$SERIES/$STORY/chapter$CHAPTER/chapter.json":
+  dependencies: |
+    $SERIES/about
+    $SERIES/$STORY/about
+    $SERIES/$STORY/outline.json
+    $SERIES/$STORY/locations.json
+    $SERIES/characters/*/about.json
+    $SERIES/$STORY/chapter*/chapter.json
+  variables:
+    NUM_CHAPTERS: |
+      jq '.chapters | length' $SERIES/$STORY/outline.json
+    CHAPTER: |
+      seq 0 $(($NUM_CHAPTERS - 1)) | tr '\n' '\0'
+    CHAPTER_TEXT: |
+      jq ".chapters[$CHAPTER]" $SERIES/$STORY/outline.json
+
+"$SERIES/$STORY/chapter$CHAPTER/section$SECTION/blocking.json":
+  prompt_file: prompts/blocking
+  dependencies: |
+    $SERIES/about
+    $SERIES/$STORY/about
+    $SERIES/$STORY/outline.json
+    $SERIES/$STORY/locations.json
+    $SERIES/characters/*/about.json
+    $SERIES/$STORY/chapter*/chapter.json
+  variables:
+    NUM_CHAPTERS: |
+      jq '.chapters | length' $SERIES/$STORY/outline.json
+    CHAPTER: |
+      seq 0 $(($NUM_CHAPTERS - 1)) | tr '\n' '\0'
+    CHAPTER_PATH: |
+      echo $SERIES/$STORY/chapter$CHAPTER/chapter.json
+    NUM_SECTIONS: |
+      jq '.sections | length' $SERIES/$STORY/chapter$CHAPTER/chapter.json
+    SECTION: |
+      seq 0 $(($NUM_SECTIONS - 1)) | tr '\n' '\0'
+    PREV_SECTION: |
+      echo $(($SECTION - 1))
+    SECTION_TEXT: |
+      jq ".sections[$SECTION]" $SERIES/$STORY/chapter$CHAPTER/chapter.json
+
+"$SERIES/$STORY/text.md":
+  cmd: ./scripts/gen_markdown.py "$SERIES/$STORY/"
+  dependencies: |
+    "$SERIES/$STORY/chapter$CHAPTER/section$SECTION/blocking.json"
+
+"$SERIES/$STORY/text.html":
+  cmd: ./scripts/gen_html.sh "$SERIES/$STORY/text.md"
+  dependencies: |
+    "$SERIES/$STORY/text.md"

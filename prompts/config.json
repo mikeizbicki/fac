@@ -1,0 +1,51 @@
+{
+    "$SERIES/$STORY/outline.json": {
+        "dependencies": [
+            "prompts/story_structures/freytag",
+            "$SERIES/about",
+            "$SERIES/$STORY/about",
+            "$SERIES/characters/*/about.json"
+        ]
+    },
+    "$SERIES/$STORY/locations.json": {
+        "dependencies": [
+            "prompts/story_structures/freytag",
+            "$SERIES/about",
+            "$SERIES/$STORY/about",
+            "$SERIES/$STORY/outline.json",
+            "$SERIES/characters/*/about.json"
+        ]
+    },
+    "$SERIES/$STORY/chapter$CHAPTER/chapter.json": {
+        "dependencies": [
+            "$SERIES/about",
+            "$SERIES/$STORY/about",
+            "$SERIES/$STORY/outline.json",
+            "$SERIES/$STORY/locations.json",
+            "$SERIES/characters/*/about.json",
+            "$SERIES/$STORY/chapter*/chapter.json"
+        ],
+        "variables": {
+            "NUM_CHAPTERS": "jq '.chapters | length' $SERIES/$STORY/outline.json",
+            "CHAPTER": "seq 0 $(($NUM_CHAPTERS - 1)) | tr '\\n' '\\0'",
+            "CHAPTER_TEXT": "jq \".chapters[$CHAPTER]\" $SERIES/$STORY/outline.json"
+        }
+    },
+    "$SERIES/$STORY/chapter$CHAPTER/section$SECTION/blocking.json": {
+        "dependencies": [
+            "$SERIES/about",
+            "$SERIES/$STORY/about",
+            "$SERIES/$STORY/outline.json",
+            "$SERIES/$STORY/locations.json",
+            "$SERIES/characters/*/about.json",
+            "$SERIES/$STORY/chapter*/chapter.json"
+        ],
+        "variables": {
+            "NUM_CHAPTERS": "jq '.chapters | length' $SERIES/$STORY/outline.json",
+            "CHAPTER": "seq 0 $(($NUM_CHAPTERS - 1)) | tr '\\n' '\\0'",
+            "NUM_SECTIONS": "jq '.sections | length' $SERIES/$STORY/chapter$CHAPTER/chapter.json",
+            "SECTION": "seq 0 $(($NUM_SECTIONS - 1)) | try '\\n' '\\0'",
+            "SECTION_TEXT": "jq \".sections[$SECTION]\" $SERIES/$STORY/chapter$CHAPTER/chapter.json"
+        }
+    }
+}

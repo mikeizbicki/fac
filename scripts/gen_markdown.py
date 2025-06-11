@@ -20,13 +20,14 @@ if __name__ == '__main__':
     parser.add_argument('book_path')
     args = parser.parse_args()
 
-    out_path = args.book_path + '/text.markdown'
+    out_path = args.book_path + '/text.md'
     logging.info(f"out_path={out_path}")
     with open(out_path, 'wt') as fout:
 
-        for chapter_num, chapter_path in enumerate(sorted(glob.glob(args.book_path + '/chapter*/text'))):
+        for chapter_num, chapter_path in enumerate(sorted(glob.glob(args.book_path + '/chapter*/chapter.json'))):
             logging.info(f"chapter_path={chapter_path}")
 
+            print(f"chapter_path={chapter_path}")
             with open(chapter_path) as fin:
                 chapter_json = json.load(fin)
 

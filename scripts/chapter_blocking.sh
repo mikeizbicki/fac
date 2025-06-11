@@ -11,6 +11,6 @@ chapter_text="$chapter_dir"/text
 num_sections=$(cat "$chapter_text" | jq '.sections | length')
 
 for i in $(seq -f "%02g" 0 $(($num_sections - 1))); do
-    ./scripts/gen_blocking.sh "$story_dir" "$chapter" "$i"
+    ./scripts/section_blocking.sh "$story_dir" "$chapter" "$i"
 done
 

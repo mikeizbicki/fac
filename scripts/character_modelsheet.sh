@@ -33,4 +33,4 @@ The model sheet should:
 Style: cartoon, bright colors, bold outlines, fun for kids
 "
 
-./scripts/internal/gen_image.py "$modelsheet_path" "$prompt" $rawimages_path/* --quality=high
+./scripts/internal/gen_image.py "$modelsheet_path" "$prompt" #$rawimages_path/* #--quality=high

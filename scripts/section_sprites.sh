@@ -24,7 +24,7 @@ section_blocking_file="$section_dir/blocking.json"
 num_characters=$(jq '.characters | length' "$section_blocking_file")
 
 for i in $(seq 0 $((num_characters - 1))); do 
-    character_name=$(jq ".characters[$i].name" "$section_blocking_file" | tr -d '"' | tr '[:upper:]' '[:lower:]')
+    character_name=$(jq ".characters[$i].name" "$section_blocking_file" | tr -d '"' | tr '[:upper:]' '[:lower:]' | tr ' ' '_')
     echo generating sprite $i for character $character_name
     character_dir="$story_dir/../characters/$character_name"
     prompt="
@@ -36,21 +36,31 @@ character pose information
 ---
 $(jq ".characters[$i].description" "$section_blocking_file")
 
+$(
+if [ -f "$character_dir/about.json" ]; then
+    echo "
 ---
 character about
 ---
 $(jq ".Appearance" "$character_dir/about.json")
 "
+fi
+)
+"
     #echo "$prompt"
 
-    modelsheet="$character_dir/modelsheet.png"
-    #echo $modelsheet
+    modelsheets=$character_dir/modelsheet*.png
+    #echo "modelsheets=$modelsheets"
+    if echo $modelsheets | grep -q '\*'; then
+        modelsheets=
+    fi
+    echo $modelsheets
 
-    output_file="$section_dir/$character_name.png"
+    output_file="$section_dir/sprites/$character_name.png"
+    mkdir -p $(dirname $output_file)
 
     if ! [ -f $output_file ]; then
-        ./scripts/internal/gen_image.py "$output_file" "$prompt" "$modelsheet" --size=1024x1536 &
+        ./scripts/internal/gen_image.py "$output_file" "$prompt" $modelsheets --size=1024x1536
     fi
 
 done
-wait

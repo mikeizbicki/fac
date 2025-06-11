@@ -1,0 +1,59 @@
+Generate the blocking for the current beat described below.
+The movement and positioning should smoothly transition between the previous and next beats.
+The output should be a JSON dictionary (without markdown codeblocks) with the following keys:
+- "characters": A JSON list of dictionaries with the following keys
+  - "name": must match exactly the name of a character in the characters list
+  - "placement": one of ["center", "stage-left", "stage-right", "off-screen"] (if the character's movement will enter the scene, the placement should be "off-screen")
+  - "description": this key should only be present if there is significant change between what the character is doing in this beat and the previous beat; if this is the first beat, then the description will always be present; whenever possible, the description should be absent; if present, description is a JSON dict with the following keys:
+      - "pose": a string that must be one of
+        - "profile-left" (facing sideways to the camera, looking to the left)
+        - "profile-right" (facing sideways to the camera, looking to the right)
+        - "straight-on" (facing directly at the camera)
+        - "back" (facing away from the camera)
+      - "action": a 1-2 sentence description of what the character is doing; the description should be designed for an animator to decide what to draw; the descriptions of all characters should tie together into the overall scene
+  - "movements": a JSON list that describes how the characters will move in the scene; it is okay for the list to be empty; each entry is a dict with the following keys:
+    - "character": must exactly match the name of a character in the scene
+    - "action": must exactly match one of the following strings
+      - "enter-stage-left"
+      - "enter-stage-right"
+      - "exit-stage-left"
+      - "exit-stage-right"
+    - "final-placement": the final placement of the character after the action (if exiting, the final placement must be "off-screen")
+
+---
+current beat
+---
+
+$SECTION_TEXT
+
+---
+previous beat
+---
+
+$(
+if [ $SECTION = 0000 ]; then
+  echo "none"
+else
+  jq ".sections[$SECTION-1]" "$CHAPTER_PATH"
+  echo "
+---
+previous blocking
+---
+$(cat "$SERIES/$STORY/chapter$CHAPTER/section$PREV_SECTION/blocking.json")
+"
+fi
+)
+
+---
+next beat
+---
+
+$(
+if [ $SECTION -eq $(jq '.sections | length - 1' "$CHAPTER_PATH") ]; then
+  echo "none"
+else
+  jq ".sections[$SECTION+1]" "$CHAPTER_PATH"
+fi
+)
+
+
