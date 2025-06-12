@@ -3,6 +3,7 @@
 # setup logging
 import logging
 handler = 'standard'
+#handler = 'rich'
 
 if handler == 'rich':
     from rich.logging import RichHandler
@@ -448,53 +449,153 @@ def match_pattern(patterns, input_string):
 # main function
 ################################################################################
 
-def generate_file(
-        pattern_to_build='$SERIES/$STORY/outline.json',
-        *,
-        prompt_dir='prompts',
-        config_path='prompts/config.yaml',
-        overwrite=False,
-        print_prompt=False,
-        print_environments=False,
-        environment0=None,
-        ):
+class BuildSystem:
 
-    if not environment0:
-        environment0 = {}
+    def __init__(
+            self,
+            pattern_to_build=None,
+            *,
+            prompt_dir='prompts',
+            config_path='prompts/config.yaml',
+            overwrite=False,
+            print_prompt=False,
+            print_environments=False,
+            environment0=None,
+            ):
 
-    logger.debug(f'pattern_to_build="{pattern_to_build}"')
-    logger.debug(f"environment0={environment0}")
-    llm = LLM()
+        # update attributes
+        self.pattern_to_build = pattern_to_build
+        self.prompt_dir = prompt_dir
+        self.overwrite = overwrite
+        self.print_prompt = print_prompt
+        self.print_environments = print_environments
 
-    # load config file
-    import yaml
-    with open(config_path) as fin:
-        full_config = yaml.safe_load(fin)
-    config_patterns = full_config.keys()
-    transformed_pattern, environment = match_pattern(config_patterns, pattern_to_build)
-    logger.debug(f"transformed_pattern={transformed_pattern}; environment={environment}")
-    assert transformed_pattern
-    assert transformed_pattern in full_config
-    config = full_config[transformed_pattern]
+        if not environment0:
+            environment0 = {}
+        self.environment0 = environment0
 
-    # compute the variables
-    environments = [{**environment, **environment0}]
-    for var, expr in config.get('variables', {}).items():
+        # load config file
+        import yaml
+        with open(config_path) as fin:
+            self.full_config = yaml.safe_load(fin)
 
-        environments0 = environments
-        environments = []
-        for environment in environments0:
+        # build
+        if pattern_to_build:
+            self.build_pattern(pattern_to_build)
 
-            # the var was specified in the environment,
-            # so we do not execute the expr
-            if var in os.environ:
-                vals  = os.environ[var]
 
-            # run the expr in the bash shell
-            else:
-                full_command = "set -eu; " + expr
+    def build_pattern(self, pattern_to_build):
+
+        logger.debug(f'pattern_to_build="{pattern_to_build}"')
+        logger.debug(f"self.environment0={self.environment0}")
+        llm = LLM()
+
+        # load pattern config
+        config_patterns = self.full_config.keys()
+        transformed_pattern, environment = match_pattern(config_patterns, pattern_to_build)
+        logger.debug(f"transformed_pattern={transformed_pattern}; environment={environment}")
+        assert transformed_pattern
+        assert transformed_pattern in self.full_config
+        config = self.full_config[transformed_pattern]
+
+        # compute the variables
+        environments = [{**environment, **self.environment0}]
+        for var, expr in config.get('variables', {}).items():
+
+            environments0 = environments
+            environments = []
+            for environment in environments0:
+
+                # the var was specified in the environment,
+                # so we do not execute the expr
+                if var in os.environ:
+                    vals  = os.environ[var]
+
+                # run the expr in the bash shell
+                else:
+                    full_command = "set -eu; " + expr
+                    result = subprocess.run(
+                        full_command,
+                        shell=True,
+                        capture_output=True,
+                        text=True,
+                        executable="/bin/bash",
+                        env={**os.environ, **environment},
+                        )
+                    if result.returncode != 0:
+                        logger.error(f'evaluating {var}=$({expr} failed)')
+                        logger.error(f"result.returncode={result.returncode}")
+                        logger.error(f"result.stdout={result.stdout}")
+                        logger.error(f"result.stderr={result.stderr}")
+                        sys.exit(1)
+                    vals = result.stdout
+
+                # lists are separated by null characters;
+                # for each entry in the list,
+                # we will add a new environment with the entry added
+                for val in vals.split('\0'):
+
+                    # don't add val to the environments list when it is empty;
+                    # this is because when doing the split on \0,
+                    # we will always have the last entry be '',
+                    # because of the tr '\n' '\0' command
+                    # and all outputs ending in a '\n'
+                    val = val.strip()
+                    if val == '':
+                        continue
+
+                    # if val is an integer, prepend it with zeros
+                    try:
+                        intval = int(val)
+                        val = f'{intval:04d}'
+                    except ValueError:
+                        pass
+
+                    # add the environment
+                    environment1 = copy.copy(environment)
+                    environment1[var] = val
+                    environments.append(environment1)
+
+        # print environments debug information
+        if self.print_environments:
+            import pprint
+            pprint.pprint(environments)
+            return
+
+        # loop over each environment and run the processing code for the environment
+        for i, environment in enumerate(environments):
+            logger.debug(f'iteration {i+1}/{len(environments)}; environment={environment}')
+
+            # compute the dependencies
+            logger.debug(f'computing dependencies for "{pattern_to_build}"')
+            include_paths = []
+            deps = config['dependencies'].split()
+            for dep_pattern in deps:
+                dep_paths = expand_path(dep_pattern, environment)
+                if not dep_paths:
+                    logger.debug(f'no paths found for dep_pattern={dep_pattern}, building')
+                    #generate_file(
+                        #pattern_to_build=dep_pattern,
+                        #prompt_dir=self.prompt_dir,
+                        #config_path=self.config_path,
+                        #overwrite=self.overwrite,
+                        #print_prompt=self.print_prompt,
+                        #print_environments=self.print_environments,
+                        #self.environment0 = environment,
+                        #)
+                else:
+                    logger.debug(f'matched: dep_pattern="{dep_pattern}"')
+                    #logger.debug(f'dependency matched: dep_pattern="{dep_pattern}"; dep_paths={dep_paths}')
+                include_paths.extend(dep_paths)
+            logger.debug(f"include_paths={include_paths}")
+
+            # after generating dependencies
+            logger.info(f'building "{pattern_to_build}"')
+
+            # build with a custom command
+            if config.get('cmd'):
                 result = subprocess.run(
-                    full_command,
+                    config['cmd'],
                     shell=True,
                     capture_output=True,
                     text=True,
@@ -502,148 +603,68 @@ def generate_file(
                     env={**os.environ, **environment},
                     )
                 if result.returncode != 0:
-                    logger.error(f'evaluating {var}=$({expr} failed)')
                     logger.error(f"result.returncode={result.returncode}")
                     logger.error(f"result.stdout={result.stdout}")
                     logger.error(f"result.stderr={result.stderr}")
                     sys.exit(1)
-                vals = result.stdout
 
-            # lists are separated by null characters;
-            # for each entry in the list,
-            # we will add a new environment with the entry added
-            for val in vals.split('\0'):
+            # build the target with the LLM
+            else:
 
-                # don't add val to the environments list when it is empty;
-                # this is because when doing the split on \0,
-                # we will always have the last entry be '',
-                # because of the tr '\n' '\0' command
-                # and all outputs ending in a '\n'
-                val = val.strip()
-                if val == '':
-                    continue
+                # compute files_prompt
+                files_prompt = '<documents>\n'
+                for path in include_paths:
+                    with open(path) as fin:
+                        files_prompt += f'''<document path="{path}">
+    {fin.read().strip()}
+    </document>
+    '''
+                files_prompt += '</documents>'
 
-                # if val is an integer, prepend it with zeros
+                # compute the instructions prompt
+                filename = os.path.basename(pattern_to_build)
+                _, extension = os.path.splitext(filename)
+
+                if 'prompt_file' in config:
+                    prompt_path = config['prompt_file']
+                else:
+                    prompt_path = os.path.join(self.prompt_dir, filename)
+                with open(prompt_path) as fin:
+                    prompt_cmd = fin.read()
+                    prompt_cmd = process_template(prompt_cmd, env_vars=environment)
+                    #prompt_cmd = process_template(prompt_cmd, env_vars={**os.environ, **environment})
+                
+                if extension == '.json':
+                    format_cmd = '<formatting>JSON with no markdown codeblocks.</formatting>'
+                else:
+                    format_cmd = ''
+
+                # compute full prompt
+                prompt = f'''<instructions>
+    {prompt_cmd}
+    </instructions>
+    {format_cmd}
+    {files_prompt}
+    '''
+
+                # stop processing if printing the prompt
+                if self.print_prompt:
+                    print(prompt)
+                    return
+
+                # write to the output file
+                path_to_generate = process_template(pattern_to_build, environment)
+                logger.debug(f"path_to_generate={path_to_generate}")
+                dirname = os.path.dirname(path_to_generate)
+                os.makedirs(dirname, exist_ok=True)
+                mode = 'wt' if self.overwrite else 'xt'
                 try:
-                    intval = int(val)
-                    val = f'{intval:04d}'
-                except ValueError:
-                    pass
-
-                # add the environment
-                environment1 = copy.copy(environment)
-                environment1[var] = val
-                environments.append(environment1)
-
-    # print environments debug information
-    if print_environments:
-        import pprint
-        pprint.pprint(environments)
-        return
-
-    # loop over each environment and run the processing code for the environment
-    for i, environment in enumerate(environments):
-        logger.debug(f'iteration {i+1}/{len(environments)}; environment={environment}')
-
-        # compute the dependencies
-        logger.debug(f'computing dependencies for "{pattern_to_build}"')
-        include_paths = []
-        deps = config['dependencies'].split()
-        for dep_pattern in deps:
-            dep_paths = expand_path(dep_pattern, environment)
-            if not dep_paths:
-                logger.debug(f'no paths found for dep_pattern={dep_pattern}, building')
-                generate_file(
-                    pattern_to_build=dep_pattern,
-                    prompt_dir=prompt_dir,
-                    config_path=config_path,
-                    overwrite=overwrite,
-                    print_prompt=print_prompt,
-                    print_environments=print_environments,
-                    environment0 = environment,
-                    )
-            else:
-                logger.debug(f'matched: dep_pattern="{dep_pattern}"')
-                #logger.debug(f'dependency matched: dep_pattern="{dep_pattern}"; dep_paths={dep_paths}')
-            include_paths.extend(dep_paths)
-        logger.debug(f"include_paths={include_paths}")
-
-        # after generating dependencies
-        logger.info(f'building "{pattern_to_build}"')
-
-        # build with a custom command
-        if config.get('cmd'):
-            result = subprocess.run(
-                config['cmd'],
-                shell=True,
-                capture_output=True,
-                text=True,
-                executable="/bin/bash",
-                env={**os.environ, **environment},
-                )
-            if result.returncode != 0:
-                logger.error(f"result.returncode={result.returncode}")
-                logger.error(f"result.stdout={result.stdout}")
-                logger.error(f"result.stderr={result.stderr}")
-                sys.exit(1)
-
-        # build the target with the LLM
-        else:
-
-            # compute files_prompt
-            files_prompt = '<documents>\n'
-            for path in include_paths:
-                with open(path) as fin:
-                    files_prompt += f'''<document path="{path}">
-{fin.read().strip()}
-</document>
-'''
-            files_prompt += '</documents>'
-
-            # compute the instructions prompt
-            filename = os.path.basename(pattern_to_build)
-            _, extension = os.path.splitext(filename)
-
-            if 'prompt_file' in config:
-                prompt_path = config['prompt_file']
-            else:
-                prompt_path = os.path.join(prompt_dir, filename)
-            with open(prompt_path) as fin:
-                prompt_cmd = fin.read()
-                prompt_cmd = process_template(prompt_cmd, env_vars=environment)
-                #prompt_cmd = process_template(prompt_cmd, env_vars={**os.environ, **environment})
-            
-            if extension == '.json':
-                format_cmd = '<formatting>JSON with no markdown codeblocks.</formatting>'
-            else:
-                format_cmd = ''
-
-            # compute full prompt
-            prompt = f'''<instructions>
-{prompt_cmd}
-</instructions>
-{format_cmd}
-{files_prompt}
-'''
-
-            # stop processing if printing the prompt
-            if print_prompt:
-                print(prompt)
-                return
-
-            # write to the output file
-            path_to_generate = process_template(pattern_to_build, environment)
-            logger.debug(f"path_to_generate={path_to_generate}")
-            dirname = os.path.dirname(path_to_generate)
-            os.makedirs(dirname, exist_ok=True)
-            mode = 'wt' if overwrite else 'xt'
-            try:
-                with open(path_to_generate, mode) as fout:
-                    fout.write(llm.text(prompt))
-            except FileExistsError:
-                logger.warning(f'file "{path_to_generate}" exists; skipping')
+                    with open(path_to_generate, mode) as fout:
+                        fout.write(llm.text(prompt))
+                except FileExistsError:
+                    logger.warning(f'file "{path_to_generate}" exists; skipping')
 
 if __name__ == '__main__':
     logger.setLevel(logging.DEBUG)
     #logger.setLevel(logging.INFO)
-    clize.run(generate_file)
+    clize.run(BuildSystem)
