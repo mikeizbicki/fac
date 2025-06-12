@@ -502,9 +502,8 @@ def generate_file(
                     env={**os.environ, **environment},
                     )
                 if result.returncode != 0:
+                    logger.error(f'evaluating {var}=$({expr} failed)')
                     logger.error(f"result.returncode={result.returncode}")
-                    logger.error(f"var={var}")
-                    logger.error(f"expr={expr}")
                     logger.error(f"result.stdout={result.stdout}")
                     logger.error(f"result.stderr={result.stderr}")
                     sys.exit(1)
