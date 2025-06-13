@@ -1,0 +1,16 @@
+"wikisearch/search_terms.json":
+  prompt: |
+    List $NUM_QUERIES wikipedia pages that would provide useful background information for the specified query.
+    Ensure that they cover a diverse set of topics.
+    Output as a JSON dictionary with key "wikipedia" whose value is a list of strings.
+  dependencies: |
+    /dev/stdin
+  variables:
+    NUM_QUERIES: echo 10
+
+"/dev/stdout":
+  cmd: |
+    cat "wikisearch/search_terms.json"
+  dependencies:
+    "wikisearch/search_terms.json"
+

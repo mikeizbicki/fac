@@ -251,10 +251,17 @@ class VariableEvaluationError(Exception):
     def __init__(self, var, expr, result):
         errorstrs = [
             f'error evaluating {var}=$({expr})',
-            f"context.variables={context.variables}",
             f"result.returncode={result.returncode}",
             f"result.stdout={result.stdout}",
             f"result.stderr={result.stderr}",
+            ]
+        super().__init__('\n'.join(errorstrs))
+
+
+class EmptyVariableError(Exception):
+    def __init__(self, var, expr):
+        errorstrs = [
+            f'error evaluating {var}=$({expr})',
             ]
         super().__init__('\n'.join(errorstrs))
 
@@ -517,6 +524,8 @@ class BuildSystem:
             print_prompt=False,
             print_contexts=False,
             simple_logger=False,
+            quiet=False,
+            collapse_display=True,
             ):
 
         # update attributes;
@@ -526,6 +535,7 @@ class BuildSystem:
         self.overwrite = overwrite
         self.print_prompt = print_prompt
         self.print_contexts = print_contexts
+        self.collapse_display = collapse_display
 
         # load config file
         import yaml
@@ -538,22 +548,28 @@ class BuildSystem:
         from rich.tree import Tree
         from rich.console import Console
         from rich.live import Live
+        from rich.align import Align
         from rich.traceback import install
         import traceback
         #install()
-        self.logtree = Tree(f"BuildSystem")
+        self.logtree = Tree(f'build_pattern("{pattern_to_build}")')
         self.live = None
-        if simple_logger:
-            handler = logging.StreamHandler()
-            handler.setFormatter(logging.Formatter(
-                '%(asctime)s [%(levelname)s] %(message)s',
-                '%Y-%m-%d %H:%M:%S'
-            ))
-            logger = logging.getLogger(__name__)
-            logger.addHandler(handler)
-        else:
-            self.live = Live(self.logtree, console=Console(), refresh_per_second=4)
-            self.live.start()
+        if not quiet:
+            if simple_logger:
+                handler = logging.StreamHandler()
+                handler.setFormatter(logging.Formatter(
+                    '%(asctime)s [%(levelname)s] %(message)s',
+                    '%Y-%m-%d %H:%M:%S'
+                ))
+                logger = logging.getLogger(__name__)
+                logger.addHandler(handler)
+            else:
+                self.live = Live(
+                        self.logtree,
+                        vertical_overflow='visible',
+                        refresh_per_second=4,
+                        )
+                self.live.start()
 
         try:
             if pattern_to_build:
@@ -565,9 +581,6 @@ class BuildSystem:
 
 
     def build_pattern(self, pattern_to_build, input_env, subtree):
-
-        subtree.add(f'build_pattern("{pattern_to_build}")')
-
         logger.debug(f'pattern_to_build="{pattern_to_build}"')
 
         # load pattern config
@@ -591,12 +604,9 @@ class BuildSystem:
             [],
             config['dependencies'].split(),
             )]
-        #deptree.add(f"contexts={contexts}")
         
-        #self.live.update(self.logtree)
         DUMMY_VAR = 'DUMMY_VAR_CREATED_TO_FORCE_LOOP_TO_RUN_ONCE'
-        for var, expr in config.get('variables', {DUMMY_VAR: ''}).items():
-        #for var, expr in config.get('variables', {}).items():
+        for var, expr in config.get('variables', {DUMMY_VAR: 'DUMMY_VAL'}).items():
             expr = expr.strip()
 
             # compute the variables
@@ -611,7 +621,6 @@ class BuildSystem:
                 unresolved_dependencies1 = []
                 for dep_pattern in context.unresolved_dependencies:
                     subdeptree = deptree.add(f'resolving dependency: "{dep_pattern}"')
-                    #print(f"deptree.children={deptree.children}")
                     try:
                         dep_paths = expand_path(dep_pattern, context.variables)
                         if not dep_paths:
@@ -630,16 +639,21 @@ class BuildSystem:
                             unresolved_dependencies1.append(dep_pattern)
                     # update the tree to indicate success
                     #print(f"subdeptree={subdeptree}")
-                    deptree.children.remove(subdeptree)
-                    deptree.add(f'resolved dependency {dep_pattern}')
-
+                    if self.live and self.collapse_display:
+                        deptree.children.remove(subdeptree)
+                        deptree.add(f'resolved dependency {dep_pattern}')
 
                 logger.debug(f"include_paths1={include_paths1}")
                 logger.debug(f"unresolved_dependencies1={unresolved_dependencies1}")
 
+                # do not evaluate the variable if it is DUMMY_VAR,
+                # since it was created only to force the unresolved_dependencies to run once
+                if var == DUMMY_VAR:
+                    vals = ''
+
                 # the var was specified in the environment,
                 # so we do not execute the expr
-                if var in context.variables:
+                elif var in context.variables:
                     vals = context.variables[var]
 
                 # run the expr in the bash shell
@@ -657,10 +671,15 @@ class BuildSystem:
                         raise VariableEvaluationError(var, expr, result)
                     vals = result.stdout
 
+                    if vals.strip() == '':
+                        raise EmptyVariableError(var, expr)
+
                 # lists are separated by null characters;
                 # for each entry in the list,
                 # we will add a new context with the entry added
-                for val in vals.split('\0'):
+                vals_split = [val.strip() for val in vals.split('\0')]
+                vals_split = [val for val in vals_split if len(val) > 0]
+                for val in vals_split:
 
                     # don't add val to the contexts list when it is empty;
                     # this is because when doing the split on \0,
@@ -687,6 +706,9 @@ class BuildSystem:
                     contexts.append(context1)
 
             if var != DUMMY_VAR:
+                vals_split_disp = vals_split
+                if len(vals_split) == 1:
+                    vals_split_disp = vals_split[0]
                 deptree.add(f'resolved variable {var}')
 
         # print contexts debug information
@@ -702,7 +724,7 @@ class BuildSystem:
             # after generating dependencies
             path_to_generate = process_template(pattern_to_build, context.variables)
             infostr = f'building {i+1}/{len(contexts)} "{path_to_generate}"'
-            subtree.add(infostr)
+            buildtree = subtree.add(infostr)
             logger.info(infostr)
             logger.debug(f'context={context}')
 
@@ -713,6 +735,8 @@ class BuildSystem:
 
             # build with a custom command
             if config.get('cmd'):
+                #buildtree.add(config['cmd'])
+
                 result = subprocess.run(
                     config['cmd'],
                     shell=True,
@@ -726,10 +750,18 @@ class BuildSystem:
 
             # build the target with the LLM
             else:
+                #buildtree.add('llm.text()')
 
                 # compute files_prompt
                 files_prompt = '<documents>\n'
                 for path in context.include_paths:
+                    # FIXME:
+                    # when piping into stdin, open('/dev/stdin') fails because the open function does not work on pipe "files";
+                    # this is a hackish way to detect that we're piping into stdin,
+                    # and then changing path to a value that is compatible with open;
+                    # in theory, weirdly named files could break this hack
+                    if 'pipe:[' in path: 
+                        path = 0
                     with open(path) as fin:
                         files_prompt += f'''<document path="{path}">\n{fin.read().strip()}\n</document>\n'''
                 files_prompt += '</documents>'
@@ -738,13 +770,16 @@ class BuildSystem:
                 filename = os.path.basename(pattern_to_build)
                 _, extension = os.path.splitext(filename)
 
-                if 'prompt_file' in config:
-                    prompt_path = config['prompt_file']
+                if 'prompt' in config:
+                    prompt_cmd = config['prompt']
                 else:
-                    prompt_path = os.path.join(self.prompt_dir, filename)
-                with open(prompt_path) as fin:
-                    prompt_cmd = fin.read()
-                    prompt_cmd = process_template(prompt_cmd, env_vars=context.variables)
+                    if 'prompt_file' in config:
+                        prompt_path = config['prompt_file']
+                    else:
+                        prompt_path = os.path.join(self.prompt_dir, filename)
+                    with open(prompt_path) as fin:
+                        prompt_cmd = fin.read()
+                prompt_cmd = process_template(prompt_cmd, env_vars=context.variables)
                 
                 if extension == '.json':
                     format_cmd = '<formatting>JSON with no markdown codeblocks.</formatting>\n'
@@ -768,9 +803,11 @@ class BuildSystem:
                 except FileExistsError:
                     logger.warning(f'file "{path_to_generate}" exists; skipping')
 
-        #subtree.children = []
-        if self.live:
-            self.live.update(self.logtree)
+            if self.collapse_display and self.live:
+                buildtree.children = []
+
+        if self.collapse_display and self.live and subtree is not self.logtree:
+            subtree.children = []
 
 
 if __name__ == '__main__':
