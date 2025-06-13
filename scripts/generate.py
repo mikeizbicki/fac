@@ -70,6 +70,7 @@ class LLM():
     models = {
         'anthropic/claude-3-haiku-20240307':    {'in_price': 0.25, 'out_price':  1.25},
         'anthropic/claude-sonnet-4-0':          {'in_price': 3.00, 'out_price': 15.00},
+        'anthropic/claude-3-5-haiku-latest':    {'in_price': 0.80, 'out_price':  4.00},
         'groq/llama-3.3-70b-versatile':         {'in_price': 0.00, 'out_price':  0.00},
         'openai/gpt-4.1':                       {'in_price': 2.00, 'out_price':  8.00},
         'openai/gpt-4.1-mini':                  {'in_price': 0.40, 'out_price':  1.60},
@@ -78,6 +79,7 @@ class LLM():
     def __init__(self):
         #self.model = 'groq/llama-3.3-70b-versatile'
         #self.model = 'openai/gpt-4.1-mini'
+        #self.model = 'anthropic/claude-3-5-haiku-latest'
         self.model = 'anthropic/claude-3-haiku-20240307'
         self.usage = Counter()
 
@@ -248,9 +250,10 @@ class CommandExecutionError(Exception):
 
 
 class VariableEvaluationError(Exception):
-    def __init__(self, var, expr, result):
+    def __init__(self, var, expr, context, result):
         errorstrs = [
             f'error evaluating {var}=$({expr})',
+            f'context={context}',
             f"result.returncode={result.returncode}",
             f"result.stdout={result.stdout}",
             f"result.stderr={result.stderr}",
@@ -669,7 +672,7 @@ class BuildSystem:
                         env=context.variables,
                         )
                     if result.returncode != 0 or result.stdout.strip() == '':
-                        raise VariableEvaluationError(var, expr, result)
+                        raise VariableEvaluationError(var, expr, context, result)
                     vals = result.stdout
 
                     if vals.strip() == '':
@@ -752,63 +755,94 @@ class BuildSystem:
             # build the target with the LLM
             else:
                 buildtree.add('llm.text()')
+                self.context_to_file(path_to_generate, config, context)
 
-                # compute files_prompt
-                files_prompt = '<documents>\n'
-                for path in context.include_paths:
-                    # FIXME:
-                    # when piping into stdin, open('/dev/stdin') fails because the open function does not work on pipe "files";
-                    # this is a hackish way to detect that we're piping into stdin,
-                    # and then changing path to a value that is compatible with open;
-                    # in theory, weirdly named files could break this hack
-                    if 'pipe:[' in path: 
-                        path = 0
-                    with open(path) as fin:
-                        files_prompt += f'''<document path="{path}">\n{fin.read().strip()}\n</document>\n'''
-                files_prompt += '</documents>'
+            # validate file
+            self.validate_file(path_to_generate)
 
-                # compute the instructions prompt
-                filename = os.path.basename(pattern_to_build)
-                _, extension = os.path.splitext(filename)
-
-                if 'prompt' in config:
-                    prompt_cmd = config['prompt']
-                else:
-                    if 'prompt_file' in config:
-                        prompt_path = config['prompt_file']
-                    else:
-                        prompt_path = os.path.join(self.prompt_dir, filename)
-                    with open(prompt_path) as fin:
-                        prompt_cmd = fin.read()
-                prompt_cmd = process_template(prompt_cmd, env_vars=context.variables)
-                
-                if extension == '.json':
-                    format_cmd = '<formatting>JSON with no markdown codeblocks.</formatting>\n'
-                else:
-                    format_cmd = ''
-
-                # compute full prompt
-                prompt = f'''<instructions>\n{prompt_cmd}\n</instructions>\n{format_cmd}{files_prompt}'''
-
-                # stop processing if printing the prompt
-                if self.print_prompt:
-                    print(prompt)
-                    return
-
-                # write to the output file
-                mode = 'wt' if self.overwrite else 'xt'
-                try:
-                    text = self.llm.text(prompt)
-                    with open(path_to_generate, mode) as fout:
-                        fout.write(text)
-                except FileExistsError:
-                    logger.warning(f'file "{path_to_generate}" exists; skipping')
-
+            # update tree
             if self.collapse_display and self.live:
                 buildtree.children = []
 
         if self.collapse_display and self.live and subtree is not self.logtree:
             subtree.children = []
+
+    def validate_file(self, path, fix_json=True):
+        # ensure the input path exists
+        if not os.path.exists(path):
+            raise RuntimeError(f'path="{path}" does not exist')
+        
+        # ensure the file is non-empty
+        if os.path.getsize(path) == 0:
+            raise RuntimeError(f'os.path.getsize("{path}")=0')
+
+        # if the file is JSON, ensure that it is valid JSON
+        _, extension = os.path.splitext(path)
+        if extension == '.json':
+            with open(path) as fin:
+                text = fin.read()
+            try:
+                json.loads(text)
+            except json.JSONDecodeError as e:
+                if fix_json:
+                    print('fixing JSONDecodeError')
+                    import json_repair
+                    with open(path, 'wt') as fout:
+                        obj = json_repair.loads(text, skip_json_loads=True)
+                        json.dump(obj, fout)
+
+    def context_to_file(self, path_to_generate, config, context):
+
+        # compute files_prompt
+        files_prompt = '<documents>\n'
+        for path in context.include_paths:
+            # FIXME:
+            # when piping into stdin, open('/dev/stdin') fails because the open function does not work on pipe "files";
+            # this is a hackish way to detect that we're piping into stdin,
+            # and then changing path to a value that is compatible with open;
+            # in theory, weirdly named files could break this hack
+            if 'pipe:[' in path: 
+                path = 0
+            with open(path) as fin:
+                files_prompt += f'''<document path="{path}">\n{fin.read().strip()}\n</document>\n'''
+        files_prompt += '</documents>'
+
+        # compute the instructions prompt
+        filename = os.path.basename(path_to_generate)
+        _, extension = os.path.splitext(filename)
+
+        if 'prompt' in config:
+            prompt_cmd = config['prompt']
+        else:
+            if 'prompt_file' in config:
+                prompt_path = config['prompt_file']
+            else:
+                prompt_path = os.path.join(self.prompt_dir, filename)
+            with open(prompt_path) as fin:
+                prompt_cmd = fin.read()
+        prompt_cmd = process_template(prompt_cmd, env_vars=context.variables)
+        
+        if extension == '.json':
+            format_cmd = '<formatting>JSON with no markdown codeblocks.</formatting>\n'
+        else:
+            format_cmd = ''
+
+        # compute full prompt
+        prompt = f'''<instructions>\n{prompt_cmd}\n</instructions>\n{format_cmd}{files_prompt}'''
+
+        # stop processing if printing the prompt
+        if self.print_prompt:
+            print(prompt)
+            return
+
+        # write to the output file
+        mode = 'wt' if self.overwrite else 'xt'
+        try:
+            text = self.llm.text(prompt)
+            with open(path_to_generate, mode) as fout:
+                fout.write(text)
+        except FileExistsError:
+            logger.warning(f'file "{path_to_generate}" exists; skipping')
 
 
 if __name__ == '__main__':
