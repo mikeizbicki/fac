@@ -7,3 +7,4 @@ tmp
 *.text*
 __pycache__
 *.pyc
+.log*

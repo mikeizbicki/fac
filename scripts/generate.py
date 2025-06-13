@@ -18,6 +18,7 @@ if handler == 'rich':
     ))
 else:
     handler = logging.StreamHandler()
+    handler = logging.FileHandler('.log.exmachina')
     handler.setFormatter(logging.Formatter(
         '%(asctime)s [%(levelname)s] %(message)s',
         '%Y-%m-%d %H:%M:%S'
@@ -25,6 +26,8 @@ else:
 logger = logging.getLogger(__name__)
 logger.addHandler(handler)
 logger.propagate = False
+logger.setLevel(logging.DEBUG)
+#logger.setLevel(logging.INFO)
 
 # imports
 from collections import namedtuple, Counter
@@ -37,6 +40,7 @@ import string
 import subprocess
 import sys
 import tempfile
+import time
 
 import clize
 import groq
@@ -191,6 +195,9 @@ def process_template(template_content, env_vars=None):
         ...
         TemplateProcessingError: blah
     """
+    if env_vars is None:
+        env_vars = {}
+
     # Create a temporary shell script
     fd, script_path = tempfile.mkstemp(suffix='.sh')
     try:
@@ -200,14 +207,9 @@ def process_template(template_content, env_vars=None):
         # Write to the file using a regular file handle
         with open(script_path, 'w') as script:
             # Write a shell script that will output the processed template
-            script.write('#!/bin/sh\n')
+            script.write('#!/bin/bash\n')
             script.write('set -e\n')  # Exit immediately if a command exits with non-zero status
             script.write('set -u\n')  # Treat unset variables as an error
-
-            # Add environment variables
-            if env_vars:
-                for key, value in env_vars.items():
-                    script.write(f'export {key}="{value}"\n')
 
             # Use cat with a heredoc to process the template
             script.write('cat << __EOF_DELIMITER_END\n')
@@ -218,7 +220,7 @@ def process_template(template_content, env_vars=None):
         os.chmod(script_path, 0o755)
 
         # Execute the script and capture output
-        result = subprocess.run([script_path], capture_output=True, text=True)
+        result = subprocess.run([script_path], capture_output=True, text=True, env={**os.environ, **env_vars})
         if result.returncode != 0 or len(result.stderr.strip()) > 0:
             raise TemplateProcessingError(result.returncode, result.stdout, result.stderr)
         return result.stdout.strip()
@@ -236,8 +238,25 @@ class TemplateProcessingError(Exception):
         self.returncode = returncode
         self.stdout = stdout
         self.stderr = stderr
-        message = f"stderr"
         super().__init__(stderr)
+
+
+class CommandExecutionError(Exception):
+    def __init__(self, result):
+        self.result = result
+        super().__init__(result.stderr)
+
+
+class VariableEvaluationError(Exception):
+    def __init__(self, var, expr, result):
+        errorstrs = [
+            f'error evaluating {var}=$({expr})',
+            f"context.variables={context.variables}",
+            f"result.returncode={result.returncode}",
+            f"result.stdout={result.stdout}",
+            f"result.stderr={result.stderr}",
+            ]
+        super().__init__('\n'.join(errorstrs))
 
 
 def expand_path(path, env_vars=None):
@@ -264,7 +283,7 @@ def expand_path(path, env_vars=None):
     2
 
     If the input string uses an environment variable that is undefined,
-    then a `ValueError` will be raised.
+    then a `TemplateProcessingError` will be raised.
 
     >>> with tempfile.TemporaryDirectory() as tmpdir:
     ...     expand_path('$PY_TEST_VAR2/*.txt', {}) # doctest: +IGNORE_EXCEPTION_DETAIL
@@ -295,9 +314,10 @@ def match_pattern(patterns, input_string):
         Tuple of (matched_pattern, extracted_variables) or (None, {}) if no match
 
     Raises:
-        ValueError: If multiple patterns match the input string (ambiguous patterns)
+        TemplateProcessingError: If multiple patterns match the input string (ambiguous patterns)
 
     Examples:
+
         >>> patterns = ["$SERIES/$STORY/outline.json"]
         >>> match_pattern(patterns, "a/b/outline.json")
         ('$SERIES/$STORY/outline.json', {'SERIES': 'a', 'STORY': 'b'})
@@ -314,6 +334,9 @@ def match_pattern(patterns, input_string):
         >>> match_pattern(patterns, "a/b/locations.json")
         ('$SERIES/$STORY/locations.json', {'SERIES': 'a', 'STORY': 'b'})
 
+    If `input_string` does not match any patterns,
+    then we return `(None, {})`.
+
         >>> patterns = ["$SERIES/$STORY/outline.json"]
         >>> match_pattern(patterns, "a/b/c/outline.json")
         (None, {})
@@ -322,127 +345,160 @@ def match_pattern(patterns, input_string):
         >>> match_pattern(patterns, "a/b/summary.json")
         (None, {})
 
-        >>> # Ambiguous patterns test
+    If there are `.` references to the current directory,
+    we should still match the pattern.
+
+        >>> patterns = ['$PROJECT/outline.json', '$PROJECT/$LEVEL1/blurb.json']
+        >>> match_pattern(patterns, 'test_project/outline.json')
+        ('$PROJECT/outline.json', {'PROJECT': 'test_project'})
+
+        >>> patterns = ['./$PROJECT/outline.json', '$PROJECT/$LEVEL1/blurb.json']
+        >>> match_pattern(patterns, 'test_project/outline.json')
+        ('$PROJECT/outline.json', {'PROJECT': 'test_project'})
+
+        >>> patterns = ['././$PROJECT/./outline.json', '$PROJECT/$LEVEL1/blurb.json']
+        >>> match_pattern(patterns, 'test_project/outline.json')
+        ('$PROJECT/outline.json', {'PROJECT': 'test_project'})
+
+        >>> patterns = ['./$PROJECT/outline.json', '$PROJECT/$LEVEL1/blurb.json']
+        >>> match_pattern(patterns, './test_project/outline.json')
+        ('$PROJECT/outline.json', {'PROJECT': 'test_project'})
+
+        >>> patterns = ['./$PROJECT/./outline.json', '$PROJECT/$LEVEL1/blurb.json']
+        >>> match_pattern(patterns, './test_project/outline.json')
+        ('$PROJECT/outline.json', {'PROJECT': 'test_project'})
+
+        >>> patterns = ['$PROJECT/./outline.json', '$PROJECT/$LEVEL1/blurb.json']
+        >>> match_pattern(patterns, './test_project/outline.json')
+        ('$PROJECT/outline.json', {'PROJECT': 'test_project'})
+
+    If there are multiple patterns that could match,
+    then the choice of pattern is ambiguous.
+    Raise a ValueError.
+    This likely indicates a problem with the structure of the dependencies in the config.
+
         >>> patterns = ["$A/$B/$C/file.json", "$X/something/$Y/file.json"]
         >>> match_pattern(patterns, "first/something/second/file.json")
         Traceback (most recent call last):
             ...
         ValueError: Ambiguous pattern match for 'first/something/second/file.json'
 
-        >>> # Input with variable - no extraction for that variable
+    If we pass a variable in the `input_string`,
+    we should not match that variable to one of the patterns in the returned variable list.
+
         >>> patterns = ["$SERIES/$STORY/outline.json"]
         >>> match_pattern(patterns, "a/$STORY/outline.json")
         ('$SERIES/$STORY/outline.json', {'SERIES': 'a'})
+
+        >>> patterns = ["$SERIES/$STORY/chapter$CHAPTER/chapter.json"]
+        >>> match_pattern(patterns, "a/b/chapter$CHAPTER/chapter.json")
+        ('$SERIES/$STORY/chapter$CHAPTER/chapter.json', {'SERIES': 'a', 'STORY': 'b'})
+
+        >>> patterns = ["$SERIES/$STORY/chapter$CHAPTER/chapter.json"]
+        >>> match_pattern(patterns, "$SERIES/$STORY/chapter$CHAPTER/chapter.json")
+        ('$SERIES/$STORY/chapter$CHAPTER/chapter.json', {})
+
+        >>> patterns = ["$SERIES/$STORY/chapter$CHAPTER/chapter.json"]
+        >>> match_pattern(patterns, "$SERIES/b/chapter$CHAPTER/chapter.json")
+        ('$SERIES/$STORY/chapter$CHAPTER/chapter.json', {'STORY': 'b'})
     """
     import re
+    import os
 
-    matches = []
-    match_results = []
+    # Normalize input string by removing './' references
+    norm_input = re.sub(r'(\.\/)+', '', input_string)
+
+    # Create a mapping of normalized patterns to original patterns
+    norm_to_orig = {}
+    normalized_patterns = []
 
     for pattern in patterns:
-        # Split both pattern and input into segments
-        pattern_segments = pattern.split('/')
-        input_segments = input_string.split('/')
+        # Normalize pattern by removing './' references
+        norm_pattern = re.sub(r'(\.\/)+', '', pattern)
+        normalized_patterns.append(norm_pattern)
+        norm_to_orig[norm_pattern] = pattern
 
-        # If segment counts don't match, continue to next pattern
+    matched_patterns = []
+    matched_vars = []
+
+    input_segments = norm_input.split('/')
+
+    for norm_pattern in normalized_patterns:
+        pattern_segments = norm_pattern.split('/')
+
+        # Skip patterns with different number of segments
         if len(pattern_segments) != len(input_segments):
             continue
 
         variables = {}
-        match_failed = False
+        is_match = True
 
-        # Check each segment
-        for pattern_seg, input_seg in zip(pattern_segments, input_segments):
-            # Check if input segment is a variable (starts with $)
-            if input_seg.startswith('$'):
-                # Extract variable name from input
-                input_var_name = input_seg[1:]
-
-                # Input segment is a variable, check if pattern segment has the same variable
-                if pattern_seg == input_seg:
-                    # Exact match, continue to next segment
-                    continue
-                elif not pattern_seg.startswith('$'):
-                    # Pattern segment is not a variable, but input is
-                    match_failed = True
-                    break
-                # Otherwise, pattern segment is a variable but not the same as input
-                # We'll handle this in the next condition
-
-            # Process pattern segment if it contains variables
-            if '$' in pattern_seg:
-                # Skip extraction if input segment is a variable
-                if input_seg.startswith('$'):
-                    # Check if the variable names match
-                    pattern_var = pattern_seg[1:] if pattern_seg.startswith('$') else None
-                    input_var = input_seg[1:]
-
-                    if pattern_var == input_var:
-                        # Same variable, continue to next segment
-                        continue
-                    elif pattern_seg.startswith('$'):
-                        # Different variables, we don't extract but consider it a match
-                        continue
-                    else:
-                        # Pattern has a complex segment with variables but input is a variable
-                        match_failed = True
-                        break
-
-                # Input is not a variable, do normal extraction
+        for i, (p_seg, i_seg) in enumerate(zip(pattern_segments, input_segments)):
+            # Check if pattern segment contains variables
+            if '$' in p_seg:
                 # Convert pattern segment to regex
-                regex_pattern = '^'
-                var_positions = []
+                regex = '^'
+                pos = 0
+                var_names = []
 
-                i = 0
-                while i < len(pattern_seg):
-                    if pattern_seg[i] == '$':
-                        # Found a variable
-                        var_start = i + 1
-                        # Find the end of variable name
+                while pos < len(p_seg):
+                    if p_seg[pos] == '$':
+                        # Found start of a variable
+                        var_start = pos + 1
                         var_end = var_start
-                        while var_end < len(pattern_seg) and pattern_seg[var_end].isalnum():
+                        while var_end < len(p_seg) and (p_seg[var_end].isalnum() or p_seg[var_end] == '_'):
                             var_end += 1
 
-                        var_name = pattern_seg[var_start:var_end]
-                        var_positions.append(var_name)
+                        var_name = p_seg[var_start:var_end]
+                        var_placeholder = f"${var_name}"
 
-                        # Add a capturing group to the regex
-                        regex_pattern += '(.*?)'
-                        i = var_end
+                        # Check if this variable appears in input segment
+                        if var_placeholder in i_seg:
+                            # Match literally
+                            regex += re.escape(var_placeholder)
+                        else:
+                            # Capture the variable value
+                            var_names.append(var_name)
+                            regex += '(.*?)'
+
+                        pos = var_end
                     else:
-                        # Regular character, escape special regex chars
-                        if pattern_seg[i] in '.^$*+?{}[]\\|()':
-                            regex_pattern += '\\'
-                        regex_pattern += pattern_seg[i]
-                        i += 1
+                        # Add regular character to regex
+                        if p_seg[pos] in '.^$*+?{}[]\\|()':
+                            regex += '\\'
+                        regex += p_seg[pos]
+                        pos += 1
 
-                regex_pattern += '$'
+                regex += '$'
 
-                # Match the regex against the input segment
-                match = re.match(regex_pattern, input_seg)
+                # Apply regex to input segment
+                match = re.match(regex, i_seg)
+
                 if not match:
-                    match_failed = True
+                    is_match = False
                     break
 
-                # Extract variables from the match
-                for i, var_name in enumerate(var_positions):
-                    variables[var_name] = match.group(i+1)
+                # Extract captured variables
+                for j, var_name in enumerate(var_names):
+                    variables[var_name] = match.group(j+1)
 
-            elif pattern_seg != input_seg:
+            elif p_seg != i_seg:
                 # Literal segments must match exactly
-                match_failed = True
+                is_match = False
                 break
 
-        if not match_failed:
-            matches.append(pattern)
-            match_results.append((pattern, variables))
+        if is_match:
+            matched_patterns.append(norm_pattern)
+            matched_vars.append(variables)
 
-    # Check for ambiguous matches
-    if len(matches) > 1:
+    if len(matched_patterns) > 1:
         raise ValueError(f"Ambiguous pattern match for '{input_string}'")
 
-    # Return the match if found, otherwise (None, {})
-    return match_results[0] if match_results else (None, {})
+    if matched_patterns:
+        # For tests, we should return the clean version of the pattern
+        return (matched_patterns[0], matched_vars[0])
+    else:
+        return (None, {})
 
 
 ################################################################################
@@ -459,57 +515,132 @@ class BuildSystem:
             config_path='prompts/config.yaml',
             overwrite=False,
             print_prompt=False,
-            print_environments=False,
-            environment0=None,
+            print_contexts=False,
+            simple_logger=False,
             ):
 
-        # update attributes
+        # update attributes;
+        # these are all the command line args from clize
         self.pattern_to_build = pattern_to_build
         self.prompt_dir = prompt_dir
         self.overwrite = overwrite
         self.print_prompt = print_prompt
-        self.print_environments = print_environments
-
-        if not environment0:
-            environment0 = {}
-        self.environment0 = environment0
+        self.print_contexts = print_contexts
 
         # load config file
         import yaml
         with open(config_path) as fin:
             self.full_config = yaml.safe_load(fin)
 
-        # build
-        if pattern_to_build:
-            self.build_pattern(pattern_to_build)
+        self.llm = LLM()
+
+        # setup logging
+        from rich.tree import Tree
+        from rich.console import Console
+        from rich.live import Live
+        from rich.traceback import install
+        import traceback
+        #install()
+        self.logtree = Tree(f"BuildSystem")
+        self.live = None
+        if simple_logger:
+            handler = logging.StreamHandler()
+            handler.setFormatter(logging.Formatter(
+                '%(asctime)s [%(levelname)s] %(message)s',
+                '%Y-%m-%d %H:%M:%S'
+            ))
+            logger = logging.getLogger(__name__)
+            logger.addHandler(handler)
+        else:
+            self.live = Live(self.logtree, console=Console(), refresh_per_second=4)
+            self.live.start()
+
+        try:
+            if pattern_to_build:
+                self.build_pattern(pattern_to_build, {}, self.logtree)
+            self.live and self.live.stop()
+        except Exception:
+            self.live and self.live.stop()
+            traceback.print_exc()
 
 
-    def build_pattern(self, pattern_to_build):
+    def build_pattern(self, pattern_to_build, input_env, subtree):
+
+        subtree.add(f'build_pattern("{pattern_to_build}")')
 
         logger.debug(f'pattern_to_build="{pattern_to_build}"')
-        logger.debug(f"self.environment0={self.environment0}")
-        llm = LLM()
 
         # load pattern config
         config_patterns = self.full_config.keys()
-        transformed_pattern, environment = match_pattern(config_patterns, pattern_to_build)
-        logger.debug(f"transformed_pattern={transformed_pattern}; environment={environment}")
-        assert transformed_pattern
+        transformed_pattern, pattern_env = match_pattern(config_patterns, pattern_to_build)
+        subtree.add(f'input_env={input_env}; pattern_env={pattern_env}')
+        logger.debug(f"transformed_pattern={transformed_pattern}; pattern_env={pattern_env}")
+        assert transformed_pattern, f'transformed_pattern={transformed_pattern}, pattern_to_build={pattern_to_build}, input_env={input_env}, config_patterns={config_patterns}'
         assert transformed_pattern in self.full_config
         config = self.full_config[transformed_pattern]
 
-        # compute the variables
-        environments = [{**environment, **self.environment0}]
-        for var, expr in config.get('variables', {}).items():
+        # compute the variables and resolve dependencies
+        deptree = subtree.add(f'resolving dependencies and variables')
+        BuildContext = namedtuple('Context', [
+            'variables',
+            'include_paths',
+            'unresolved_dependencies'
+            ])
+        contexts = [BuildContext(
+            {**input_env, **pattern_env},
+            [],
+            config['dependencies'].split(),
+            )]
+        #deptree.add(f"contexts={contexts}")
+        
+        #self.live.update(self.logtree)
+        DUMMY_VAR = 'DUMMY_VAR_CREATED_TO_FORCE_LOOP_TO_RUN_ONCE'
+        for var, expr in config.get('variables', {DUMMY_VAR: ''}).items():
+        #for var, expr in config.get('variables', {}).items():
+            expr = expr.strip()
 
-            environments0 = environments
-            environments = []
-            for environment in environments0:
+            # compute the variables
+            logger.debug(f'computing {var}=$({expr})')
+            contexts0 = contexts
+            contexts = []
+            for context in contexts0:
+
+                # compute the dependencies
+                logger.debug(f'computing dependencies for "{pattern_to_build}"')
+                include_paths1 = []
+                unresolved_dependencies1 = []
+                for dep_pattern in context.unresolved_dependencies:
+                    subdeptree = deptree.add(f'resolving dependency: "{dep_pattern}"')
+                    #print(f"deptree.children={deptree.children}")
+                    try:
+                        dep_paths = expand_path(dep_pattern, context.variables)
+                        if not dep_paths:
+                            logger.debug(f'no paths found for dep_pattern={dep_pattern}, building')
+                            self.build_pattern(dep_pattern, context.variables, subdeptree)
+                        else:
+                            logger.debug(f'matched: dep_pattern="{dep_pattern}"')
+                        include_paths1.extend(dep_paths)
+
+                    # if expand_path failed, there is an unresolved dependency in the path;
+                    # so we must keep it around and try to resolve it again after computing more variables
+                    except TemplateProcessingError:
+                        if dep_pattern in self.full_config:
+                            self.build_pattern(dep_pattern, context.variables, subdeptree)
+                        else:
+                            unresolved_dependencies1.append(dep_pattern)
+                    # update the tree to indicate success
+                    #print(f"subdeptree={subdeptree}")
+                    deptree.children.remove(subdeptree)
+                    deptree.add(f'resolved dependency {dep_pattern}')
+
+
+                logger.debug(f"include_paths1={include_paths1}")
+                logger.debug(f"unresolved_dependencies1={unresolved_dependencies1}")
 
                 # the var was specified in the environment,
                 # so we do not execute the expr
-                if var in os.environ:
-                    vals  = os.environ[var]
+                if var in context.variables:
+                    vals = context.variables[var]
 
                 # run the expr in the bash shell
                 else:
@@ -520,28 +651,24 @@ class BuildSystem:
                         capture_output=True,
                         text=True,
                         executable="/bin/bash",
-                        env={**os.environ, **environment},
+                        env=context.variables,
                         )
                     if result.returncode != 0:
-                        logger.error(f'evaluating {var}=$({expr} failed)')
-                        logger.error(f"result.returncode={result.returncode}")
-                        logger.error(f"result.stdout={result.stdout}")
-                        logger.error(f"result.stderr={result.stderr}")
-                        sys.exit(1)
+                        raise VariableEvaluationError(var, expr, result)
                     vals = result.stdout
 
                 # lists are separated by null characters;
                 # for each entry in the list,
-                # we will add a new environment with the entry added
+                # we will add a new context with the entry added
                 for val in vals.split('\0'):
 
-                    # don't add val to the environments list when it is empty;
+                    # don't add val to the contexts list when it is empty;
                     # this is because when doing the split on \0,
                     # we will always have the last entry be '',
                     # because of the tr '\n' '\0' command
                     # and all outputs ending in a '\n'
                     val = val.strip()
-                    if val == '':
+                    if val == '' and len(vals) > 1:
                         continue
 
                     # if val is an integer, prepend it with zeros
@@ -551,46 +678,38 @@ class BuildSystem:
                     except ValueError:
                         pass
 
-                    # add the environment
-                    environment1 = copy.copy(environment)
-                    environment1[var] = val
-                    environments.append(environment1)
+                    # add the context
+                    context1 = BuildContext(
+                        {**context.variables, var: val},
+                        context.include_paths + include_paths1,
+                        unresolved_dependencies1
+                        )
+                    contexts.append(context1)
 
-        # print environments debug information
-        if self.print_environments:
+            if var != DUMMY_VAR:
+                deptree.add(f'resolved variable {var}')
+
+        # print contexts debug information
+        if self.print_contexts:
             import pprint
-            pprint.pprint(environments)
+            print('contexts=')
+            pprint.pprint(contexts)
             return
 
-        # loop over each environment and run the processing code for the environment
-        for i, environment in enumerate(environments):
-            logger.debug(f'iteration {i+1}/{len(environments)}; environment={environment}')
-
-            # compute the dependencies
-            logger.debug(f'computing dependencies for "{pattern_to_build}"')
-            include_paths = []
-            deps = config['dependencies'].split()
-            for dep_pattern in deps:
-                dep_paths = expand_path(dep_pattern, environment)
-                if not dep_paths:
-                    logger.debug(f'no paths found for dep_pattern={dep_pattern}, building')
-                    #generate_file(
-                        #pattern_to_build=dep_pattern,
-                        #prompt_dir=self.prompt_dir,
-                        #config_path=self.config_path,
-                        #overwrite=self.overwrite,
-                        #print_prompt=self.print_prompt,
-                        #print_environments=self.print_environments,
-                        #self.environment0 = environment,
-                        #)
-                else:
-                    logger.debug(f'matched: dep_pattern="{dep_pattern}"')
-                    #logger.debug(f'dependency matched: dep_pattern="{dep_pattern}"; dep_paths={dep_paths}')
-                include_paths.extend(dep_paths)
-            logger.debug(f"include_paths={include_paths}")
+        # loop over each context and run the processing code for the context
+        for i, context in enumerate(contexts):
 
             # after generating dependencies
-            logger.info(f'building "{pattern_to_build}"')
+            path_to_generate = process_template(pattern_to_build, context.variables)
+            infostr = f'building {i+1}/{len(contexts)} "{path_to_generate}"'
+            subtree.add(infostr)
+            logger.info(infostr)
+            logger.debug(f'context={context}')
+
+            # create output directory if needed
+            logger.debug(f"path_to_generate={path_to_generate}")
+            dirname = os.path.dirname(path_to_generate)
+            os.makedirs(dirname, exist_ok=True)
 
             # build with a custom command
             if config.get('cmd'):
@@ -600,25 +719,19 @@ class BuildSystem:
                     capture_output=True,
                     text=True,
                     executable="/bin/bash",
-                    env={**os.environ, **environment},
+                    env=context.variables,
                     )
                 if result.returncode != 0:
-                    logger.error(f"result.returncode={result.returncode}")
-                    logger.error(f"result.stdout={result.stdout}")
-                    logger.error(f"result.stderr={result.stderr}")
-                    sys.exit(1)
+                    raise CommandExecutionError(result)
 
             # build the target with the LLM
             else:
 
                 # compute files_prompt
                 files_prompt = '<documents>\n'
-                for path in include_paths:
+                for path in context.include_paths:
                     with open(path) as fin:
-                        files_prompt += f'''<document path="{path}">
-    {fin.read().strip()}
-    </document>
-    '''
+                        files_prompt += f'''<document path="{path}">\n{fin.read().strip()}\n</document>\n'''
                 files_prompt += '</documents>'
 
                 # compute the instructions prompt
@@ -631,21 +744,15 @@ class BuildSystem:
                     prompt_path = os.path.join(self.prompt_dir, filename)
                 with open(prompt_path) as fin:
                     prompt_cmd = fin.read()
-                    prompt_cmd = process_template(prompt_cmd, env_vars=environment)
-                    #prompt_cmd = process_template(prompt_cmd, env_vars={**os.environ, **environment})
+                    prompt_cmd = process_template(prompt_cmd, env_vars=context.variables)
                 
                 if extension == '.json':
-                    format_cmd = '<formatting>JSON with no markdown codeblocks.</formatting>'
+                    format_cmd = '<formatting>JSON with no markdown codeblocks.</formatting>\n'
                 else:
                     format_cmd = ''
 
                 # compute full prompt
-                prompt = f'''<instructions>
-    {prompt_cmd}
-    </instructions>
-    {format_cmd}
-    {files_prompt}
-    '''
+                prompt = f'''<instructions>\n{prompt_cmd}\n</instructions>\n{format_cmd}{files_prompt}'''
 
                 # stop processing if printing the prompt
                 if self.print_prompt:
@@ -653,18 +760,18 @@ class BuildSystem:
                     return
 
                 # write to the output file
-                path_to_generate = process_template(pattern_to_build, environment)
-                logger.debug(f"path_to_generate={path_to_generate}")
-                dirname = os.path.dirname(path_to_generate)
-                os.makedirs(dirname, exist_ok=True)
                 mode = 'wt' if self.overwrite else 'xt'
                 try:
+                    text = self.llm.text(prompt)
                     with open(path_to_generate, mode) as fout:
-                        fout.write(llm.text(prompt))
+                        fout.write(text)
                 except FileExistsError:
                     logger.warning(f'file "{path_to_generate}" exists; skipping')
 
+        #subtree.children = []
+        if self.live:
+            self.live.update(self.logtree)
+
+
 if __name__ == '__main__':
-    logger.setLevel(logging.DEBUG)
-    #logger.setLevel(logging.INFO)
     clize.run(BuildSystem)

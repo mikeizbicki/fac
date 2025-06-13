@@ -22,10 +22,8 @@
     $SERIES/$STORY/locations.json
     $SERIES/characters/*/about.json
   variables:
-    NUM_CHAPTERS: |
-      jq '.chapters | length' $SERIES/$STORY/outline.json
     CHAPTER: |
-      seq 0 $(($NUM_CHAPTERS - 1)) | tr '\n' '\0'
+      jq -r 'range(0; .chapters | length)' $SERIES/$STORY/outline.json | tr '\n' '\0'
     CHAPTER_TEXT: |
       jq ".chapters[$CHAPTER]" $SERIES/$STORY/outline.json
 
@@ -39,18 +37,19 @@
     $SERIES/characters/*/about.json
     $SERIES/$STORY/chapter$CHAPTER/chapter.json
   variables:
-    NUM_CHAPTERS: |
-      jq '.chapters | length' $SERIES/$STORY/outline.json
     CHAPTER: |
-      seq 0 $(($NUM_CHAPTERS - 1)) | tr '\n' '\0'
+      jq -r 'range(0; .chapters | length)' $SERIES/$STORY/outline.json | tr '\n' '\0'
     CHAPTER_PATH: |
       echo $SERIES/$STORY/chapter$CHAPTER/chapter.json
-    NUM_SECTIONS: |
-      jq '.sections | length' $SERIES/$STORY/chapter$CHAPTER/chapter.json
     SECTION: |
-      seq 0 $(($NUM_SECTIONS - 1)) | tr '\n' '\0'
+      jq -r 'range(0; .sections | length)' $SERIES/$STORY/chapter$CHAPTER/chapter.json | tr '\n' '\0'
+      #NUM_SECTIONS: |
+      #jq '.sections | length' $SERIES/$STORY/chapter$CHAPTER/chapter.json
+      #SECTION: |
+      #seq 0 $(($NUM_SECTIONS - 1)) | tr '\n' '\0'
     PREV_SECTION: |
-      echo $(($SECTION - 1))
+      echo $(($(bc <<< "scale=0; $SECTION") - 1))
+      #echo $(($SECTION - 1))
     SECTION_TEXT: |
       jq ".sections[$SECTION]" $SERIES/$STORY/chapter$CHAPTER/chapter.json
 
