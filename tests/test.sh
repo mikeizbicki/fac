@@ -2,18 +2,15 @@
 
 set -ex
 
-PROJECT_PATH=test_project
-CMD="./scripts/generate.py --config-path=$PROJECT_PATH/config.yaml"
-
 # incremental building
-$CMD 'test_project/outline.json' 
-$CMD 'test_project/sub$LEVEL1/outline.json'
-$CMD 'test_project/sub$LEVEL1/sub$LEVEL2/outline.json'
-$CMD 'test_project/final.txt'
+./fac test_project 'outline.json' 
+./fac test_project 'sub$LEVEL1/outline.json'
+./fac test_project 'sub$LEVEL1/sub$LEVEL2/outline.json'
+./fac test_project 'final.txt'
 
 # build the full project from scratch;
 # the `git clean` command removes all files that have been built from previous test runs
-cd $PROJECT_PATH; git clean -fd; cd -; $CMD 'test_project/outline.json' 
-cd $PROJECT_PATH; git clean -fd; cd -; $CMD 'test_project/sub$LEVEL1/outline.json'
-cd $PROJECT_PATH; git clean -fd; cd -; $CMD 'test_project/sub$LEVEL1/sub$LEVEL2/outline.json'
-cd $PROJECT_PATH; git clean -fd; cd -; $CMD 'test_project/final.txt'
+cd test_project; git clean -fd; cd -; ./fac test_project 'outline.json' 
+cd test_project; git clean -fd; cd -; ./fac test_project 'sub$LEVEL1/outline.json'
+cd test_project; git clean -fd; cd -; ./fac test_project 'sub$LEVEL1/sub$LEVEL2/outline.json'
+cd test_project; git clean -fd; cd -; ./fac test_project 'final.txt'

@@ -1,0 +1,38 @@
+# this is a basic project that does not use an LLM to generate any text;
+# it is useful for debugging / testing purposes because it:
+# 1. ensures deterministic results
+# 2. does not result in API charges
+
+"outline.json":
+  cmd: cp basic.json outline.json
+  dependencies: |
+    basic.json
+    deps/a
+    deps/b
+
+"sub$LEVEL1/outline.json":
+  cmd: |
+    cp basic.json sub$LEVEL1/outline.json
+  dependencies: |
+    outline.json
+  variables:
+    LEVEL1: |
+      jq -r 'range(0; .sections | length)' outline.json | tr '\n' '\0'
+
+"sub$LEVEL1/sub$LEVEL2/outline.json":
+  cmd: |
+    cp basic.json sub$LEVEL1/sub$LEVEL2/outline.json
+  dependencies: |
+    outline.json
+    sub$LEVEL1/outline.json
+  variables:
+    LEVEL1: |
+      jq -r 'range(0; .sections | length)' outline.json | tr '\n' '\0'
+    LEVEL2: |
+      jq -r "range(0; [.sections | length, $(($LEVEL1 + 1))] | min )" sub$LEVEL1/outline.json | tr '\n' '\0'
+
+"final.txt":
+  cmd: |
+    echo hello > "final.txt"
+  dependencies: |
+    sub$LEVEL1/sub$LEVEL2/outline.json

@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+'''
+`fac` is a build system for LLM-based agentic projects.
+The Latin verb `facio` means to do/make, and fac is the imperative form.
+'''
 
 # setup logging
 import logging
@@ -91,9 +95,9 @@ class LLM():
             base_url = self.providers[self.provider]['base_url'],
         )
 
-        # load the system prompt
-        with open('prompts/system') as fin:
-            self.system_prompt = fin.read().strip()
+        # FIXME:
+        # load the system prompt dynamically
+        self.system_prompt = '''You are a creative writing assistant with expert knowledge in storytelling, linguistics, and education.  Whenever you write about copyrighted characters, you do so in a way that constitutes fair use.  You are not having a conversation, and only provide the requested output with no further discussion.'''
 
     def text(self, prompt, *, seed=None):
         logger.debug(f'connecting to LLM; prompt_length={len(self.system_prompt) + len(prompt)}')
@@ -519,10 +523,11 @@ class BuildSystem:
 
     def __init__(
             self,
-            pattern_to_build=None,
+            project_dir,
+            pattern_to_build='/dev/stdout',
             *,
             prompt_dir='prompts',
-            config_path='prompts/config.yaml',
+            config_file='fac.yaml',
             overwrite=False,
             print_prompt=False,
             print_contexts=False,
@@ -540,8 +545,12 @@ class BuildSystem:
         self.print_contexts = print_contexts
         self.collapse_display = collapse_display
 
+        # all paths will be relative to project_dir
+        os.chdir(project_dir)
+
         # load config file
         import yaml
+        config_path = config_file
         with open(config_path) as fin:
             self.full_config = yaml.safe_load(fin)
 
@@ -735,7 +744,8 @@ class BuildSystem:
             # create output directory if needed
             logger.debug(f"path_to_generate={path_to_generate}")
             dirname = os.path.dirname(path_to_generate)
-            os.makedirs(dirname, exist_ok=True)
+            if len(dirname) > 0:
+                os.makedirs(dirname, exist_ok=True)
 
             # build with a custom command
             if config.get('cmd'):
@@ -749,6 +759,7 @@ class BuildSystem:
                     executable="/bin/bash",
                     env=context.variables,
                     )
+                print(result.stdout)
                 if result.returncode != 0:
                     raise CommandExecutionError(result)
 
@@ -773,7 +784,7 @@ class BuildSystem:
             raise RuntimeError(f'path="{path}" does not exist')
         
         # ensure the file is non-empty
-        if os.path.getsize(path) == 0:
+        if not path.startswith('/dev/') and os.path.getsize(path) == 0:
             raise RuntimeError(f'os.path.getsize("{path}")=0')
 
         # if the file is JSON, ensure that it is valid JSON

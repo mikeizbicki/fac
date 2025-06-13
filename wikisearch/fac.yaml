@@ -1,4 +1,4 @@
-"wikisearch/search_terms.json":
+"search_terms.json":
   prompt: |
     List $NUM_QUERIES wikipedia pages that would provide useful background information for the specified query.
     Ensure that they cover a diverse set of topics.
@@ -10,7 +10,7 @@
 
 "/dev/stdout":
   cmd: |
-    cat "wikisearch/search_terms.json"
+    cat "search_terms.json"
   dependencies:
-    "wikisearch/search_terms.json"
+    "search_terms.json"
 
