@@ -575,9 +575,9 @@ class BuildSystem:
             if pattern_to_build:
                 self.build_pattern(pattern_to_build, {}, self.logtree)
             self.live and self.live.stop()
-        except Exception:
+        except Exception as e:
             self.live and self.live.stop()
-            traceback.print_exc()
+            raise e
 
 
     def build_pattern(self, pattern_to_build, input_env, subtree):

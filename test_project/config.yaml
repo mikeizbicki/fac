@@ -24,11 +24,12 @@
     cp $PROJECT/basic.json $PROJECT/sub$LEVEL1/sub$LEVEL2/outline.json && sleep 0.5
   dependencies: |
     $PROJECT/outline.json
+    $PROJECT/sub$LEVEL1/outline.json
   variables:
     LEVEL1: |
       jq -r 'range(0; .sections | length)' $PROJECT/outline.json | tr '\n' '\0'
     LEVEL2: |
-      jq -r 'range(0; .sections | length)' $PROJECT/sub$LEVEL1/outline.json | tr '\n' '\0'
+      jq -r "range(0; [.sections | length, $(($LEVEL1 + 1))] | min )" $PROJECT/sub$LEVEL1/outline.json | tr '\n' '\0'
 
 "$PROJECT/final.txt":
   cmd: |
