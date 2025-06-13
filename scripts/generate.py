@@ -261,7 +261,7 @@ class VariableEvaluationError(Exception):
 class EmptyVariableError(Exception):
     def __init__(self, var, expr):
         errorstrs = [
-            f'error evaluating {var}=$({expr})',
+            f'{var}=$({expr})',
             ]
         super().__init__('\n'.join(errorstrs))
 
@@ -593,7 +593,8 @@ class BuildSystem:
         config = self.full_config[transformed_pattern]
 
         # compute the variables and resolve dependencies
-        deptree = subtree.add(f'resolving dependencies and variables')
+        #deptree = subtree.add(f'resolving dependencies and variables')
+        deptree = subtree
         BuildContext = namedtuple('Context', [
             'variables',
             'include_paths',
@@ -667,28 +668,28 @@ class BuildSystem:
                         executable="/bin/bash",
                         env=context.variables,
                         )
-                    if result.returncode != 0:
+                    if result.returncode != 0 or result.stdout.strip() == '':
                         raise VariableEvaluationError(var, expr, result)
                     vals = result.stdout
 
                     if vals.strip() == '':
-                        raise EmptyVariableError(var, expr)
+                        raise EmptyVariableError(var, expr, result)
 
                 # lists are separated by null characters;
                 # for each entry in the list,
                 # we will add a new context with the entry added
                 vals_split = [val.strip() for val in vals.split('\0')]
-                vals_split = [val for val in vals_split if len(val) > 0]
-                for val in vals_split:
 
-                    # don't add val to the contexts list when it is empty;
-                    # this is because when doing the split on \0,
-                    # we will always have the last entry be '',
-                    # because of the tr '\n' '\0' command
-                    # and all outputs ending in a '\n'
-                    val = val.strip()
-                    if val == '' and len(vals) > 1:
-                        continue
+                # don't add val to the contexts list when it is empty;
+                # this is because when doing the split on \0,
+                # we will always have the last entry be '',
+                # because of the tr '\n' '\0' command
+                # and all outputs ending in a '\n'
+                vals_split = [val for val in vals_split if len(val) > 0]
+                if len(vals_split) == 0:
+                    vals_split = ['']
+
+                for val in vals_split:
 
                     # if val is an integer, prepend it with zeros
                     try:
@@ -735,7 +736,7 @@ class BuildSystem:
 
             # build with a custom command
             if config.get('cmd'):
-                #buildtree.add(config['cmd'])
+                buildtree.add(config['cmd'])
 
                 result = subprocess.run(
                     config['cmd'],
@@ -750,7 +751,7 @@ class BuildSystem:
 
             # build the target with the LLM
             else:
-                #buildtree.add('llm.text()')
+                buildtree.add('llm.text()')
 
                 # compute files_prompt
                 files_prompt = '<documents>\n'
