@@ -138,10 +138,10 @@ class LLM():
     def __init__(self):
         #self.model = 'groq/llama-3.3-70b-versatile'
         #self.model = 'openai/gpt-4.1'
-        self.model = 'openai/gpt-4.1-mini'
+        #self.model = 'openai/gpt-4.1-mini'
         #self.model = 'anthropic/claude-sonnet-4-0'
         #self.model = 'anthropic/claude-3-5-haiku-latest'
-        #self.model = 'anthropic/claude-3-haiku-20240307'
+        self.model = 'anthropic/claude-3-haiku-20240307'
         self.usage = Counter()
 
         # connect to the API
@@ -591,8 +591,11 @@ class BuildSystem:
             print_contexts=False,
             simple_logger=False,
             quiet=False,
+            debug=False,
             collapse_display=False,
             ):
+        if debug:
+            logger.setLevel(logging.DEBUG)
 
         # update attributes;
         # these are all the command line args from clize
@@ -680,9 +683,6 @@ class BuildSystem:
                 logger.debug(f"include_paths1={include_paths1}")
                 logger.debug(f"unresolved_dependencies1={unresolved_dependencies1}")
 
-                if var != DUMMY_VAR:
-                    logger.info(f'resolving variable {var}')
-
                 # do not evaluate the variable if it is DUMMY_VAR,
                 # since it was created only to force the unresolved_dependencies to run once
                 if var == DUMMY_VAR:
@@ -727,13 +727,12 @@ class BuildSystem:
 
                 for val in vals_split:
 
-                    if False:
-                        # if val is an integer, pad it with zeros
-                        try:
-                            intval = int(val)
-                            val = f'{intval:04d}'
-                        except ValueError:
-                            pass
+                    # if val is an integer, pad it with zeros
+                    try:
+                        intval = int(val)
+                        val = f'{intval:04d}'
+                    except ValueError:
+                        pass
 
                     # add the context
                     context1 = BuildContext(
@@ -744,6 +743,7 @@ class BuildSystem:
                     contexts.append(context1)
 
             if var != DUMMY_VAR:
+                logger.info(f'resolved variable {var}; len(contexts)={len(contexts)}')
                 vals_split_disp = vals_split
                 if len(vals_split) == 1:
                     vals_split_disp = vals_split[0]
@@ -851,8 +851,12 @@ class BuildSystem:
                 prompt_path = config['prompt_file']
             else:
                 prompt_path = os.path.join(self.prompt_dir, filename)
-            with open(prompt_path) as fin:
-                prompt_cmd = fin.read()
+            try:
+                with open(prompt_path) as fin:
+                    prompt_cmd = fin.read()
+            except FileNotFoundError:
+                logger.error(f'prompt_path={prompt_path} not found')
+                sys.exit(1)
         prompt_cmd = process_template(prompt_cmd, env_vars=context.variables)
         
         if extension == '.json':
