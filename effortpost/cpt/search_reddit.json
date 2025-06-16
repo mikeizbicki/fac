@@ -1,0 +1,44 @@
+{
+  "subreddits": [
+    {
+      "name": "/r/Christianity",
+      "about": "A subreddit to discuss Christianity and aspects of Christian life."
+    },
+    {
+      "name": "/r/Christian",
+      "about": "A subreddit for Christians to discuss their faith, theology, and practice."
+    },
+    {
+      "name": "/r/PeaceActivism",
+      "about": "A subreddit dedicated to discussions and organizing around nonviolent social change."
+    },
+    {
+      "name": "/r/NonViolence",
+      "about": "A subreddit for discussions and resources related to nonviolent philosophies and movements."
+    },
+    {
+      "name": "/r/pacifism",
+      "about": "A subreddit for discussions around pacifist ideologies and their practical applications."
+    },
+    {
+      "name": "/r/FaithAndPeace",
+      "about": "A subreddit for interfaith discussions on spiritual approaches to peace and conflict resolution."
+    },
+    {
+      "name": "/r/TheologyPolitics",
+      "about": "A subreddit to discuss the intersection of theology, political theory, and social justice."
+    },
+    {
+      "name": "/r/ProgressiveChristianity",
+      "about": "A subreddit for discussions around left-leaning and socially conscious forms of Christianity."
+    },
+    {
+      "name": "/r/LanguageHacking",
+      "about": "A subreddit for discussions around language learning strategies and techniques."
+    },
+    {
+      "name": "/r/Pedagogy",
+      "about": "A subreddit for discussions around educational theory, teaching methods, and classroom practices."
+    }
+  ]
+}

@@ -1,0 +1,124 @@
+{
+  "domains": [
+    {
+      "domain": "cpt.org",
+      "type": "news",
+      "country": "US",
+      "language": "en"
+    },
+    {
+      "domain": "christiancentury.org",
+      "type": "news",
+      "country": "US",
+      "language": "en"
+    },
+    {
+      "domain": "anabaptistworld.org",
+      "type": "news",
+      "country": "US",
+      "language": "en"
+    },
+    {
+      "domain": "mennoniteworld.org",
+      "type": "news",
+      "country": "CH",
+      "language": "en"
+    },
+    {
+      "domain": "paxchristi.net",
+      "type": "news",
+      "country": "IT",
+      "language": "en"
+    },
+    {
+      "domain": "sojourners.com",
+      "type": "news",
+      "country": "US",
+      "language": "en"
+    },
+    {
+      "domain": "friendsjournal.org",
+      "type": "news",
+      "country": "US",
+      "language": "en"
+    },
+    {
+      "domain": "faithandleadership.com",
+      "type": "news",
+      "country": "US",
+      "language": "en"
+    },
+    {
+      "domain": "religiondispatches.org",
+      "type": "news",
+      "country": "US",
+      "language": "en"
+    },
+    {
+      "domain": "mccchurch.org",
+      "type": "news",
+      "country": "US",
+      "language": "en"
+    },
+    {
+      "domain": "ecumenicalstudies.blogspot.com",
+      "type": "blog",
+      "country": "US",
+      "language": "en"
+    },
+    {
+      "domain": "nonviolentpeaceforce.org",
+      "type": "news",
+      "country": "FI",
+      "language": "en"
+    },
+    {
+      "domain": "pcusanews.org",
+      "type": "news",
+      "country": "US",
+      "language": "en"
+    },
+    {
+      "domain": "cpj.ca",
+      "type": "news",
+      "country": "CA",
+      "language": "en"
+    },
+    {
+      "domain": "justiceunbound.org",
+      "type": "news",
+      "country": "US",
+      "language": "en"
+    },
+    {
+      "domain": "globalministries.org",
+      "type": "news",
+      "country": "US",
+      "language": "en"
+    },
+    {
+      "domain": "christianpeacemaker.org",
+      "type": "news",
+      "country": "US",
+      "language": "en"
+    },
+    {
+      "domain": "thenationsmagazine.com",
+      "type": "news",
+      "country": "US",
+      "language": "en"
+    },
+    {
+      "domain": "mcc.org",
+      "type": "news",
+      "country": "US",
+      "language": "en"
+    },
+    {
+      "domain": "mennonitechurch.ca",
+      "type": "news",
+      "country": "CA",
+      "language": "en"
+    }
+  ]
+}

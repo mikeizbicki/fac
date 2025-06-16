@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "required": ["subreddits"],
+  "properties": {
+    "subreddits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["search_term"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "a short phrase that will provide relevant webpages when used to search the internet"
+          }
+        }
+      }
+    }
+  }
+}
+

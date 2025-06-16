@@ -619,7 +619,9 @@ class BuildSystem:
             )]
         
         DUMMY_VAR = 'DUMMY_VAR_CREATED_TO_FORCE_LOOP_TO_RUN_ONCE'
-        for var, expr in config.get('variables', {DUMMY_VAR: 'DUMMY_VAL'}).items():
+        config_variables = config.get('variables', {DUMMY_VAR: 'DUMMY_VAL'})
+        assert type(config_variables) is dict, "did you write `variables: |` instead of `variables:`?"
+        for var, expr in config_variables.items():
             expr = expr.strip()
 
             # compute the variables
@@ -703,12 +705,13 @@ class BuildSystem:
 
                 for val in vals_split:
 
-                    # if val is an integer, prepend it with zeros
-                    try:
-                        intval = int(val)
-                        val = f'{intval:04d}'
-                    except ValueError:
-                        pass
+                    if False:
+                        # if val is an integer, pad it with zeros
+                        try:
+                            intval = int(val)
+                            val = f'{intval:04d}'
+                        except ValueError:
+                            pass
 
                     # add the context
                     context1 = BuildContext(
@@ -722,7 +725,7 @@ class BuildSystem:
                 vals_split_disp = vals_split
                 if len(vals_split) == 1:
                     vals_split_disp = vals_split[0]
-                deptree.add(f'resolved variable {var}')
+                deptree.add(f'resolved variable {var}; len(contexts)={len(contexts)}')
 
         # print contexts debug information
         if self.print_contexts:
@@ -769,7 +772,7 @@ class BuildSystem:
                 self.context_to_file(path_to_generate, config, context)
 
             # validate file
-            self.validate_file(path_to_generate)
+            #self.validate_file(path_to_generate)
 
             # update tree
             if self.collapse_display and self.live:

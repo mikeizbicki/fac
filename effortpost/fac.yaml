@@ -1,0 +1,35 @@
+"$TOPIC/search_terms.json":
+  prompt: |
+    List $NUM_SEARCHES search phrases that will provide webpages related to the prompt when entered into google.
+    Ensure that the search terms are as different as possible so that they will not result in overlapping webpages returned.
+  dependencies: |
+    $TOPIC/prompt
+  variables:
+    NUM_SEARCHES: echo 1
+
+"$TOPIC/search_websites.json":
+  prompt: |
+    List $SEARCH_BREADTH domain names that are likely to contain information relevant to the provided query.  These websites will be searched at a later point for more detailed articles.  The results should be formatted according to the following JSON schema, and they should be as diverse as possible.
+    $(cat search_websites.json-schema) 
+  dependencies: |
+    $TOPIC/prompt
+  variables:
+    SEARCH_BREADTH: echo 20
+
+"$TOPIC/search/$DOMAIN/$TERM":
+  cmd: echo $DOMAIN
+  dependencies: |
+    $TOPIC/search_terms.json
+    $TOPIC/search_websites.json
+  variables:
+    DOMAIN: jq -r '.domains[].domain' $TOPIC/search_websites.json | tr '\n' '\0'
+    TERM: 
+
+"$TOPIC/search_reddit.json":
+  prompt: |
+    List $SEARCH_BREADTH subreddits that are likely to contain discussions relevant to the provided query.  These subreddits will be searched at a later point for more detailed discussions.  The results should be formatted according to the following JSON schema, and they should be as diverse as possible.
+    $(cat search_reddit.json-schema) 
+  dependencies: |
+    $TOPIC/prompt
+  variables:
+    SEARCH_BREADTH: echo 20
