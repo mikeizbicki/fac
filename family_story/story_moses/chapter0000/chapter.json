@@ -1,30 +1,70 @@
 {
-  "name": "The Oppressed Children",
+  "name": "The Children's Hard Work",
   "sections": [
     {
-      "sublocation": "Dungeon",
-      "image_description": "The children, Evan, Isaac, Aaron, and Aurelia, are chained to the floor of the dark, damp dungeon. They look up with frightened expressions as the Koopa Troopers, Koopa1 and Koopa2, stand over them, glaring menacingly.",
-      "text": "הַיְלָדִים עֲבָדִים לְקוּפָּה וּלְקוּפָּה 2."
+      "sublocation": "Main Sand Castle Construction Site",
+      "image_description": "Evan, Isaac, Aaron, and Aurelia, tired and dirty, kneel in the hot sand building huge sand castles. Koopa1 stands nearby with a spear, yelling at them. Other koopas patrol between the castle towers, watching for any child who might stop working.",
+      "text": "וְאֶבֶן וְיִצְחָק וְאַהֲרֹן וְאוֹרֶלְיָה בּוֹנִים אַרְמוֹנוֹת חוֹל גְּדוֹלִים בַּחֹם. הַקּוּפָּה צֹוֹעֵק: 'עֲבוֹדוּ! בְּנוּ עוֹד!'"
     },
     {
-      "sublocation": "Dungeon",
-      "image_description": "Evan, the oldest child, whispers to his siblings, and they nod in agreement. Suddenly, the children begin to transform into their animal forms - Evan as an owl, Isaac as a koala, Aaron as a dinosaur, and Aurelia as a panda.",
-      "text": "הַיְלָדִים מִתְחַיְּבִים לִבְרֹחַ מִן הַכְּלֵא."
+      "sublocation": "Main Sand Castle Construction Site",
+      "image_description": "Koopa2, with an eye patch and spear, stomps over to where Isaac is shaping a wall. He shouts and points to a fallen section of castle, forcing the children to fix it quickly. Sweat trickles down their foreheads as they pile wet sand.",
+      "text": "הַקּוּפָּה שְׁנִי צוֹעֵק בְּקוֹלוֹ גָדוֹל: 'עָצַרְתָּ?! אֵין מְנוּחָה! בְּנוּ עוֹד אַרְמוֹן!' הַיְלָדִים יְלֵאִים וּמִנּוֹחָה אֵין."
     },
     {
-      "sublocation": "Courtyard",
-      "image_description": "The children, now in their animal forms, scurry and fly across the courtyard, evading the Koopa Troopers who try to catch them. Evan the owl takes to the skies, while Isaac the koala clings to the walls, and Aaron the dinosaur and Aurelia the panda charge through the cobblestones.",
-      "text": "הַיְלָדִים בַּעֲלֵי צוּרוֹת חַיּוֹת בּוֹרְחִים מֵהַקוּפָּה."
+      "sublocation": "Main Sand Castle Construction Site",
+      "image_description": "Aurelia, sitting in the sand, tries to rest. Koopa1 notices and waves his spear. The children exchange tired glances but are forced to continue, hands heavy with sand and buckets.",
+      "text": "וְאוֹרֶלְיָה יָשְבָה מְעַט, וְהַקּוּפָּה רָאָה אוֹתָהּ וְצָוַח: 'קוּמִי! עֲבֹדִי! זֶה לֹא זְמַן לִשְׁבֹּת!'"
     },
     {
-      "sublocation": "Throne Room",
-      "image_description": "Bowser, the evil Koopa King, sits on his throne, angrily watching as his Koopa Troopers fail to capture the children. He slams his fist on the armrest, his face contorted in rage, as he orders his minions to find the escaped children.",
-      "text": "קוּפָּה זָעֵם כַּאֲשֶׁר הַיְלָדִים בּוֹרְחִים."
+      "sublocation": "Main Sand Castle Construction Site",
+      "image_description": "Evan looks at the sky, wishing to escape. Quietly, he whispers to his siblings about transforming. Hidden from the koopas, Isaac smiles and nods in agreement.",
+      "text": "אֶבֶן אָמַר בִּקוֹל לָחַשׁ: 'הֲנַעֲשֶׂה בְּנֵי־חַיּוֹת? נָבֹרַח?' יִצְחָק מֵנִיף רֹאשׁוֹ: 'נְבוֹרָח!'."
     },
     {
-      "sublocation": "Courtyard",
-      "image_description": "The children, still in their animal forms, hide behind the dried-up fountain, panting with exhaustion. They know they can't keep running forever, and they look at each other with worried expressions, unsure of what to do next.",
-      "text": "הַיְלָדִים מִתְחַבְּאִים מֵהַקוּפָּה, אֲבָל הֵם יָעֵף וְאֵינָם יוֹדְעִים מַה לַעֲשׂוֹת."
+      "sublocation": "Main Sand Castle Construction Site",
+      "image_description": "The four children begin to change shape—Evan's arms become wings, Isaac grows fuzzy ears—but Koopa2 suddenly notices. He shouts, waving his spear, and chases after them, stopping their transformation.",
+      "text": "וְהֵנָּה הַיְלָדִים מִשְׁתַּנִּים, אַךְ הַקּוּפָּה שְׁנִי רָאָה וְצָעַק: 'עִצְרוּ! בְּנוּ אָרוּרוֹת!'"
+    },
+    {
+      "sublocation": "Main Sand Castle Construction Site",
+      "image_description": "Koopa1 and Koopa2 herd the children back to the sand, standing guard on both sides. The children return to their human forms, heads low, and continue to build as the koopas glare at them.",
+      "text": "הַקּוּפָּה וְהַקּוּפָּה שְׁנִי הֶחְזִירוּ אוֹתָם לָעֲבוֹדָה. הַיְלָדִים שָׁבוּ לִהְיוֹת כַּאֲדָם, רָאשׁ שָׁפוּל."
+    },
+    {
+      "sublocation": "Main Sand Castle Construction Site",
+      "image_description": "Suddenly, Evan's stomach rumbles and he looks embarrassed. He whispers that he must go quickly. He rushes away, koopas grumbling, and soon returns, jumping right back into building.",
+      "text": "אֶבֶן אָמַר בִּבֹשֶׁת: 'צָרִיךְ לַעֲשׂוֹת צוֹאָה.' הוּא רָץ לַחֲדַר, וְחָזַר לִבְנוֹת כְּמוֹ קוֹדֶם."
+    },
+    {
+      "sublocation": "Main Sand Castle Construction Site",
+      "image_description": "Aaron, tired and hungry, starts to cry quietly. His face is streaked with tears. Suddenly, Shenzi the dog runs over, hugs Aaron tightly, and licks his cheek, making him smile and forget his sadness.",
+      "text": "אַהֲרֹן בּוֹכֶה. שֵׁנְזִי הַכֶּלֶבָה בָּאָה וַתַּחְבֹּק אוֹתוֹ, וַיְשַׂמַּח אַהֲרֹן."
+    },
+    {
+      "sublocation": "Main Sand Castle Construction Site",
+      "image_description": "Isaac sighs and says he needs a new shovel. As if from nowhere, a group of minions cartwheeling and singing bring a shiny new shovel on a pillow, present it as a gift, and leave, making everyone laugh.",
+      "text": "יִצְחָק אָמַר: 'צָרִיךְ אֲנִי אָבִיאָה חָדָשׁ.' הַמִּינְיוֹנִים הֵבִיאוּ מַתָּנָה–אַתֵּ חָדָשָׁה! כוּלָם שָׂמְחוּ."
+    },
+    {
+      "sublocation": "Main Sand Castle Construction Site",
+      "image_description": "As the children work, they remember a story Evan once read about helping friends. Evan narrates from his memory, encouraging everyone to be kind, even when the work is hard.",
+      "text": "וְאֶבֶן אָמַר: 'בַּסֵּפֶר שֶׁקָּרָאתִי, צָרִיךְ לֶאֱהֹב רֵעִים וְלַעֲזֹר. נַעֲזוֹר זֶה לָזֶה בַּעֲבוֹדָה.'"
+    },
+    {
+      "sublocation": "Main Sand Castle Construction Site",
+      "image_description": "Suddenly, the children fight over who has the heaviest bucket. Voices rise and they start pushing, but Isaac shouts that fighting is bad and hugs Aaron and Aurelia. Quickly, everyone apologizes and hugs.",
+      "text": "הַיְלָדִים נִצְטָּחוּ בֵּינֵיהֶם. יִצְחָק אָמַר: 'לֹא רָע עִם רֵעִים! נֶאֱהַב!' וְהֵם נָשְׁקוּ וְחִבְּקוּ."
+    },
+    {
+      "sublocation": "Main Sand Castle Construction Site",
+      "image_description": "Work drags on as the sun moves across the sky. Sand castles rise high under the constant shouts of Koopa1 and Koopa2. Then, in the silence, the air shimmers with a sudden, otherworldly glow.",
+      "text": "הַיְלָדִים עוֹבְדִים כָּל הַיּוֹם. פִּתְאֹם קוֹל בַּשָּׁמַיִם, כְּתוֹר אֵשׁ, דִּבֵּר אֱלֹהִים."
+    },
+    {
+      "sublocation": "Main Sand Castle Construction Site",
+      "image_description": "A golden light bathes the tired children where they sit, eyes wide in awe. The voice of God, gentle but strong, tells them they must return and free all the other children still trapped.",
+      "text": "קוֹל אֱלֹהִים אָמַר: 'שׁוּבוּ! הוֹצִיאוּ אֶת הַיְלָדִים הַנִּלְכָּדִים.' הַיְלָדִים שָׁמְעוּ וְפָנִים נִפְתָּחוּ בְּתִקְוָה."
     }
   ]
 }

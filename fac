@@ -64,6 +64,20 @@ class RecursiveLogger(logging.Logger):
         super()._log(level, msg, args, **kwargs)
 
 
+def with_subtree(logger_obj):
+    """
+    This decorator creates a logging subtree context around the decorated function.
+    Whenever the function is called (usually recursively),
+    a new indentation level will appear in the logger.
+    """
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            with logger_obj.make_subtree():
+                return func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
 handler = logging.StreamHandler()
 handler.setFormatter(logging.Formatter(
     '%(asctime)s %(tree_prefix)s[%(levelname)s] %(message)s',
@@ -123,9 +137,11 @@ class LLM():
 
     def __init__(self):
         #self.model = 'groq/llama-3.3-70b-versatile'
-        #self.model = 'openai/gpt-4.1-mini'
+        #self.model = 'openai/gpt-4.1'
+        self.model = 'openai/gpt-4.1-mini'
+        #self.model = 'anthropic/claude-sonnet-4-0'
         #self.model = 'anthropic/claude-3-5-haiku-latest'
-        self.model = 'anthropic/claude-3-haiku-20240307'
+        #self.model = 'anthropic/claude-3-haiku-20240307'
         self.usage = Counter()
 
         # connect to the API
@@ -602,8 +618,8 @@ class BuildSystem:
         if pattern_to_build:
             self.build_pattern(pattern_to_build, {})
 
+    @with_subtree(logger)
     def build_pattern(self, pattern_to_build, input_env):
-      with logger.make_subtree():
         logger.debug(f'pattern_to_build="{pattern_to_build}"')
 
         # load pattern config
