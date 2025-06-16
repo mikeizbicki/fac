@@ -1,0 +1,17 @@
+{ "Name": "Evan"
+, "Name_Note": "In Hebrew, the name is אֶבֶן"
+, "Appearance":
+    { "Age": "7 years"
+    , "Sex": "Male"
+    , "Hair": "Black"
+    , "Eyes": "Brown"
+    }
+, "Favorites":
+    { "Animal": ["Owl"]
+    , "Food": ["Pasta", "Chicken Nuggets", "Maccaroni and Cheese"]
+    , "Toy": ["Making things out of paper"]
+    , "TV": ["Chronicles of Narnia"]
+    }
+}
+
+

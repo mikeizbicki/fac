@@ -1,0 +1,76 @@
+{
+  "characters": [
+    {
+      "name": "Evan",
+      "placement": "stage-left",
+      "description": {
+        "pose": "straight-on",
+        "action": "Collapses onto the soft grass, breathing heavily but with a relieved smile on his face as sunlight filters through the trees above."
+      }
+    },
+    {
+      "name": "Aaron",
+      "placement": "center",
+      "description": {
+        "pose": "straight-on",
+        "action": "Falls onto the grass next to his siblings, his small chest rising and falling as he catches his breath, looking around the peaceful clearing with wide, happy eyes."
+      }
+    },
+    {
+      "name": "Isaac",
+      "placement": "stage-right",
+      "description": {
+        "pose": "straight-on",
+        "action": "Drops down onto the grass with visible relief, wiping sweat from his forehead while gazing up at the dappled sunlight coming through the canopy."
+      }
+    },
+    {
+      "name": "Aurelia",
+      "placement": "center",
+      "description": {
+        "pose": "straight-on",
+        "action": "Sits down heavily on the soft grass, her light blonde hair catching the filtered sunlight as she breathes deeply and smiles with the joy of being free."
+      }
+    },
+    {
+      "name": "Koopa1",
+      "placement": "off-screen"
+    },
+    {
+      "name": "Koopa2",
+      "placement": "off-screen"
+    }
+  ],
+  "movements": [
+    {
+      "character": "Evan",
+      "action": "enter-stage-left",
+      "final-placement": "stage-left"
+    },
+    {
+      "character": "Aaron",
+      "action": "enter-stage-left",
+      "final-placement": "center"
+    },
+    {
+      "character": "Isaac",
+      "action": "enter-stage-left",
+      "final-placement": "stage-right"
+    },
+    {
+      "character": "Aurelia",
+      "action": "enter-stage-left",
+      "final-placement": "center"
+    },
+    {
+      "character": "Koopa1",
+      "action": "exit-stage-left",
+      "final-placement": "off-screen"
+    },
+    {
+      "character": "Koopa2",
+      "action": "exit-stage-left",
+      "final-placement": "off-screen"
+    }
+  ]
+}

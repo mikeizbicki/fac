@@ -1,0 +1,52 @@
+{
+  "characters": [
+    {
+      "name": "Evan",
+      "placement": "center",
+      "description": {
+        "pose": "profile-right",
+        "action": "Evan, still in his owl form, hoots softly as he leads the group of children into the town square. His sharp eyes scan the area, looking for any sign of danger."
+      }
+    },
+    {
+      "name": "Isaac",
+      "placement": "stage-left",
+      "description": {
+        "pose": "profile-left",
+        "action": "Isaac, the koala, clings to Evan's side, his small paws gripping the owl's feathers. He lets out gentle chirps, looking around the square with curious eyes."
+      }
+    },
+    {
+      "name": "Aaron",
+      "placement": "stage-right",
+      "description": {
+        "pose": "profile-right",
+        "action": "Aaron, the small dinosaur, walks alongside the group, his head held high. He sniffs the air, ready to defend his friends if needed."
+      }
+    },
+    {
+      "name": "Aurelia",
+      "placement": "center",
+      "description": {
+        "pose": "straight-on",
+        "action": "Aurelia, the panda, stands in the center of the group, her large eyes taking in the sights and sounds of the town square. She lets out a soft grunt, her round body swaying gently as she moves."
+      }
+    },
+    {
+      "name": "Villager1",
+      "placement": "stage-left",
+      "description": {
+        "pose": "profile-left",
+        "action": "A villager, a kind-looking man, approaches the group of children, his eyes wide with wonder. He reaches out a hand, tentatively, as if to touch one of the transformed children."
+      }
+    },
+    {
+      "name": "Villager2",
+      "placement": "stage-right",
+      "description": {
+        "pose": "profile-right",
+        "action": "Another villager, a woman with a warm smile, joins the first villager, her gaze fixed on the children. She clasps her hands together, murmuring something under her breath, her expression a mix of awe and relief."
+      }
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "chapter": "המחלקת הגדלה",
+  "subscenes": [
+    {
+      "name": "Rocky Desert",
+      "description": "A barren wilderness stretches endlessly with scattered rocks and dry earth under the harsh sun. Ancient olive trees stand alone between thorny bushes, their gnarled branches providing sparse shade. The rocky path winds through this desolate landscape toward distant mountains that rise like ancient walls. Stone formations jut from the ground, weathered by countless years of wind and rain."
+    },
+    {
+      "name": "Olive Grove",
+      "description": "Several old olive trees cluster together in a small grove, their twisted trunks and silver-green leaves offering refuge from the desert heat. The rocky path passes directly through this grove, connecting the wider wilderness. Thorny bushes grow around the base of each tree, while smooth stones lie scattered beneath their branches. This peaceful spot contrasts sharply with the harsh desert surrounding it."
+    },
+    {
+      "name": "Mountain Path",
+      "description": "The rocky path climbs steeply toward towering mountains that loom against the sky like ancient fortresses. Loose stones and pebbles make the way treacherous, while thorny bushes line both sides of the trail. Olive trees dot the lower slopes, becoming sparser as the path ascends. The wilderness stretches endlessly behind, showing how far the journey has come."
+    }
+  ],
+  "sections": [
+    {
+      "title_english": "Return to Peace",
+      "subscene": "Garden Overview",
+      "text": "הילדים חוזרים לגן שלהם. הם שמחים כי ניצחו את האויב. השלום חוזר לגן."
+    },
+    {
+      "title_english": "The Enemy Returns",
+      "subscene": "Garden Overview",
+      "text": "דרת׳ וידר הקטן חוזר לגן. הפעם הוא מביא חילים רבים יותר. הם רוצים לנקם."
+    },
+    {
+      "title_english": "Destruction Begins",
+      "subscene": "Play Area",
+      "text": "החילים הורסים את מקום המשחק של הילדים. הם שוברים את הפרחים ומשליכים אבנים."
+    },
+    {
+      "title_english": "The Children Are Angry",
+      "subscene": "Play Area",
+      "text": "הילדים רואים את ההרס וכועסים מאד. המקום היפה שלהם נהרס. הם רוצים להלחם."
+    },
+    {
+      "title_english": "They Transform to Fight",
+      "subscene": "Play Area",
+      "text": "הילדים נהפכים לחיות שוב. הפעם הם יותר כועסים. הם מוכנים למלחמה גדולה."
+    },
+    {
+      "title_english": "The Battle Grows",
+      "subscene": "Garden Overview",
+      "text": "הקרב גדל ונעשה קשה יותר. החיות נלחמות בחילים רבים. ההרס גדל בכל הגן."
+    },
+    {
+      "title_english": "Aurelia Gets Sad",
+      "subscene": "Stone Well",
+      "text": "אורליה רואה את כל ההרס ונעצבת מאד. היא בכה ליד הבאר. הקרב קשה מדי."
+    },
+    {
+      "title_english": "Shenzi Comes",
+      "subscene": "Stone Well",
+      "text": "שנצי הכלבה באה אל אורליה. היא חובקת אותה ועושה אותה שמחה. שנצי טובה ואוהבת."
+    },
+    {
+      "title_english": "The Enemy Retreats",
+      "subscene": "Rocky Desert",
+      "text": "דרת׳ וידר הקטן והחילים בורחים אל המדבר. אבל הם לא מפחדים כמו לפני. הם יחזרו."
+    },
+    {
+      "title_english": "The Children Feel Troubled",
+      "subscene": "Play Area",
+      "text": "הילדים עומדים בין ההרס. הם מודאגים כי הקרב קשה יותר. הניצחון לא קל הפעם."
+    }
+  ],
+  "grammar": [
+    "Past tense verbs using the perfect form with וו consecutive",
+    "Comparative constructions using יותר (more) with adjectives",
+    "Construct chains showing possession and relationship between nouns"
+  ]
+}

@@ -1,0 +1,398 @@
+{
+  "chapter": "המסר האלהי",
+  "subscenes": [
+    {
+      "name": "Shoreline View",
+      "description": "The vast Mediterranean shoreline stretches endlessly with rolling waves crashing against weathered rocks. Ancient stones line the beach, polished smooth by countless tides, while seabirds circle overhead in the salty air. Foam and spray dance across the water's surface as waves retreat and advance in eternal rhythm. The horizon blends sea and sky into one infinite expanse that seems to call toward distant lands."
+    },
+    {
+      "name": "Rocky Outcrop",
+      "description": "Large weathered rocks jut from the shoreline like ancient monuments, their surfaces carved smooth by wind and water. Waves crash against these stone formations, sending spray high into the air before retreating back to the sea. Smaller stones and pebbles scatter around the base of these rocks, creating tide pools that reflect the sky. The endless horizon stretches beyond, where the great sea meets the heavens."
+    },
+    {
+      "name": "Sandy Beach",
+      "description": "Soft sand stretches along the shoreline, marked by the patterns of retreating waves and scattered with smooth stones. Seabirds leave their tracks in the wet sand as they search for food among the tide pools. The weathered rocks of the coast provide shelter from the stronger waves, while gentle foam reaches toward the children's feet. The vast sea extends to the horizon, its surface sparkling in the sunlight."
+    }
+  ],
+  "sections": [
+    {
+      "title_english": "The Attacks Grow Worse",
+      "title_target": "התקפות נעשות יותר קשות",
+      "subscene": "Play Area",
+      "image_description": "Baby Darth Vader and many storm troopers are destroying more of the garden, while the children stand watching in dismay. The destruction is more severe than before, with broken branches and scattered stones everywhere.",
+      "text": "דרת׳ וידר הקטן חוזר עם חילים רבים מאד. הם הורסים את הגן יותר ויותר. הילדים מפחדים.",
+      "stage_directions": [
+        {
+          "character": "Baby Darth Vader",
+          "action": "standing",
+          "animation_prompt": "Baby Darth Vader stands directing his storm troopers as they cause destruction around the garden."
+        },
+        {
+          "character": "Evan",
+          "action": "standing",
+          "animation_prompt": "Evan stands watching the destruction with worry and fear on his face."
+        },
+        {
+          "character": "Isaac",
+          "action": "standing",
+          "animation_prompt": "Isaac stands next to his brother, looking troubled by the increasing violence."
+        },
+        {
+          "character": "Aaron",
+          "action": "standing",
+          "animation_prompt": "Aaron stands close to his siblings, clearly frightened by the escalating conflict."
+        },
+        {
+          "character": "Aurelia",
+          "action": "standing",
+          "animation_prompt": "Aurelia stands with her brothers, her expression showing fear and confusion."
+        }
+      ]
+    },
+    {
+      "title_english": "God Speaks to the Children",
+      "title_target": "אלהים מדבר אל הילדים",
+      "subscene": "Stone Well",
+      "image_description": "The children gather around the stone well as a divine voice speaks from above. Light seems to emanate from the well as God delivers His message about forgiveness.",
+      "text": "אלהים קורא אל הילדים: 'לכו אל דרת׳ וידר הקטן. סלחו לו. אהבו אותו במקום להלחם.'",
+      "stage_directions": [
+        {
+          "character": "Evan",
+          "action": "standing",
+          "animation_prompt": "Evan stands listening intently to God's voice, his head tilted upward toward the heavens."
+        },
+        {
+          "character": "Isaac",
+          "action": "standing",
+          "animation_prompt": "Isaac stands with a confused expression, struggling to understand God's difficult command."
+        },
+        {
+          "character": "Aaron",
+          "action": "standing",
+          "animation_prompt": "Aaron stands looking uncertain about the divine message he's hearing."
+        },
+        {
+          "character": "Aurelia",
+          "action": "standing",
+          "animation_prompt": "Aurelia stands close to her brothers, looking up toward the source of God's voice."
+        }
+      ]
+    },
+    {
+      "title_english": "The Children Refuse",
+      "title_target": "הילדים מסרבים",
+      "subscene": "Stone Well",
+      "image_description": "The children stand around the well, clearly upset and refusing God's command. Their body language shows rebellion and anger at being asked to forgive their enemy.",
+      "text": "הילדים כועסים על הפקודה הזאת. 'לא נסלח לו! הוא רע מאד! למה נאהב אותו?'",
+      "stage_directions": [
+        {
+          "character": "Evan",
+          "action": "speaking",
+          "animation_prompt": "Evan speaks with anger and frustration, gesturing with his hands to emphasize his refusal."
+        },
+        {
+          "character": "Isaac",
+          "action": "speaking",
+          "animation_prompt": "Isaac speaks with indignation, shaking his head to show his disagreement with God's command."
+        },
+        {
+          "character": "Aaron",
+          "action": "standing",
+          "animation_prompt": "Aaron stands with his arms crossed, showing his stubborn refusal to obey."
+        },
+        {
+          "character": "Aurelia",
+          "action": "standing",
+          "animation_prompt": "Aurelia stands with a pouty expression, clearly unhappy with what God is asking."
+        }
+      ]
+    },
+    {
+      "title_english": "They Decide to Flee",
+      "title_target": "הם מחליטים לברח",
+      "subscene": "Garden Overview",
+      "image_description": "The children gather together, whispering and planning their escape from God's presence. They look around nervously as they make their rebellious decision.",
+      "text": "הילדים מחליטים לברח מאלהים. הם אומרים: 'נברח אל הים הגדול. שם לא ימצא אותנו אלהים.'",
+      "stage_directions": [
+        {
+          "character": "Evan",
+          "action": "speaking",
+          "animation_prompt": "Evan speaks quietly to his siblings, gesturing toward the direction of the sea."
+        },
+        {
+          "character": "Isaac",
+          "action": "standing",
+          "animation_prompt": "Isaac nods in agreement with the plan, looking around nervously."
+        },
+        {
+          "character": "Aaron",
+          "action": "standing",
+          "animation_prompt": "Aaron stands ready to follow his older brothers in their flight from God."
+        },
+        {
+          "character": "Aurelia",
+          "action": "standing",
+          "animation_prompt": "Aurelia stands uncertainly, not fully understanding but following her brothers' lead."
+        }
+      ]
+    },
+    {
+      "title_english": "Aaron Needs the Bathroom",
+      "title_target": "אהרן צריך שירותים",
+      "subscene": "Garden Overview",
+      "image_description": "Aaron suddenly holds his stomach and looks uncomfortable, needing to use the bathroom during their important discussion about fleeing from God.",
+      "text": "אהרן פתאם צריך לעשות צואה. הוא רץ מהר לשירותים ואז חוזר לאחיו.",
+      "stage_directions": [
+        {
+          "character": "Aaron",
+          "action": "leave_stage_right",
+          "animation_prompt": "Aaron runs quickly off stage holding his stomach, needing to use the bathroom urgently."
+        },
+        {
+          "character": "Evan",
+          "action": "standing",
+          "animation_prompt": "Evan waits patiently while his little brother takes care of his needs."
+        },
+        {
+          "character": "Isaac",
+          "action": "standing",
+          "animation_prompt": "Isaac stands waiting, understanding that nature calls at inconvenient times."
+        },
+        {
+          "character": "Aurelia",
+          "action": "standing",
+          "animation_prompt": "Aurelia stands with her remaining brothers, waiting for Aaron's return."
+        }
+      ]
+    },
+    {
+      "title_english": "Aaron Returns",
+      "title_target": "אהרן חוזר",
+      "subscene": "Garden Overview",
+      "image_description": "Aaron returns from the bathroom, rejoining his siblings who are still planning their escape to the seashore.",
+      "text": "אהרן חוזר מהשירותים. הוא אומר: 'עכשיו אני מוכן לברח אל הים!'",
+      "stage_directions": [
+        {
+          "character": "Aaron",
+          "action": "enter_stage_right",
+          "animation_prompt": "Aaron returns looking relieved and ready to rejoin his siblings' plan."
+        },
+        {
+          "character": "Evan",
+          "action": "standing",
+          "animation_prompt": "Evan welcomes his brother back and continues with their escape plan."
+        },
+        {
+          "character": "Isaac",
+          "action": "standing",
+          "animation_prompt": "Isaac stands ready to begin their journey to the sea."
+        },
+        {
+          "character": "Aurelia",
+          "action": "standing",
+          "animation_prompt": "Aurelia stands with her brothers, ready to follow them to the shore."
+        }
+      ]
+    },
+    {
+      "title_english": "They Journey to the Sea",
+      "title_target": "הם נוסעים אל הים",
+      "subscene": "Rocky Desert",
+      "image_description": "The four children walk through the wilderness path, leaving their garden home behind as they flee toward the great sea to escape God's command.",
+      "text": "הילדים יוצאים מהגן ונוסעים דרך המדבר. הם הולכים אל הים הגדול לברח מאלהים.",
+      "stage_directions": [
+        {
+          "character": "Evan",
+          "action": "standing",
+          "animation_prompt": "Evan leads his siblings along the rocky path, looking determined but troubled."
+        },
+        {
+          "character": "Isaac",
+          "action": "standing",
+          "animation_prompt": "Isaac walks beside his brother, glancing back occasionally toward their abandoned home."
+        },
+        {
+          "character": "Aaron",
+          "action": "standing",
+          "animation_prompt": "Aaron walks with his siblings, excited about the adventure but unaware of the consequences."
+        },
+        {
+          "character": "Aurelia",
+          "action": "standing",
+          "animation_prompt": "Aurelia walks with her brothers, trusting them to lead her safely to their destination."
+        }
+      ]
+    },
+    {
+      "title_english": "They Reach the Shore",
+      "title_target": "הם מגיעים אל החוף",
+      "subscene": "Shoreline View",
+      "image_description": "The children arrive at the vast shoreline, standing before the endless sea where they hope to hide from God's presence and avoid His difficult command.",
+      "text": "הילדים מגיעים אל חוף הים הגדול. הים גדול מאד. הם חושבים שכאן יהיו בטוחים מאלהים.",
+      "stage_directions": [
+        {
+          "character": "Evan",
+          "action": "standing",
+          "animation_prompt": "Evan stands at the water's edge, looking out over the vast sea with relief and determination."
+        },
+        {
+          "character": "Isaac",
+          "action": "standing",
+          "animation_prompt": "Isaac stands beside his brother, amazed by the size of the great sea before them."
+        },
+        {
+          "character": "Aaron",
+          "action": "standing",
+          "animation_prompt": "Aaron stands excitedly at the shore, fascinated by the waves and seabirds."
+        },
+        {
+          "character": "Aurelia",
+          "action": "standing",
+          "animation_prompt": "Aurelia stands close to her brothers, looking both amazed and slightly frightened by the endless water."
+        }
+      ]
+    },
+    {
+      "title_english": "They Hide by the Water",
+      "title_target": "הם מתחבאים ליד המים",
+      "subscene": "Rocky Outcrop",
+      "image_description": "The children find shelter among the weathered rocks along the shoreline, trying to hide from God's presence while the waves crash around them.",
+      "text": "הילדים מתחבאים בין הסלעים ליד המים. הם אומרים: 'כאן אלהים לא יכול למצא אותנו.'",
+      "stage_directions": [
+        {
+          "character": "Evan",
+          "action": "sitting",
+          "animation_prompt": "Evan sits among the rocks, trying to make himself small and hidden from God's sight."
+        },
+        {
+          "character": "Isaac",
+          "action": "sitting",
+          "animation_prompt": "Isaac sits close to his brother, whispering their plans to avoid God's command."
+        },
+        {
+          "character": "Aaron",
+          "action": "sitting",
+          "animation_prompt": "Aaron sits with his siblings, treating their hiding as an exciting game."
+        },
+        {
+          "character": "Aurelia",
+          "action": "sitting",
+          "animation_prompt": "Aurelia sits pressed close to her brothers, seeking comfort and security in their hiding place."
+        }
+      ]
+    },
+    {
+      "title_english": "They Refuse God's Calling",
+      "title_target": "הם מסרבים לקריאת אלהים",
+      "subscene": "Sandy Beach",
+      "image_description": "The children sit defiantly on the beach, their backs turned toward the direction of their home and God's calling, refusing to accept their divine mission.",
+      "text": "הילדים יושבים על החוף ומסרבים לשמע בקול אלהים. הם לא רוצים לסלח לאויב שלהם.",
+      "stage_directions": [
+        {
+          "character": "Evan",
+          "action": "sitting",
+          "animation_prompt": "Evan sits with his arms crossed, showing stubborn defiance against God's command."
+        },
+        {
+          "character": "Isaac",
+          "action": "sitting",
+          "animation_prompt": "Isaac sits turned away from home, refusing to look in the direction of his calling."
+        },
+        {
+          "character": "Aaron",
+          "action": "sitting",
+          "animation_prompt": "Aaron sits with his siblings, not fully understanding but following their lead in rebellion."
+        },
+        {
+          "character": "Aurelia",
+          "action": "sitting",
+          "animation_prompt": "Aurelia sits close to her brothers, confused but loyal to their shared decision."
+        }
+      ]
+    }
+  ],
+  "vocabulary": [
+    {
+      "part_of_speech": "verb",
+      "table": [
+        {
+          "word": "קרא",
+          "gloss": "to call, to summon"
+        },
+        {
+          "word": "סלח",
+          "gloss": "to forgive"
+        },
+        {
+          "word": "ברח",
+          "gloss": "to flee, to escape"
+        },
+        {
+          "word": "מצא",
+          "gloss": "to find"
+        },
+        {
+          "word": "חבא",
+          "gloss": "to hide"
+        },
+        {
+          "word": "סרב",
+          "gloss": "to refuse"
+        }
+      ]
+    },
+    {
+      "part_of_speech": "noun",
+      "table": [
+        {
+          "word": "פקודה",
+          "gloss": "command, order"
+        },
+        {
+          "word": "ים",
+          "gloss": "sea, ocean"
+        },
+        {
+          "word": "חוף",
+          "gloss": "shore, coast"
+        },
+        {
+          "word": "סלע",
+          "gloss": "rock, stone"
+        },
+        {
+          "word": "מים",
+          "gloss": "water"
+        },
+        {
+          "word": "קריאה",
+          "gloss": "calling, summons"
+        }
+      ]
+    },
+    {
+      "part_of_speech": "adverb",
+      "table": [
+        {
+          "word": "פתאם",
+          "gloss": "suddenly"
+        },
+        {
+          "word": "כאן",
+          "gloss": "here"
+        },
+        {
+          "word": "שם",
+          "gloss": "there"
+        }
+      ]
+    }
+  ],
+  "grammar": [
+    "Imperative verbs used for divine commands and human responses",
+    "Direct speech introduced with quotation and reporting verbs",
+    "Compound sentences using coordinating conjunctions",
+    "Prepositional phrases indicating location and direction",
+    "Infinitive constructions expressing purpose and intention"
+  ]
+}

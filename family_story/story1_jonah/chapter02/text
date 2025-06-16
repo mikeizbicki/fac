@@ -1,0 +1,274 @@
+{
+  "chapter": "המחלקת הגדלה",
+  "subscenes": [
+    {
+      "name": "Rocky Desert",
+      "description": "A barren wilderness stretches endlessly with scattered rocks and dry earth under the harsh sun. Ancient olive trees stand alone between thorny bushes, their gnarled branches providing sparse shade. The rocky path winds through this desolate landscape toward distant mountains that rise like ancient walls. Stone formations jut from the ground, weathered by countless years of wind and rain."
+    },
+    {
+      "name": "Olive Grove",
+      "description": "Several old olive trees cluster together in a small grove, their twisted trunks and silver-green leaves offering refuge from the desert heat. The rocky path passes directly through this grove, connecting the wider wilderness. Thorny bushes grow around the base of each tree, while smooth stones lie scattered beneath their branches. This peaceful spot contrasts sharply with the harsh desert surrounding it."
+    },
+    {
+      "name": "Mountain Path",
+      "description": "The rocky path climbs steeply toward towering mountains that loom against the sky like ancient fortresses. Loose stones and pebbles make the way treacherous, while thorny bushes line both sides of the trail. Olive trees dot the lower slopes, becoming sparser as the path ascends. The wilderness stretches endlessly behind, showing how far the journey has come."
+    }
+  ],
+  "sections": [
+    {
+      "title_english": "Return to Peace",
+      "title_target": "חזרה לשלום",
+      "subscene": "Garden Overview",
+      "image_description": "The four children sit peacefully in their garden home, enjoying the fruits and flowers around them. They appear calm and happy after their recent victory.",
+      "text": "הילדים חוזרים לגן שלהם. הם שמחים כי ניצחו את האויב. השלום חוזר לגן.",
+      "stage_directions": [
+        {
+          "character": "Evan",
+          "action": "sitting",
+          "animation_prompt": "Evan sits contentedly under a fruit tree, smiling peacefully."
+        },
+        {
+          "character": "Isaac",
+          "action": "sitting",
+          "animation_prompt": "Isaac sits beside Evan, looking relaxed and happy."
+        },
+        {
+          "character": "Aaron",
+          "action": "sitting",
+          "animation_prompt": "Aaron sits near the well, playing with small stones."
+        },
+        {
+          "character": "Aurelia",
+          "action": "sitting",
+          "animation_prompt": "Aurelia sits among the flowers, picking petals gently."
+        }
+      ]
+    },
+    {
+      "title_english": "The Enemy Returns",
+      "title_target": "האויב חוזר",
+      "subscene": "Garden Overview",
+      "image_description": "Baby Darth Vader appears at the garden entrance with twice as many white-armored storm troopers behind him, creating an intimidating force.",
+      "text": "דרת׳ וידר הקטן חוזר לגן. הפעם הוא מביא חילים רבים יותר. הם רוצים לנקם.",
+      "stage_directions": [
+        {
+          "character": "Baby Darth Vader",
+          "action": "enter_stage_left",
+          "animation_prompt": "Baby Darth Vader marches confidently into the garden with many storm troopers following."
+        }
+      ]
+    },
+    {
+      "title_english": "Destruction Begins",
+      "title_target": "ההרס מתחיל",
+      "subscene": "Play Area",
+      "image_description": "The storm troopers systematically destroy the children's favorite play area, breaking flower beds and overturning stones while Baby Darth Vader directs them.",
+      "text": "החילים הורסים את מקום המשחק של הילדים. הם שוברים את הפרחים ומשליכים אבנים.",
+      "stage_directions": [
+        {
+          "character": "Baby Darth Vader",
+          "action": "standing",
+          "animation_prompt": "Baby Darth Vader points and directs his troops with commanding gestures."
+        }
+      ]
+    },
+    {
+      "title_english": "The Children Are Angry",
+      "title_target": "הילדים כועסים",
+      "subscene": "Play Area",
+      "image_description": "The four children stand together, their faces showing anger and distress as they witness the destruction of their beloved play area.",
+      "text": "הילדים רואים את ההרס וכועסים מאד. המקום היפה שלהם נהרס. הם רוצים להלחם.",
+      "stage_directions": [
+        {
+          "character": "Evan",
+          "action": "standing",
+          "animation_prompt": "Evan stands with clenched fists, looking angry at the destruction."
+        },
+        {
+          "character": "Isaac",
+          "action": "standing",
+          "animation_prompt": "Isaac stands beside Evan, his face showing fierce determination."
+        },
+        {
+          "character": "Aaron",
+          "action": "standing",
+          "animation_prompt": "Aaron stands with his small hands on his hips, looking upset."
+        },
+        {
+          "character": "Aurelia",
+          "action": "standing",
+          "animation_prompt": "Aurelia stands with tears in her eyes, looking at the broken flowers."
+        }
+      ]
+    },
+    {
+      "title_english": "They Transform to Fight",
+      "title_target": "הם נהפכים להלחם",
+      "subscene": "Play Area",
+      "image_description": "The children transform into their animal forms with more aggressive energy than before, ready for a more serious battle.",
+      "text": "הילדים נהפכים לחיות שוב. הפעם הם יותר כועסים. הם מוכנים למלחמה גדולה.",
+      "stage_directions": [
+        {
+          "character": "Evan",
+          "action": "standing",
+          "animation_prompt": "Evan transforms into an owl with spread wings, looking fierce and ready to attack."
+        },
+        {
+          "character": "Isaac",
+          "action": "standing",
+          "animation_prompt": "Isaac becomes a koala with determined eyes, preparing to fight."
+        },
+        {
+          "character": "Aaron",
+          "action": "standing",
+          "animation_prompt": "Aaron transforms into a dinosaur, roaring with anger."
+        },
+        {
+          "character": "Aurelia",
+          "action": "standing",
+          "animation_prompt": "Aurelia becomes a panda, standing on hind legs ready for battle."
+        }
+      ]
+    },
+    {
+      "title_english": "The Battle Grows",
+      "title_target": "הקרב גדל",
+      "subscene": "Garden Overview",
+      "image_description": "A fierce battle rages throughout the garden as the animal-children fight against many storm troopers, with destruction spreading everywhere.",
+      "text": "הקרב גדל ונעשה קשה יותר. החיות נלחמות בחילים רבים. ההרס גדל בכל הגן.",
+      "stage_directions": [
+        {
+          "character": "Evan",
+          "action": "standing",
+          "animation_prompt": "Evan as an owl flies aggressively at the storm troopers, attacking from above."
+        },
+        {
+          "character": "Isaac",
+          "action": "standing",
+          "animation_prompt": "Isaac as a koala battles multiple enemies, using his strength fiercely."
+        },
+        {
+          "character": "Aaron",
+          "action": "standing",
+          "animation_prompt": "Aaron as a dinosaur charges through the garden, fighting desperately."
+        },
+        {
+          "character": "Aurelia",
+          "action": "standing",
+          "animation_prompt": "Aurelia as a panda wrestles with storm troopers, looking overwhelmed."
+        }
+      ]
+    },
+    {
+      "title_english": "Aurelia Gets Sad",
+      "title_target": "אורליה נעצבת",
+      "subscene": "Stone Well",
+      "image_description": "Aurelia, back in human form, sits by the well crying as she sees all the destruction around the garden, feeling overwhelmed by the violence.",
+      "text": "אורליה רואה את כל ההרס ונעצבת מאד. היא בכה ליד הבאר. הקרב קשה מדי.",
+      "stage_directions": [
+        {
+          "character": "Aurelia",
+          "action": "sitting",
+          "animation_prompt": "Aurelia sits by the stone well, crying and covering her face with her hands."
+        }
+      ]
+    },
+    {
+      "title_english": "Shenzi Comes",
+      "title_target": "שנצי באה",
+      "subscene": "Stone Well",
+      "image_description": "A friendly female dog named Shenzi approaches Aurelia at the well and gives her a comforting hug to help her feel better.",
+      "text": "שנצי הכלבה באה אל אורליה. היא חובקת אותה ועושה אותה שמחה. שנצי טובה ואוהבת.",
+      "stage_directions": [
+        {
+          "character": "Aurelia",
+          "action": "sitting",
+          "animation_prompt": "Aurelia sits by the well, receiving a gentle hug from Shenzi the dog."
+        },
+        {
+          "character": "Shenzi",
+          "action": "standing",
+          "animation_prompt": "Shenzi the female dog stands beside Aurelia, nuzzling her lovingly to comfort her."
+        }
+      ]
+    },
+    {
+      "title_english": "The Enemy Retreats",
+      "title_target": "האויב נסוג",
+      "subscene": "Rocky Desert",
+      "image_description": "Baby Darth Vader and his storm troopers retreat from the garden into the rocky wilderness, but they appear to be regrouping rather than truly defeated.",
+      "text": "דרת׳ וידר הקטן והחילים בורחים אל המדבר. אבל הם לא מפחדים כמו לפני. הם יחזרו.",
+      "stage_directions": [
+        {
+          "character": "Baby Darth Vader",
+          "action": "leave_stage_right",
+          "animation_prompt": "Baby Darth Vader leads his troops away from the garden, but looks back with determination."
+        }
+      ]
+    },
+    {
+      "title_english": "The Children Feel Troubled",
+      "title_target": "הילדים מודאגים",
+      "subscene": "Play Area",
+      "image_description": "The four children stand in human form among the ruins of their play area, looking worried and troubled rather than victorious like before.",
+      "text": "הילדים עומדים בין ההרס. הם מודאגים כי הקרב קשה יותר. הניצחון לא קל הפעם.",
+      "stage_directions": [
+        {
+          "character": "Evan",
+          "action": "standing",
+          "animation_prompt": "Evan stands looking at the destruction with concern and worry on his face."
+        },
+        {
+          "character": "Isaac",
+          "action": "standing",
+          "animation_prompt": "Isaac stands with his arms crossed, looking troubled by what happened."
+        },
+        {
+          "character": "Aaron",
+          "action": "standing",
+          "animation_prompt": "Aaron stands looking around at the broken garden with sad eyes."
+        },
+        {
+          "character": "Aurelia",
+          "action": "standing",
+          "animation_prompt": "Aurelia stands close to her brothers, still showing signs of her earlier tears."
+        }
+      ]
+    }
+  ],
+  "vocabulary": [
+    {
+      "part_of_speech": "verb",
+      "table": [
+        {"word": "הרס", "gloss": "destroy"},
+        {"word": "שבר", "gloss": "break"},
+        {"word": "נקם", "gloss": "take revenge"},
+        {"word": "גדל", "gloss": "grow/increase"},
+        {"word": "נסג", "gloss": "retreat/withdraw"}
+      ]
+    },
+    {
+      "part_of_speech": "noun",
+      "table": [
+        {"word": "הרס", "gloss": "destruction"},
+        {"word": "קרב", "gloss": "battle"},
+        {"word": "מלחמה", "gloss": "war"},
+        {"word": "מדבר", "gloss": "wilderness/desert"},
+        {"word": "דאגה", "gloss": "worry/concern"}
+      ]
+    },
+    {
+      "part_of_speech": "adjective",
+      "table": [
+        {"word": "קשה", "gloss": "difficult/hard"},
+        {"word": "רב", "gloss": "many/much"},
+        {"word": "מודאג", "gloss": "worried/concerned"}
+      ]
+    }
+  ],
+  "grammar": [
+    "Past tense verbs using the perfect form with וַו consecutive",
+    "Comparative constructions using יותר (more) with adjectives",
+    "Construct chains showing possession and relationship between nouns"
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "characters": [
+    {
+      "name": "Evan",
+      "placement": "center",
+      "description": {
+        "pose": "profile-right",
+        "action": "Evan, now in human form, holds up the scroll he found, revealing the contract that Bowser had signed, promising to free all the enslaved children if he were ever defeated."
+      },
+      "movements": []
+    },
+    {
+      "name": "Isaac",
+      "placement": "stage-left",
+      "description": {
+        "pose": "profile-left",
+        "action": "Isaac, also in human form, watches intently as Evan presents the scroll, understanding the significance of this discovery."
+      },
+      "movements": []
+    },
+    {
+      "name": "Aurelia",
+      "placement": "stage-right",
+      "description": {
+        "pose": "straight-on",
+        "action": "Aurelia stands alongside her siblings, a relieved expression on her face now that Bowser has been defeated and the contract has been revealed."
+      },
+      "movements": []
+    },
+    {
+      "name": "Aaron",
+      "placement": "center",
+      "description": {
+        "pose": "profile-left",
+        "action": "Aaron, no longer in dinosaur form, looks around at his free siblings, ready to assist them in liberating the other enslaved children."
+      },
+      "movements": []
+    },
+    {
+      "name": "Bowser",
+      "placement": "center",
+      "description": {
+        "pose": "profile-right",
+        "action": "Bowser, trapped under the cape, glares angrily at the children, realizing that his defeat means he must now uphold his promise to free all the enslaved children."
+      },
+      "movements": []
+    }
+  ]
+}

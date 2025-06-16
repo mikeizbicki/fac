@@ -6,32 +6,73 @@ The Latin verb `facio` means to do/make, and fac is the imperative form.
 
 # setup logging
 import logging
-handler = 'standard'
-#handler = 'rich'
+import contextlib
 
-if handler == 'rich':
-    from rich.logging import RichHandler
-    handler = RichHandler(
-        show_time=False,
-        show_path=False,
-        keywords=[]
-    )
-    handler.setFormatter(logging.Formatter(
-        '%(asctime)s %(message)s',
-        '%Y-%m-%d %H:%M:%S'
-    ))
-else:
-    handler = logging.StreamHandler()
-    handler = logging.FileHandler('.log.exmachina')
-    handler.setFormatter(logging.Formatter(
-        '%(asctime)s [%(levelname)s] %(message)s',
-        '%Y-%m-%d %H:%M:%S'
-    ))
-logger = logging.getLogger(__name__)
+class RecursiveLogger(logging.Logger):
+    """
+    A logger class with a recursive subtree feature.
+
+    >>> import sys
+    >>> logger = RecursiveLogger('test')
+    >>> logger.setLevel(logging.DEBUG)
+    >>> handler = logging.StreamHandler(sys.stdout)
+    >>> handler.setFormatter(logging.Formatter('%(message)s'))
+    >>> logger.addHandler(handler)
+
+    >>> logger.info('Root message')
+    Root message
+    >>> with logger.make_subtree():
+    ...     logger.info('First level message')
+    ...     logger.info('First level message')
+    ...     with logger.make_subtree():
+    ...         logger.info('Second level message')
+    ...         logger.info('Second level message')
+    ...         with logger.make_subtree():
+    ...             logger.info('Third level message')
+    ...     logger.info('First level message again')
+    ...     with logger.make_subtree():
+    ...         logger.info('Second level message')
+    ├── First level message
+    ├── First level message
+    │   ├── Second level message
+    │   ├── Second level message
+    │   │   ├── Third level message
+    ├── First level message again
+    │   ├── Second level message
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.indent_level = 0
+        self.log_stack = []
+
+    @contextlib.contextmanager
+    def make_subtree(self):
+        self.indent_level += 1
+        try:
+            yield
+        finally:
+            self.indent_level -= 1
+
+    def _log(self, level, msg, args, **kwargs):
+        extra = kwargs.get('extra', {})
+        if self.indent_level > 0:
+            extra['tree_prefix'] = '│   ' * (self.indent_level - 1) + '├── '
+        else:
+            extra['tree_prefix'] = ''
+        kwargs['extra'] = extra
+        super()._log(level, msg, args, **kwargs)
+
+
+handler = logging.StreamHandler()
+handler.setFormatter(logging.Formatter(
+    '%(asctime)s %(tree_prefix)s[%(levelname)s] %(message)s',
+    '%Y-%m-%d %H:%M:%S'
+))
+logger = RecursiveLogger(__name__)
 logger.addHandler(handler)
 logger.propagate = False
-logger.setLevel(logging.DEBUG)
-#logger.setLevel(logging.INFO)
+logger.setLevel(logging.INFO)
 
 # imports
 from collections import namedtuple, Counter
@@ -134,7 +175,8 @@ class LLM():
 
 
 def process_template(template_content, env_vars=None):
-    """Process a template string by evaluating shell expressions within it.
+    """
+    Process a template string by evaluating shell expressions within it.
 
     This function takes a template string, creates a temporary shell script that
     processes the template using shell expansions (like $(...) and $variables),
@@ -533,7 +575,7 @@ class BuildSystem:
             print_contexts=False,
             simple_logger=False,
             quiet=False,
-            collapse_display=True,
+            collapse_display=False,
             ):
 
         # update attributes;
@@ -557,56 +599,22 @@ class BuildSystem:
         self.llm = LLM()
 
         # setup logging
-        from rich.tree import Tree
-        from rich.console import Console
-        from rich.live import Live
-        from rich.align import Align
-        from rich.traceback import install
-        import traceback
-        #install()
-        self.logtree = Tree(f'build_pattern("{pattern_to_build}")')
-        self.live = None
-        if not quiet:
-            if simple_logger:
-                handler = logging.StreamHandler()
-                handler.setFormatter(logging.Formatter(
-                    '%(asctime)s [%(levelname)s] %(message)s',
-                    '%Y-%m-%d %H:%M:%S'
-                ))
-                logger = logging.getLogger(__name__)
-                logger.addHandler(handler)
-            else:
-                self.live = Live(
-                        self.logtree,
-                        vertical_overflow='visible',
-                        refresh_per_second=4,
-                        )
-                self.live.start()
+        if pattern_to_build:
+            self.build_pattern(pattern_to_build, {})
 
-        try:
-            if pattern_to_build:
-                self.build_pattern(pattern_to_build, {}, self.logtree)
-            self.live and self.live.stop()
-        except Exception as e:
-            self.live and self.live.stop()
-            raise e
-
-
-    def build_pattern(self, pattern_to_build, input_env, subtree):
+    def build_pattern(self, pattern_to_build, input_env):
+      with logger.make_subtree():
         logger.debug(f'pattern_to_build="{pattern_to_build}"')
 
         # load pattern config
         config_patterns = self.full_config.keys()
         transformed_pattern, pattern_env = match_pattern(config_patterns, pattern_to_build)
-        subtree.add(f'input_env={input_env}; pattern_env={pattern_env}')
         logger.debug(f"transformed_pattern={transformed_pattern}; pattern_env={pattern_env}")
         assert transformed_pattern, f'transformed_pattern={transformed_pattern}, pattern_to_build={pattern_to_build}, input_env={input_env}, config_patterns={config_patterns}'
         assert transformed_pattern in self.full_config
         config = self.full_config[transformed_pattern]
 
         # compute the variables and resolve dependencies
-        #deptree = subtree.add(f'resolving dependencies and variables')
-        deptree = subtree
         BuildContext = namedtuple('Context', [
             'variables',
             'include_paths',
@@ -618,7 +626,7 @@ class BuildSystem:
             config['dependencies'].split(),
             )]
         
-        DUMMY_VAR = 'DUMMY_VAR_CREATED_TO_FORCE_LOOP_TO_RUN_ONCE'
+        DUMMY_VAR = '__NONE__'
         config_variables = config.get('variables', {DUMMY_VAR: 'DUMMY_VAL'})
         assert type(config_variables) is dict, "did you write `variables: |` instead of `variables:`?"
         for var, expr in config_variables.items():
@@ -635,12 +643,12 @@ class BuildSystem:
                 include_paths1 = []
                 unresolved_dependencies1 = []
                 for dep_pattern in context.unresolved_dependencies:
-                    subdeptree = deptree.add(f'resolving dependency: "{dep_pattern}"')
+                    logger.info(f'resolving dependency {dep_pattern}')
                     try:
                         dep_paths = expand_path(dep_pattern, context.variables)
                         if not dep_paths:
                             logger.debug(f'no paths found for dep_pattern={dep_pattern}, building')
-                            self.build_pattern(dep_pattern, context.variables, subdeptree)
+                            self.build_pattern(dep_pattern, context.variables)
                         else:
                             logger.debug(f'matched: dep_pattern="{dep_pattern}"')
                         include_paths1.extend(dep_paths)
@@ -649,17 +657,15 @@ class BuildSystem:
                     # so we must keep it around and try to resolve it again after computing more variables
                     except TemplateProcessingError:
                         if dep_pattern in self.full_config:
-                            self.build_pattern(dep_pattern, context.variables, subdeptree)
+                            self.build_pattern(dep_pattern, context.variables)
                         else:
                             unresolved_dependencies1.append(dep_pattern)
-                    # update the tree to indicate success
-                    #print(f"subdeptree={subdeptree}")
-                    if self.live and self.collapse_display:
-                        deptree.children.remove(subdeptree)
-                        deptree.add(f'resolved dependency {dep_pattern}')
 
                 logger.debug(f"include_paths1={include_paths1}")
                 logger.debug(f"unresolved_dependencies1={unresolved_dependencies1}")
+
+                if var != DUMMY_VAR:
+                    logger.info(f'resolving variable {var}')
 
                 # do not evaluate the variable if it is DUMMY_VAR,
                 # since it was created only to force the unresolved_dependencies to run once
@@ -725,7 +731,6 @@ class BuildSystem:
                 vals_split_disp = vals_split
                 if len(vals_split) == 1:
                     vals_split_disp = vals_split[0]
-                deptree.add(f'resolved variable {var}; len(contexts)={len(contexts)}')
 
         # print contexts debug information
         if self.print_contexts:
@@ -737,23 +742,29 @@ class BuildSystem:
         # loop over each context and run the processing code for the context
         for i, context in enumerate(contexts):
 
-            # after generating dependencies
+            # output debug info about the context to process
             path_to_generate = process_template(pattern_to_build, context.variables)
             infostr = f'building {i+1}/{len(contexts)} "{path_to_generate}"'
-            buildtree = subtree.add(infostr)
             logger.info(infostr)
             logger.debug(f'context={context}')
 
             # create output directory if needed
-            logger.debug(f"path_to_generate={path_to_generate}")
             dirname = os.path.dirname(path_to_generate)
             if len(dirname) > 0:
                 os.makedirs(dirname, exist_ok=True)
 
-            # build with a custom command
-            if config.get('cmd'):
-                buildtree.add(config['cmd'])
+            # skip if the path already exists
+            # NOTE:
+            # there is a mild race condition since we do not actually open the file here;
+            # the race condition is necessary in order to support shell commands;
+            # we could probably push the native-python file generation code up to this point,
+            # but it would result in more complicated code for fixing a very minor/theoretical problem
+            if os.path.exists(path_to_generate) and not self.overwrite:
+                logger.warning(f'path exists, skiping: {path_to_generate}')
+                continue
 
+            # build with a custom shell command
+            if config.get('cmd'):
                 result = subprocess.run(
                     config['cmd'],
                     shell=True,
@@ -768,18 +779,10 @@ class BuildSystem:
 
             # build the target with the LLM
             else:
-                buildtree.add('llm.text()')
                 self.context_to_file(path_to_generate, config, context)
 
             # validate file
-            #self.validate_file(path_to_generate)
-
-            # update tree
-            if self.collapse_display and self.live:
-                buildtree.children = []
-
-        if self.collapse_display and self.live and subtree is not self.logtree:
-            subtree.children = []
+            self.validate_file(path_to_generate)
 
     def validate_file(self, path, fix_json=True):
         # ensure the input path exists

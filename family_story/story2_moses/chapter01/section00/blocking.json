@@ -1,0 +1,53 @@
+{
+  "characters": [
+    {
+      "name": "Evan",
+      "placement": "stage-left",
+      "description": {
+        "pose": "profile-right",
+        "action": "Straining to lift a heavy stone block, sweat visible on his face and dust on his clothes."
+      }
+    },
+    {
+      "name": "Aaron",
+      "placement": "center",
+      "description": {
+        "pose": "straight-on",
+        "action": "Bending down to grasp a stone block, his small frame struggling with the weight."
+      }
+    },
+    {
+      "name": "Isaac",
+      "placement": "center",
+      "description": {
+        "pose": "profile-left",
+        "action": "Carrying a heavy stone with both hands, his face showing the strain of the work."
+      }
+    },
+    {
+      "name": "Aurelia",
+      "placement": "stage-right",
+      "description": {
+        "pose": "profile-left",
+        "action": "Attempting to lift a stone block that appears too heavy for her small size."
+      }
+    },
+    {
+      "name": "Koopa1",
+      "placement": "stage-left",
+      "description": {
+        "pose": "straight-on",
+        "action": "Standing guard with a spear, watching the children work with an intimidating presence."
+      }
+    },
+    {
+      "name": "Koopa2",
+      "placement": "stage-right",
+      "description": {
+        "pose": "profile-left",
+        "action": "Patrolling with a spear, his eye patch visible as he supervises the construction work."
+      }
+    }
+  ],
+  "movements": []
+}

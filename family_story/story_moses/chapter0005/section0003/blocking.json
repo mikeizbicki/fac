@@ -1,0 +1,35 @@
+{
+  "characters": [
+    {
+      "name": "Evan",
+      "placement": "center",
+      "movements": []
+    },
+    {
+      "name": "Isaac",
+      "placement": "stage-left",
+      "movements": []
+    },
+    {
+      "name": "Aaron",
+      "placement": "stage-right",
+      "movements": []
+    },
+    {
+      "name": "Aurelia",
+      "placement": "center",
+      "movements": []
+    },
+    {
+      "name": "Shenzi",
+      "placement": "off-screen",
+      "movements": [
+        {
+          "character": "Shenzi",
+          "action": "enter-stage-left",
+          "final-placement": "center"
+        }
+      ]
+    }
+  ]
+}

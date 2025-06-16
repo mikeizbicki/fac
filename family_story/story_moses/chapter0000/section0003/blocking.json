@@ -1,0 +1,57 @@
+{
+  "characters": [
+    {
+      "name": "Bowser",
+      "placement": "center",
+      "description": {
+        "pose": "straight-on",
+        "action": "Bowser, the evil Koopa King, sits on his throne, angrily watching as his Koopa Troopers fail to capture the children. He slams his fist on the armrest, his face contorted in rage, as he orders his minions to find the escaped children."
+      },
+      "movements": []
+    },
+    {
+      "name": "Evan",
+      "placement": "off-screen",
+      "movements": [
+        {
+          "character": "Evan",
+          "action": "enter-stage-left",
+          "final-placement": "center"
+        }
+      ]
+    },
+    {
+      "name": "Isaac",
+      "placement": "off-screen",
+      "movements": [
+        {
+          "character": "Isaac",
+          "action": "enter-stage-left",
+          "final-placement": "stage-left"
+        }
+      ]
+    },
+    {
+      "name": "Aaron",
+      "placement": "off-screen",
+      "movements": [
+        {
+          "character": "Aaron",
+          "action": "enter-stage-right",
+          "final-placement": "stage-right"
+        }
+      ]
+    },
+    {
+      "name": "Aurelia",
+      "placement": "off-screen",
+      "movements": [
+        {
+          "character": "Aurelia",
+          "action": "enter-stage-left",
+          "final-placement": "center"
+        }
+      ]
+    }
+  ]
+}

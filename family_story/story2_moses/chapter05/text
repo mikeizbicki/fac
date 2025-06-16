@@ -1,0 +1,80 @@
+{
+  "name": "Freedom and Celebration",
+  "sections": [
+    {
+      "sublocation": "Stream Bank",
+      "image_description": "All the children are gathered on the safe riverbank, jumping and dancing with joy while looking back at the river that now flows normally again. The children have their arms raised in celebration, and some are transformed into their animal forms - Evan as an owl perched on a branch, Aaron as a small dinosaur, Isaac as a koala, and Aurelia as a panda.",
+      "text": "כָּל הַיְלָדִים שְׂמֵחִים מְאֹד! הֵם חָפְשִׁים מִבָּאוֹזֶר וּמִן הָעֲבוֹדָה הַקָּשָׁה!"
+    },
+    {
+      "sublocation": "Stream Bank",
+      "image_description": "The children are singing and clapping their hands together in a circle by the riverbank. Their faces show pure joy and relief as they celebrate their freedom from Bowser's oppressive rule.",
+      "text": "הֵם שָׁרִים וּמְרַקְּדִים עַל הַחֵרוּת! אֵין עוֹד אֲבָנִים כְּבֵדוֹת לָשֵׂאת!"
+    },
+    {
+      "sublocation": "Forest Clearing",
+      "image_description": "The children have moved to the peaceful forest clearing where they first found refuge. They are sitting in a circle sharing stories of their adventure, with animated gestures showing their excitement about what they've accomplished.",
+      "text": "הַיְלָדִים מְסַפְּרִים עַל הַמַּכּוֹת וְהַנֵּס הַגָּדוֹל! הֵם מִתְפַּלְּאִים עַל כֹּחַ הָאֱלֹהִים!"
+    },
+    {
+      "sublocation": "Forest Clearing",
+      "image_description": "Isaac suddenly looks overwhelmed and sits down heavily on the grass, covering his face with his hands. The other children notice his distress and gather around him with concerned expressions.",
+      "text": "יִצְחָק פִּתְאֹם עָצֵב! הַמַּסָּע הָיָה גָּדוֹל וְהוּא מַרְגִּישׁ עֵיף מְאֹד!"
+    },
+    {
+      "sublocation": "Forest Clearing",
+      "image_description": "Isaac is sitting on the ground crying softly, with tears streaming down his face. His shoulders shake as he sobs, overwhelmed by all the experiences and emotions from their journey.",
+      "text": "יִצְחָק בּוֹכֶה וּדְמָעוֹת יוֹרְדוֹת מֵעֵינָיו! הוּא מַרְגִּישׁ לְבַד וּמְפֻחָד!"
+    },
+    {
+      "sublocation": "Forest Clearing",
+      "image_description": "Shenzi, a friendly female dog, appears from behind the trees and approaches Isaac with a gentle, caring expression. Her tail is wagging slightly as she moves toward the crying child with obvious intent to comfort him.",
+      "text": "שֶׁנְצִי הַכַּלְבָּה בָּאָה אֶל יִצְחָק! הִיא רוֹאָה שֶׁהוּא בּוֹכֶה וְרוֹצָה לְעַזְרוֹ!"
+    },
+    {
+      "sublocation": "Forest Clearing",
+      "image_description": "Shenzi wraps her furry arms around Isaac in a warm, comforting hug. Isaac's face shows immediate relief as he feels the dog's gentle embrace, and his tears begin to slow.",
+      "text": "שֶׁנְצִי חוֹבֶקֶת אֶת יִצְחָק חִבּוּק גָּדוֹל וְחָם! הַחִבּוּק עוֹשֶׂה אוֹתוֹ שָׂמֵחַ!"
+    },
+    {
+      "sublocation": "Forest Clearing",
+      "image_description": "Isaac is now smiling and laughing as he hugs Shenzi back. The other children gather around them, also smiling and reaching out to pet the kind dog who helped their friend.",
+      "text": "יִצְחָק שׂוֹחֵק וְשָׂמֵחַ שׁוּב! הוּא אוֹהֵב את שֶׁנְצִי וְאֶת כָּל הַחֲבֵרִים!"
+    },
+    {
+      "sublocation": "Forest Clearing",
+      "image_description": "Aaron suddenly stops playing and puts his hand to his stomach with an urgent expression. He looks around quickly, clearly needing to find somewhere private immediately.",
+      "text": "אַהֲרֹן צָרִיךְ לַעֲשׂוֹת צוֹאָה! הוּא רָץ מַהֵר לַיַּעַר וְשָׁב!"
+    },
+    {
+      "sublocation": "Forest Clearing",
+      "image_description": "The children are sitting together discussing their amazing journey when colorful Minions suddenly appear from behind trees carrying a large wrapped gift box between them, giggling and speaking in their characteristic language.",
+      "text": "מִינְיוֹנִים בָּאִים עִם מַתָּנָה! הֵם מְבִיאִים דָּבָר שֶׁהַיְלָדִים צְרִיכִים!"
+    },
+    {
+      "sublocation": "Forest Clearing",
+      "image_description": "The children eagerly unwrap the gift to reveal musical instruments - drums, flutes, and bells. Their faces light up with excitement as they realize what the Minions have brought them for their celebration.",
+      "text": "הַמַּתָּנָה מְכִילָה כְּלֵי נְגִינָה! עַכְשָׁיו הַיְלָדִים יְכוֹלִים לְנַגֵּן וְלָשִׁיר!"
+    },
+    {
+      "sublocation": "Forest Clearing",
+      "image_description": "All the children are now playing the musical instruments together, creating a joyful symphony in the forest clearing. They are laughing and dancing as they make music to celebrate their freedom.",
+      "text": "הַיְלָדִים מְנַגְּנִים וְשָׁרִים שִׁיר חֵרוּת! הַמּוּסִיקָה יָפָה וְשְׂמֵחָה!"
+    },
+    {
+      "sublocation": "The Voice Tree",
+      "image_description": "The children have moved to stand beneath the great oak tree where they first heard God's voice. They look up at the branches with grateful expressions, remembering how their journey began at this very spot.",
+      "text": "הַיְלָדִים עוֹמְדִים תַּחַת עֵץ הַקּוֹל! הֵם זוֹכְרִים אֵיךְ הָאֱלֹהִים דִּבֵּר אֲלֵיהֶם!"
+    },
+    {
+      "sublocation": "The Voice Tree",
+      "image_description": "The children are kneeling in a circle around the base of the great tree with their heads bowed in prayer. Their hands are clasped together as they offer thanks for their successful mission and freedom.",
+      "text": "הֵם מִתְפַּלְּלִים וּמוֹדִים לָאֱלֹהִים! הוּא עָזַר לָהֶם לְהַצִּיל אֶת כָּל הַיְלָדִים!"
+    },
+    {
+      "sublocation": "Forest Clearing",
+      "image_description": "The children are now lying on the soft grass looking up at the sky through the tree branches. Their faces show peace and contentment as they realize they can finally rest without fear or worry.",
+      "text": "הַיְלָדִים שׁוֹכְבִים בַּדֶּשֶׁא וּמַבִּיטִים לַשָּׁמַיִם! הֵם יוֹדְעִים שֶׁהֵם חָפְשִׁים לְעוֹלָם!"
+    }
+  ]
+}

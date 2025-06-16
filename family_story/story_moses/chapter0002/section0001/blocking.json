@@ -1,0 +1,61 @@
+{
+  "characters": [
+    {
+      "name": "Koopa1",
+      "placement": "stage-left",
+      "description": {
+        "pose": "profile-left",
+        "action": "A Koopa Trooper continues his frustrated attempts to clean up the slime covering the floor and walls, baffled by its sudden appearance."
+      }
+    },
+    {
+      "name": "Koopa2",
+      "placement": "stage-right",
+      "description": {
+        "pose": "profile-right",
+        "action": "The Koopa Trooper with the eye patch also keeps working to clean the slime, equally confused by the mess."
+      }
+    },
+    {
+      "name": "Evan",
+      "placement": "off-screen",
+      "description": {
+        "pose": "straight-on",
+        "action": "Evan, one of the shapeshifting children, watches the Koopa Troopers' futile efforts from his hiding spot, a mischievous grin on his face."
+      }
+    },
+    {
+      "name": "Isaac",
+      "placement": "off-screen",
+      "description": {
+        "pose": "straight-on",
+        "action": "Isaac, another of the shapeshifting children, giggles quietly as he observes the chaos he and his siblings have caused in the courtyard."
+      }
+    },
+    {
+      "name": "Aurelia",
+      "placement": "off-screen",
+      "description": {
+        "pose": "straight-on",
+        "action": "The youngest of the shapeshifting children, Aurelia, hides in the bushes, her eyes filled with wonder at the colorful butterflies fluttering all around."
+      }
+    }
+  ],
+  "movements": [
+    {
+      "character": "Evan",
+      "action": "enter-stage-left",
+      "final-placement": "stage-left"
+    },
+    {
+      "character": "Isaac",
+      "action": "enter-stage-right",
+      "final-placement": "stage-right"
+    },
+    {
+      "character": "Aurelia",
+      "action": "enter-stage-center",
+      "final-placement": "stage-center"
+    }
+  ]
+}

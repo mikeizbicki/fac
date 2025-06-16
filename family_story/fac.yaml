@@ -1,0 +1,64 @@
+"$STORY/outline.json":
+  prompt_file: prompts/outline
+  dependencies: |
+    prompts/story_structures/freytag
+    about
+    $STORY/about
+    characters/*/about.json
+
+"$STORY/locations.json":
+  dependencies: |
+    prompts/story_structures/freytag
+    about
+    $STORY/about
+    $STORY/outline.json
+    characters/*/about.json
+
+"$STORY/chapter$CHAPTER/chapter.json":
+  dependencies: |
+    about
+    $STORY/about
+    $STORY/outline.json
+    $STORY/locations.json
+    characters/*/about.json
+  variables:
+    CHAPTER: |
+      jq -r 'range(0; .chapters | length)' $STORY/outline.json | tr '\n' '\0'
+    CHAPTER_TEXT: |
+      jq ".chapters[$CHAPTER]" $STORY/outline.json
+
+"$STORY/chapter$CHAPTER/section$SECTION/blocking.json":
+  prompt_file: prompts/blocking
+  dependencies: |
+    about
+    $STORY/about
+    $STORY/outline.json
+    $STORY/locations.json
+    characters/*/about.json
+    $STORY/chapter$CHAPTER/chapter.json
+  variables:
+    CHAPTER: |
+      jq -r 'range(0; .chapters | length)' $STORY/outline.json | tr '\n' '\0'
+    CHAPTER_PATH: |
+      echo $STORY/chapter$CHAPTER/chapter.json
+    SECTION: |
+      jq -r 'range(0; .sections | length)' $STORY/chapter$CHAPTER/chapter.json | tr '\n' '\0'
+      #NUM_SECTIONS: |
+      #jq '.sections | length' $STORY/chapter$CHAPTER/chapter.json
+      #SECTION: |
+      #seq 0 $(($NUM_SECTIONS - 1)) | tr '\n' '\0'
+    PREV_SECTION: |
+      echo $(($(bc <<< "scale=0; $SECTION") - 1))
+      #echo $(($SECTION - 1))
+    SECTION_TEXT: |
+      jq ".sections[$SECTION]" $STORY/chapter$CHAPTER/chapter.json
+
+"$STORY/text.md":
+  cmd: ./scripts/gen_markdown.py "$STORY/"
+  dependencies: |
+    $STORY/chapter$CHAPTER/section$SECTION/blocking.json
+
+"$STORY/text.html":
+  cmd: ./scripts/gen_html.sh "$STORY/text.md"
+  dependencies: |
+    $STORY/text.md

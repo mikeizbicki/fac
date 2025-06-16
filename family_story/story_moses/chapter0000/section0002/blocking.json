@@ -1,0 +1,86 @@
+{
+  "characters": [
+    {
+      "name": "Evan",
+      "placement": "center",
+      "description": {
+        "pose": "profile-right",
+        "action": "Evan, the oldest child, takes charge, swooping through the air as an owl to survey the courtyard and guide his siblings' movements."
+      },
+      "movements": [
+        {
+          "character": "Evan",
+          "action": "enter-stage-left",
+          "final-placement": "center"
+        }
+      ]
+    },
+    {
+      "name": "Isaac",
+      "placement": "stage-left",
+      "description": {
+        "pose": "profile-left",
+        "action": "Isaac the koala clings to the castle walls, his small claws gripping the stones as he scampers across the courtyard, evading the Koopa Troopers."
+      },
+      "movements": [
+        {
+          "character": "Isaac",
+          "action": "enter-stage-left",
+          "final-placement": "stage-left"
+        }
+      ]
+    },
+    {
+      "name": "Aaron",
+      "placement": "stage-right",
+      "description": {
+        "pose": "straight-on",
+        "action": "Aaron the dinosaur charges through the courtyard, his heavy footsteps shaking the ground as he knocks over unsuspecting Koopa Troopers."
+      },
+      "movements": [
+        {
+          "character": "Aaron",
+          "action": "enter-stage-right",
+          "final-placement": "stage-right"
+        }
+      ]
+    },
+    {
+      "name": "Aurelia",
+      "placement": "center",
+      "description": {
+        "pose": "profile-right",
+        "action": "Aurelia the panda cub bounds across the courtyard, her fluffy body rolling and tumbling as she evades the Koopa Troopers."
+      },
+      "movements": [
+        {
+          "character": "Aurelia",
+          "action": "enter-stage-left",
+          "final-placement": "center"
+        }
+      ]
+    },
+    {
+      "name": "Koopa1",
+      "placement": "stage-right",
+      "movements": [
+        {
+          "character": "Koopa1",
+          "action": "exit-stage-right",
+          "final-placement": "off-screen"
+        }
+      ]
+    },
+    {
+      "name": "Koopa2",
+      "placement": "stage-left",
+      "movements": [
+        {
+          "character": "Koopa2",
+          "action": "exit-stage-left",
+          "final-placement": "off-screen"
+        }
+      ]
+    }
+  ]
+}

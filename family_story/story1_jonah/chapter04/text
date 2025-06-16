@@ -1,0 +1,198 @@
+{
+  "chapter": "הסער הגדול",
+  "subscenes": [
+    {
+      "name": "Storm Clouds",
+      "description": "Dark gray clouds swirl overhead in threatening formations, blocking out the sun and casting deep shadows across the landscape. Lightning flashes within the storm clouds, illuminating their churning depths with brilliant white light. Thunder rumbles continuously like the voice of God speaking from the heavens. The air grows heavy and electric, charged with divine power that makes the very atmosphere tremble."
+    },
+    {
+      "name": "Lightning Flash", 
+      "description": "Brilliant lightning bolts streak across the dark sky, splitting the storm clouds with blazing white fire. The electric flashes reveal the swirling gray clouds in stark detail before plunging everything back into darkness. Thunder follows each lightning strike, echoing across the sea and shore like divine proclamations. The children can see the awesome power of God displayed in each brilliant flash that illuminates the storm."
+    },
+    {
+      "name": "Torrential Rain",
+      "description": "Heavy rain pelts down from the dark storm clouds, soaking everything with divine fury. The raindrops strike the rocky shore and sandy beach with relentless force, creating streams and puddles everywhere. Lightning continues to flash through the falling rain, while thunder shakes the ground beneath the children's feet. The storm demonstrates God's power to pursue those who flee from His calling."
+    }
+  ],
+  "sections": [
+    {
+      "title_english": "God Sends the Storm",
+      "title_target": "אלהים שולח את הסער",
+      "subscene": "Storm Clouds",
+      "image_description": "Dark storm clouds gather rapidly over the children at the seashore, with lightning beginning to flash within the swirling gray formations. The children look up in fear as they realize God has found them even by the great sea.",
+      "text": "אלהים שולח סער גדול לחפש את הילדים הבורחים. עננים כהים מתקבצים במהירות מעל הים.",
+      "stage_directions": [
+        {"character": "Evan", "action": "standing", "animation_prompt": "Evan stands looking up fearfully at the gathering storm clouds"},
+        {"character": "Isaac", "action": "standing", "animation_prompt": "Isaac points at the dark clouds approaching overhead"},
+        {"character": "Aaron", "action": "standing", "animation_prompt": "Aaron moves closer to his brothers as the storm approaches"},
+        {"character": "Aurelia", "action": "standing", "animation_prompt": "Aurelia looks worried and holds onto Isaac's hand"}
+      ]
+    },
+    {
+      "title_english": "Lightning and Thunder Begin",
+      "title_target": "הברק והרעם מתחילים", 
+      "subscene": "Lightning Flash",
+      "image_description": "Brilliant lightning flashes across the sky while the children huddle together on the rocky shore, their faces illuminated by the electric light as thunder booms around them.",
+      "text": "ברק מבהיק בשמים והרעם רועם חזק מאד. הילדים מפחדים מכח אלהים.",
+      "stage_directions": [
+        {"character": "Evan", "action": "standing", "animation_prompt": "Evan covers his ears as thunder booms loudly overhead"},
+        {"character": "Isaac", "action": "standing", "animation_prompt": "Isaac shields his eyes from the bright lightning flashes"},
+        {"character": "Aaron", "action": "standing", "animation_prompt": "Aaron crouches down low, frightened by the storm's power"},
+        {"character": "Aurelia", "action": "standing", "animation_prompt": "Aurelia clings to her brothers as lightning illuminates the scene"}
+      ]
+    },
+    {
+      "title_english": "The Rain Falls Hard",
+      "title_target": "הגשם יורד חזק",
+      "subscene": "Torrential Rain", 
+      "image_description": "Heavy rain pours down on the children as they try to find shelter among the rocks, their clothes becoming soaked as they realize they cannot escape God's storm.",
+      "text": "גשם כבד יורד מהעננים. הילדים נרטבים וחוצים מקום להתחבא מהסער.",
+      "stage_directions": [
+        {"character": "Evan", "action": "standing", "animation_prompt": "Evan holds his hands over his head trying to shield himself from the rain"},
+        {"character": "Isaac", "action": "standing", "animation_prompt": "Isaac runs toward the rocks looking for shelter"},
+        {"character": "Aaron", "action": "standing", "animation_prompt": "Aaron follows Isaac, water dripping from his hair"},
+        {"character": "Aurelia", "action": "standing", "animation_prompt": "Aurelia wipes rain from her face while staying close to her brothers"}
+      ]
+    },
+    {
+      "title_english": "The Minions Arrive",
+      "title_target": "המיניונים מגיעים",
+      "subscene": "Torrential Rain",
+      "image_description": "Three yellow Minions appear through the storm carrying an umbrella and raincoats, slipping and sliding comically in the mud as they try to help the soaked children.",
+      "text": "שלושה מיניונים מגיעים בסער. הם מביאים מטריה ומעילי גשם כמתנה לילדים. הם מחליקים בבוץ.",
+      "stage_directions": [
+        {"character": "Evan", "action": "standing", "animation_prompt": "Evan reaches out gratefully to receive a raincoat from the Minions"},
+        {"character": "Isaac", "action": "standing", "animation_prompt": "Isaac laughs as he watches a Minion slip in the mud"},
+        {"character": "Aaron", "action": "standing", "animation_prompt": "Aaron helps hold the umbrella the Minions brought"},
+        {"character": "Aurelia", "action": "standing", "animation_prompt": "Aurelia claps her hands happily at the Minions' funny arrival"}
+      ]
+    },
+    {
+      "title_english": "They Try to Escape",
+      "title_target": "הם מנסים לברח",
+      "subscene": "Sandy Beach",
+      "image_description": "The children run along the beach trying to escape the storm, but the rain and wind follow them everywhere they go, showing them they cannot flee from God's presence.",
+      "text": "הילדים רצים על החוף לנסות לברח מהסער. אבל הסער רודף אחריהם לכל מקום.",
+      "stage_directions": [
+        {"character": "Evan", "action": "standing", "animation_prompt": "Evan runs along the beach with the umbrella being blown by strong winds"},
+        {"character": "Isaac", "action": "standing", "animation_prompt": "Isaac struggles against the wind while running beside Evan"},
+        {"character": "Aaron", "action": "standing", "animation_prompt": "Aaron stumbles in the sand as he tries to keep up"},
+        {"character": "Aurelia", "action": "standing", "animation_prompt": "Aurelia holds onto Aaron's hand as they run together"}
+      ]
+    },
+    {
+      "title_english": "They Cannot Hide",
+      "title_target": "הם לא יכולים להתחבא",
+      "subscene": "Rocky Outcrop",
+      "image_description": "The children huddle behind large rocks trying to hide from the storm, but lightning flashes reveal their location and thunder echoes around them, proving God can find them anywhere.",
+      "text": "הילדים מתחבאים מאחורי סלעים גדולים. אבל הברק מגלה אותם והרעם מקיף אותם מכל צד.",
+      "stage_directions": [
+        {"character": "Evan", "action": "sitting", "animation_prompt": "Evan crouches low behind a large rock, looking worried"},
+        {"character": "Isaac", "action": "sitting", "animation_prompt": "Isaac peers around the rock nervously as lightning flashes"},
+        {"character": "Aaron", "action": "sitting", "animation_prompt": "Aaron sits close to his brothers, trembling from the storm"},
+        {"character": "Aurelia", "action": "sitting", "animation_prompt": "Aurelia huddles in the middle of the group, protected by her brothers"}
+      ]
+    },
+    {
+      "title_english": "Isaac Reads a Book",
+      "title_target": "יצחק קורא ספר",
+      "subscene": "Rocky Outcrop",
+      "image_description": "Isaac pulls out a waterproof book about prophets and reads by lightning flashes, discovering wisdom about obeying God's calling even when it's difficult.",
+      "text": "יצחק מוציא ספר על נביאים וקורא לאור הברק. הוא מוצא חכמה על שמיעה בקול אלהים.",
+      "stage_directions": [
+        {"character": "Isaac", "action": "sitting", "animation_prompt": "Isaac holds a book and reads carefully by the light of lightning flashes"},
+        {"character": "Evan", "action": "sitting", "animation_prompt": "Evan leans over to listen to what Isaac is reading"},
+        {"character": "Aaron", "action": "sitting", "animation_prompt": "Aaron watches Isaac read with curiosity"},
+        {"character": "Aurelia", "action": "sitting", "animation_prompt": "Aurelia looks at the pictures in Isaac's book"}
+      ]
+    },
+    {
+      "title_english": "They Learn About Prophets",
+      "title_target": "הם לומדים על נביאים",
+      "subscene": "Rocky Outcrop",
+      "image_description": "The children gather around Isaac's book as he reads aloud about prophets who tried to flee from God but learned they must obey His commands, even difficult ones.",
+      "text": "יצחק קורא בקול רם: 'נביאים ניסו לברח מאלהים, אבל למדו שחייבים לשמע בפקודותיו.'",
+      "stage_directions": [
+        {"character": "Isaac", "action": "speaking", "animation_prompt": "Isaac reads aloud from the book with conviction"},
+        {"character": "Evan", "action": "sitting", "animation_prompt": "Evan listens thoughtfully to Isaac's reading"},
+        {"character": "Aaron", "action": "sitting", "animation_prompt": "Aaron nods his head as he understands the lesson"},
+        {"character": "Aurelia", "action": "sitting", "animation_prompt": "Aurelia looks up at her brothers with wide, understanding eyes"}
+      ]
+    },
+    {
+      "title_english": "They Realize the Truth",
+      "title_target": "הם מבינים את האמת",
+      "subscene": "Lightning Flash",
+      "image_description": "As lightning illuminates the children's faces, they look at each other with dawning understanding that they cannot escape God's will and must accept His difficult mission.",
+      "text": "הילדים מבינים שאי אפשר לברח מאלהים. הסער מלמד אותם שהם חייבים לקבל את שליחותו.",
+      "stage_directions": [
+        {"character": "Evan", "action": "standing", "animation_prompt": "Evan stands up slowly with a look of realization on his face"},
+        {"character": "Isaac", "action": "standing", "animation_prompt": "Isaac closes the book and stands with determination"},
+        {"character": "Aaron", "action": "standing", "animation_prompt": "Aaron gets up reluctantly but with growing acceptance"},
+        {"character": "Aurelia", "action": "standing", "animation_prompt": "Aurelia stands and takes her brothers' hands, ready to face their mission"}
+      ]
+    },
+    {
+      "title_english": "They Accept God's Mission",
+      "title_target": "הם מקבלים את שליחות אלהים",
+      "subscene": "Storm Clouds",
+      "image_description": "The children stand together facing the storm with newfound resolve, no longer trying to hide or flee, as they accept that they must obey God's command to forgive their enemy.",
+      "text": "הילדים עומדים יחד ואומרים: 'אלהים, נקבל את שליחותך. נלך אל דרת׳ וידר ונסלח לו.'",
+      "stage_directions": [
+        {"character": "Evan", "action": "speaking", "animation_prompt": "Evan speaks to the sky with acceptance and determination"},
+        {"character": "Isaac", "action": "standing", "animation_prompt": "Isaac stands firm beside Evan, supporting the decision"},
+        {"character": "Aaron", "action": "standing", "animation_prompt": "Aaron looks up at the storm clouds with newfound courage"},
+        {"character": "Aurelia", "action": "standing", "animation_prompt": "Aurelia holds her brothers' hands as they make their commitment together"}
+      ]
+    }
+  ],
+  "vocabulary": [
+    {
+      "part_of_speech": "noun",
+      "table": [
+        {"word": "סַעַר", "gloss": "storm, tempest"},
+        {"word": "עָנָן", "gloss": "cloud"},
+        {"word": "בָּרָק", "gloss": "lightning"},
+        {"word": "רַעַם", "gloss": "thunder"},
+        {"word": "גֶּשֶׁם", "gloss": "rain"},
+        {"word": "מַטְרִיָה", "gloss": "umbrella"},
+        {"word": "מְעִיל", "gloss": "coat, cloak"},
+        {"word": "בּוֹץ", "gloss": "mud"},
+        {"word": "נָבִיא", "gloss": "prophet"},
+        {"word": "חָכְמָה", "gloss": "wisdom"},
+        {"word": "שְׁלִיחוּת", "gloss": "mission, calling"}
+      ]
+    },
+    {
+      "part_of_speech": "verb", 
+      "table": [
+        {"word": "שָׁלַח", "gloss": "to send"},
+        {"word": "חִפֵּשׂ", "gloss": "to search, seek"},
+        {"word": "הִתְקַבֵּץ", "gloss": "to gather, assemble"},
+        {"word": "בָּהַק", "gloss": "to flash, shine"},
+        {"word": "רָעַם", "gloss": "to thunder"},
+        {"word": "יָרַד", "gloss": "to come down, descend"},
+        {"word": "נִרְטַב", "gloss": "to get wet"},
+        {"word": "הֶחְלִיק", "gloss": "to slip, slide"},
+        {"word": "רָדַף", "gloss": "to pursue, chase"},
+        {"word": "הִקִּיף", "gloss": "to surround"},
+        {"word": "קִבֵּל", "gloss": "to accept, receive"}
+      ]
+    },
+    {
+      "part_of_speech": "adjective",
+      "table": [
+        {"word": "כָּהֶה", "gloss": "dark"},
+        {"word": "כָּבֵד", "gloss": "heavy"},
+        {"word": "רָטוֹב", "gloss": "wet"}
+      ]
+    }
+  ],
+  "grammar": [
+    "Weather verbs conjugated in present and past tense with natural phenomena as subjects",
+    "Complex verb forms including causative conjugations for divine actions",
+    "Conditional and temporal sentences using conjunctions like כַּאֲשֶׁר and אִם",
+    "Participles used as adjectives to describe ongoing states and actions",
+    "Prepositional phrases with מִן and אֶל indicating movement and direction in the storm"
+  ]
+}

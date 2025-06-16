@@ -1,0 +1,58 @@
+{
+  "characters": [
+    {
+      "name": "Evan",
+      "placement": "off-screen"
+    },
+    {
+      "name": "Aaron",
+      "placement": "off-screen"
+    },
+    {
+      "name": "Isaac",
+      "placement": "off-screen"
+    },
+    {
+      "name": "Aurelia",
+      "placement": "off-screen"
+    },
+    {
+      "name": "Koopa1",
+      "placement": "center",
+      "description": {
+        "pose": "profile-right",
+        "action": "Frantically waves his spear in the air while shouting orders, his face showing panic and confusion as he points toward where the children escaped."
+      }
+    },
+    {
+      "name": "Koopa2",
+      "placement": "stage-right",
+      "description": {
+        "pose": "profile-left",
+        "action": "Also waves his spear frantically and shouts to his partner, his eye patch visible as he turns his head in bewilderment, trying to understand how the prisoners vanished."
+      }
+    }
+  ],
+  "movements": [
+    {
+      "character": "Evan",
+      "action": "exit-stage-right",
+      "final-placement": "off-screen"
+    },
+    {
+      "character": "Aaron",
+      "action": "exit-stage-right",
+      "final-placement": "off-screen"
+    },
+    {
+      "character": "Isaac",
+      "action": "exit-stage-right",
+      "final-placement": "off-screen"
+    },
+    {
+      "character": "Aurelia",
+      "action": "exit-stage-right",
+      "final-placement": "off-screen"
+    }
+  ]
+}

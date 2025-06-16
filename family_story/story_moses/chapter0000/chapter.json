@@ -1,0 +1,30 @@
+{
+  "name": "The Oppressed Children",
+  "sections": [
+    {
+      "sublocation": "Dungeon",
+      "image_description": "The children, Evan, Isaac, Aaron, and Aurelia, are chained to the floor of the dark, damp dungeon. They look up with frightened expressions as the Koopa Troopers, Koopa1 and Koopa2, stand over them, glaring menacingly.",
+      "text": "הַיְלָדִים עֲבָדִים לְקוּפָּה וּלְקוּפָּה 2."
+    },
+    {
+      "sublocation": "Dungeon",
+      "image_description": "Evan, the oldest child, whispers to his siblings, and they nod in agreement. Suddenly, the children begin to transform into their animal forms - Evan as an owl, Isaac as a koala, Aaron as a dinosaur, and Aurelia as a panda.",
+      "text": "הַיְלָדִים מִתְחַיְּבִים לִבְרֹחַ מִן הַכְּלֵא."
+    },
+    {
+      "sublocation": "Courtyard",
+      "image_description": "The children, now in their animal forms, scurry and fly across the courtyard, evading the Koopa Troopers who try to catch them. Evan the owl takes to the skies, while Isaac the koala clings to the walls, and Aaron the dinosaur and Aurelia the panda charge through the cobblestones.",
+      "text": "הַיְלָדִים בַּעֲלֵי צוּרוֹת חַיּוֹת בּוֹרְחִים מֵהַקוּפָּה."
+    },
+    {
+      "sublocation": "Throne Room",
+      "image_description": "Bowser, the evil Koopa King, sits on his throne, angrily watching as his Koopa Troopers fail to capture the children. He slams his fist on the armrest, his face contorted in rage, as he orders his minions to find the escaped children.",
+      "text": "קוּפָּה זָעֵם כַּאֲשֶׁר הַיְלָדִים בּוֹרְחִים."
+    },
+    {
+      "sublocation": "Courtyard",
+      "image_description": "The children, still in their animal forms, hide behind the dried-up fountain, panting with exhaustion. They know they can't keep running forever, and they look at each other with worried expressions, unsure of what to do next.",
+      "text": "הַיְלָדִים מִתְחַבְּאִים מֵהַקוּפָּה, אֲבָל הֵם יָעֵף וְאֵינָם יוֹדְעִים מַה לַעֲשׂוֹת."
+    }
+  ]
+}

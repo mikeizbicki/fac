@@ -1,0 +1,76 @@
+{
+  "characters": [
+    {
+      "name": "Evan",
+      "placement": "center",
+      "description": {
+        "pose": "profile-right",
+        "action": "Evan, still in his owl form, hoots loudly as he leads the group of children across the courtyard. His sharp eyes scan the area for any signs of the Koopa Troopers."
+      }
+    },
+    {
+      "name": "Isaac",
+      "placement": "stage-left",
+      "description": {
+        "pose": "profile-left",
+        "action": "Isaac, the koala, scurries alongside the other children, his small paws gripping the ground as he darts across the courtyard. He lets out a series of gentle chirps, urging the others to keep moving."
+      }
+    },
+    {
+      "name": "Aaron",
+      "placement": "stage-right",
+      "description": {
+        "pose": "profile-right",
+        "action": "Aaron, the small dinosaur, lets out a loud roar as he runs, his sharp claws and teeth ready to defend the group if needed. His eyes are filled with determination as he keeps pace with the other children."
+      }
+    },
+    {
+      "name": "Aurelia",
+      "placement": "center",
+      "description": {
+        "pose": "straight-on",
+        "action": "Aurelia, the panda, leads the group, her large eyes scanning the courtyard for the best path to the exit. She lets out a series of gentle grunts, encouraging the other children to follow her."
+      }
+    },
+    {
+      "name": "Koopa1",
+      "placement": "stage-right",
+      "movements": [
+        {
+          "character": "Koopa1",
+          "action": "enter-stage-right",
+          "final-placement": "stage-right"
+        },
+        {
+          "character": "Koopa1",
+          "action": "exit-stage-right",
+          "final-placement": "off-screen"
+        }
+      ],
+      "description": {
+        "pose": "profile-right",
+        "action": "Koopa1, the angry turtle Koopa Trooper, charges after the children, his spear raised high. His face is twisted in a scowl as he tries to catch up to the group."
+      }
+    },
+    {
+      "name": "Koopa2",
+      "placement": "stage-right",
+      "movements": [
+        {
+          "character": "Koopa2",
+          "action": "enter-stage-right",
+          "final-placement": "stage-right"
+        },
+        {
+          "character": "Koopa2",
+          "action": "exit-stage-right",
+          "final-placement": "off-screen"
+        }
+      ],
+      "description": {
+        "pose": "profile-right",
+        "action": "Koopa2, the eye-patched Koopa Trooper, follows close behind Koopa1, his spear poised to strike. His expression is one of determination as he tries to catch the fleeing children."
+      }
+    }
+  ]
+}

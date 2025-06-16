@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>text</title>
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    span.underline{text-decoration: underline;}
+    div.column{display: inline-block; vertical-align: top; width: 50%;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    ul.task-list{list-style: none;}
+  </style>
+  <style>.word-container {
+    display: inline-block;
+    position: relative;
+  }
+
+  .word-hover-span:hover,
+  /*.word-speech-bubble:hover,*/
+  .word-container:hover .word-hover-span {
+    background: yellow;
+  }
+
+  .word-speech-bubble {
+    position: absolute;
+    top: 100%; /* Position right below the word */
+    left: 0;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 5px 10px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    display: none;
+    z-index: 9999;
+    pointer-events: auto;
+    max-width: 20em;
+    word-wrap: break-word;
+    overflow: hidden;
+  }
+
+  /* Show bubble on hover of either word or bubble itself */
+  .word-container:hover .word-speech-bubble {
+    display: block;
+  }</style>
+  <script>(function() {
+    function initSpeechBubble() {
+      try {
+        // Create and append speech bubble element
+        const speechBubble = document.createElement('div');
+        speechBubble.id = 'word-speech-bubble';
+        document.body.appendChild(speechBubble);
+
+        // Track the currently active word span
+        let activeWordSpan = null;
+
+        // Process text nodes - wrap words in spans
+        function processTextNodes() {
+          // Get all text-containing elements
+          const textElements = document.querySelectorAll('p, h1, h2, h3, h4, h5, h6, span, div, a, li');
+
+          textElements.forEach(function(element) {
+            // Skip elements that already have been processed
+            if (element.getAttribute('data-word-hover-processed') === 'true') return;
+            if (element.closest('script, style')) return; // Skip script and style elements
+
+            element.setAttribute('data-word-hover-processed', 'true');
+
+            // Don't process if this is already a word span we created
+            if (element.classList.contains('word-hover-span')) return;
+
+            const text = element.textContent.trim();
+            if (!text) return;
+
+            // Don't process elements with no direct text nodes
+            let hasDirectTextNode = false;
+            for (let i = 0; i < element.childNodes.length; i++) {
+              if (element.childNodes[i].nodeType === Node.TEXT_NODE &&
+                  element.childNodes[i].textContent.trim()) {
+                hasDirectTextNode = true;
+                break;
+              }
+            }
+            if (!hasDirectTextNode) return;
+
+            // Replace text nodes with wrapped words
+            const childNodes = Array.from(element.childNodes);
+
+            childNodes.forEach(function(node) {
+              if (node.nodeType === Node.TEXT_NODE) {
+                const words = node.textContent.split(/(\s+)/); // Split by whitespace but keep separators
+                const fragment = document.createDocumentFragment();
+
+                words.forEach(function(word) {
+                  if (word.trim()) {
+                    // Create container for word and its bubble
+                    const container = document.createElement('span');
+                    container.classList.add('word-container');
+                    container.style.display = 'inline-block';
+                    container.style.position = 'relative';
+                    
+                    // Create span for the word
+                    const span = document.createElement('span');
+                    span.textContent = word;
+                    span.classList.add('word-hover-span');
+                    
+                    // Create bubble for this word
+                    const bubble = document.createElement('div');
+                    bubble.classList.add('word-speech-bubble');
+                    bubble.innerHTML = `<a href="https://www.morfix.co.il/en/${word.trim()}">lookup on morfix.co.il</a>`;
+                    
+                    // Append everything
+                    container.appendChild(span);
+                    container.appendChild(bubble);
+                    fragment.appendChild(container);
+                  } else {
+                    // Preserve whitespace
+                    fragment.appendChild(document.createTextNode(word));
+                  }
+                });
+
+                node.parentNode.replaceChild(fragment, node);
+              }
+            });
+          });
+        }
+
+        // Handle mouse leaving the word or bubble
+        document.addEventListener('mouseover', function(e) {
+          if (e.target.classList.contains('word-hover-span')) {
+            // Already handled by the mouseenter event
+          } else if (e.target !== speechBubble && !speechBubble.contains(e.target)) {
+            // Mouse is not over a word span or the bubble
+            speechBubble.style.display = 'none';
+            activeWordSpan = null;
+          }
+        });
+
+        // Add event listener to the bubble itself
+        speechBubble.addEventListener('mouseleave', function() {
+          if (!activeWordSpan) {
+            speechBubble.style.display = 'none';
+          }
+        });
+
+        // Initial setup
+        processTextNodes();
+
+        // Setup mutation observer to handle dynamically added content
+        const observer = new MutationObserver(function(mutations) {
+          processTextNodes();
+        });
+
+        observer.observe(document.body, {
+          childList: true,
+          subtree: true
+        });
+
+        console.log('Word speech bubble initialized successfully');
+      } catch (error) {
+        console.error('Error initializing word speech bubble:', error);
+      }
+    }
+
+    // Wait for DOM to be fully loaded before initializing
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initSpeechBubble);
+    } else {
+      // DOM is already ready
+      initSpeechBubble();
+    }
+  })();
+
+
+  function adjustBubblePosition() {
+    document.querySelectorAll('.word-speech-bubble').forEach(bubble => {
+      const rect = bubble.getBoundingClientRect();
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+
+      // Adjust horizontal position if needed
+      if (rect.right > viewportWidth) {
+        const overflow = rect.right - viewportWidth;
+        bubble.style.left = `-${overflow}px`;
+      }
+
+      // Adjust vertical position if needed
+      if (rect.bottom > viewportHeight) {
+        bubble.style.top = 'auto';
+        bubble.style.bottom = '100%';
+      }
+    });
+  }
+
+  // Add event listener to check positions on hover
+  document.addEventListener('mouseover', function(e) {
+    if (e.target.classList.contains('word-hover-span') ||
+        e.target.classList.contains('word-speech-bubble')) {
+      // Use requestAnimationFrame for performance
+      requestAnimationFrame(adjustBubblePosition);
+    }
+  });</script>
+  <style>body {
+    font-size: 40pt;
+    direction: rtl;
+    unicode-bidi: bidi-override;
+  }
+
+  h3 + p {
+    display: inline-block;
+    vertical-align: top;
+    width: 50%;
+    margin: 0;
+    box-sizing: border-box;
+  }
+
+  h3 + p + p {
+    display: inline-block;
+    vertical-align: top;
+    width: 45%;
+    margin: 0;
+    padding-left: 20px;
+    box-sizing: border-box;
+    text-align: right;
+  }
+
+  h3 + p img {
+    max-width: 100%;
+    height: auto;
+  }</style>
+  <script>document.addEventListener('keydown', function(event) {
+    // Check if arrow keys or page up/down were pressed
+    if (event.keyCode === 40 || event.key === 'ArrowDown' ||
+        event.keyCode === 38 || event.key === 'ArrowUp' ||
+        event.keyCode === 33 || event.key === 'PageUp' ||
+        event.keyCode === 34 || event.key === 'PageDown') {
+
+      // Prevent default scrolling behavior
+      event.preventDefault();
+
+      // Find the current position
+      const scrollPosition = window.scrollY;
+      let targetHeading = null;
+
+      // Handle arrow keys (all h tags)
+      if (event.keyCode === 40 || event.key === 'ArrowDown' ||
+          event.keyCode === 38 || event.key === 'ArrowUp') {
+        // Get all heading elements
+        const headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
+
+        if (event.keyCode === 40 || event.key === 'ArrowDown') {
+          // DOWN ARROW: Find the next heading to scroll to
+          for (let i = 0; i < headings.length; i++) {
+            const headingPosition = headings[i].getBoundingClientRect().top + window.scrollY;
+
+            // If this heading is below current position, scroll to it
+            if (headingPosition > scrollPosition + 10) {
+              targetHeading = headings[i];
+              break;
+            }
+          }
+        }
+        else if (event.keyCode === 38 || event.key === 'ArrowUp') {
+          // UP ARROW: Find the previous heading to scroll to
+          let previousHeading = null;
+
+          for (let i = 0; i < headings.length; i++) {
+            const headingPosition = headings[i].getBoundingClientRect().top + window.scrollY;
+
+            // If this heading is at or above current position (with small buffer)
+            if (headingPosition < scrollPosition - 10) {
+              previousHeading = headings[i];
+            } else {
+              break; // We've gone past the current position
+            }
+          }
+
+          // If we found a previous heading, use it
+          if (previousHeading) {
+            targetHeading = previousHeading;
+          }
+        }
+      }
+      // Handle Page Up/Down (only h2 tags)
+      else if (event.keyCode === 33 || event.key === 'PageUp' ||
+               event.keyCode === 34 || event.key === 'PageDown') {
+        // Get only h2 elements
+        const h2Headings = document.querySelectorAll('h2');
+
+        if (event.keyCode === 34 || event.key === 'PageDown') {
+          // PAGE DOWN: Find the next h2 to scroll to
+          for (let i = 0; i < h2Headings.length; i++) {
+            const headingPosition = h2Headings[i].getBoundingClientRect().top + window.scrollY;
+
+            // If this h2 is below current position, scroll to it
+            if (headingPosition > scrollPosition + 10) {
+              targetHeading = h2Headings[i];
+              break;
+            }
+          }
+        }
+        else if (event.keyCode === 33 || event.key === 'PageUp') {
+          // PAGE UP: Find the previous h2 to scroll to
+          let previousHeading = null;
+
+          for (let i = 0; i < h2Headings.length; i++) {
+            const headingPosition = h2Headings[i].getBoundingClientRect().top + window.scrollY;
+
+            // If this h2 is at or above current position (with small buffer)
+            if (headingPosition < scrollPosition - 10) {
+              previousHeading = h2Headings[i];
+            } else {
+              break; // We've gone past the current position
+            }
+          }
+
+          // If we found a previous h2, use it
+          if (previousHeading) {
+            targetHeading = previousHeading;
+          }
+        }
+      }
+
+      // Scroll to the target heading if one was found
+      if (targetHeading) {
+        //targetHeading.scrollIntoView({behavior: 'smooth'});
+        targetHeading.scrollIntoView({behavior: 'instant'});
+      }
+    }
+  });</script>
+</head>
+<body>
+<h2 id="chapter-0-התחלה-השקטה">Chapter 0: הַתְּחִלָּה הַשְּׁקֵטָה</h2>
+<h3 id="section-0-הילדים-יושבים">Section 0: הַיְלָדִים יוֹשְׁבִים</h3>
+<p><img src="subscene/Garden%20Overview.png" alt="Four children stand together in the beautiful garden, looking happy and peaceful. They are pointing at different parts of the garden around them, showing each other the fruit trees and flower beds." /></p>
+<p>אַרְבָּעָה יְלָדִים יוֹשְׁבִים בַּגָּן. הַגָּן טוֹב מְאֹד. הֵם שְׂמֵחִים בַּגָּן.</p>
+<h3 id="section-1-הם-נהפכים">Section 1: הֵם נֶהֱפָכִים</h3>
+<p><img src="subscene/Play%20Area.png" alt="The children are in the middle of transforming into their favorite animals in the play area. Evan is becoming an owl, Isaac a koala, Aaron a dinosaur, and Aurelia a panda, with magical sparkles around them." /></p>
+<p>אֶבֶן נֶהֱפָךְ לְיַנְשׁוּף. יִצְחָק נֶהֱפָךְ לְקוֹאָלָה. אַהֲרֹן נֶהֱפָךְ לְדִינוֹזַאוּר. אוֹרֵלְיָה נֶהֱפֶכֶת לְפַנְדָּה.</p>
+<h3 id="section-2-הם-משחקים-יחדו">Section 2: הֵם מְשַׂחֲקִים יַחְדָּו</h3>
+<p><img src="subscene/Play%20Area.png" alt="The animal-transformed children are playing together joyfully in their animal forms. The owl flies overhead, the koala climbs, the dinosaur stomps around, and the panda rolls on the grass." /></p>
+<p>הַיַּנְשׁוּף עָף בַּגָּן. הַקוֹאָלָה מְטַפֵּס עַל עֵץ. הַדִּינוֹזַאוּר רָץ. הַפַּנְדָּה מִתְגַּלְגֶּלֶת עַל הַדֶּשֶׁא.</p>
+<h3 id="section-3-הם-שמחים">Section 3: הֵם שְׂמֵחִים</h3>
+<p><img src="subscene/Fruit%20Trees.png" alt="The children have returned to human form and are sitting under the fruit trees, eating apples and laughing together. They look completely content and peaceful." /></p>
+<p>הַיְלָדִים שְׂמֵחִים מְאֹד. הֵם אוֹכְלִים פְּרִי מֵהָעֵץ. הַפְּרִי טוֹב. הֵם אוֹהֲבִים אֶת הַגָּן.</p>
+<h3 id="section-4-האויב-מופיע">Section 4: הָאוֹיֵב מוֹפִיעַ</h3>
+<p><img src="subscene/Garden%20Overview.png" alt="A small figure in a black cape and helmet appears at the edge of the garden with white-armored soldiers behind him. The children look up in surprise from their peaceful activities." /></p>
+<p>דַּרְת׳ וֵידֶר הַקָּטָן בָּא אֶל הַגָּן. חַיָּלִים לְבָנִים בָּאִים עִמּוֹ. הֵם רָעִים.</p>
+<h3 id="section-5-הוא-גונב-אכל">Section 5: הוּא גּוֹנֵב אֹכֶל</h3>
+<p><img src="subscene/Fruit%20Trees.png" alt="Baby Darth Vader and his storm troopers are grabbing fruit from the trees and taking the children’s food. The children watch in anger as their peaceful meal is disrupted." /></p>
+<p>דַּרְת׳ וֵידֶר הַקָּטָן גּוֹנֵב אֶת הַפְּרִי. הַחַיָּלִים גּוֹנְבִים אֶת הָאֹכֶל. הַיְלָדִים כּוֹעֲסִים.</p>
+<h3 id="section-6-הילדים-נהפכים">Section 6: הַיְלָדִים נֶהֱפָכִים</h3>
+<p><img src="subscene/Play%20Area.png" alt="The four children quickly transform back into their animal forms to defend their garden. Magical energy swirls around them as they prepare to chase away the invaders." /></p>
+<p>הַיְלָדִים נֶהֱפָכִים לְחַיּוֹת. הֵם רוֹצִים לְהִלָּחֵם. הֵם חֲזָקִים בְּצוּרַת חַיּוֹת.</p>
+<h3 id="section-7-הם-רודפים-אחרי-האויב">Section 7: הֵם רוֹדְפִים אַחֲרֵי הָאוֹיֵב</h3>
+<p><img src="subscene/Garden%20Overview.png" alt="The animal-children are chasing Baby Darth Vader and his storm troopers around the garden. The owl swoops from above, the dinosaur stomps after them, the koala throws things, and the panda rolls at their feet." /></p>
+<p>הַיַּנְשׁוּף עָף אַחֲרֵי הָאוֹיֵב. הַדִּינוֹזַאוּר רָץ מְהֵר. הַקוֹאָלָה וְהַפַּנְדָּה רוֹדְפִים אַחֲרֵיהֶם.</p>
+<h3 id="section-8-האויב-בורח">Section 8: הָאוֹיֵב בּוֹרֵחַ</h3>
+<p><img src="subscene/Garden%20Overview.png" alt="Baby Darth Vader and his storm troopers are running away from the garden in defeat, while the animal-children stand victoriously watching them go." /></p>
+<p>דַּרְת׳ וֵידֶר הַקָּטָן בּוֹרֵחַ מֵהַגָּן. הַחַיָּלִים בּוֹרְחִים עִמּוֹ. הֵם מְפַחֲדִים מֵהַחַיּוֹת.</p>
+<h3 id="section-9-חגיגת-נצחון">Section 9: חֲגִיגַת נִצָּחוֹן</h3>
+<p><img src="subscene/Play%20Area.png" alt="The children have returned to human form and are celebrating their easy victory. They are laughing, hugging each other, and feeling very proud of their strength." /></p>
+<p>הַיְלָדִים חוֹזְרִים לְצוּרָה אֱנוֹשִׁית. הֵם שְׂמֵחִים מְאֹד. הֵם חֲזָקִים וְגִבּוֹרִים. הַנִּצָּחוֹן קַל מְאֹד.</p>
+<h2 id="chapter-1-המחלקת-הגדלה">Chapter 1: המחלקת הגדלה</h2>
+<h3 id="section-0-חזרה-לשלום">Section 0: חזרה לשלום</h3>
+<p><img src="subscene/Garden%20Overview.png" alt="The four children sit peacefully in their garden home, enjoying the fruits and flowers around them. They appear calm and happy after their recent victory." /></p>
+<p>הילדים חוזרים לגן שלהם. הם שמחים כי ניצחו את האויב. השלום חוזר לגן.</p>
+<h3 id="section-1-האויב-חוזר">Section 1: האויב חוזר</h3>
+<p><img src="subscene/Garden%20Overview.png" alt="Baby Darth Vader appears at the garden entrance with twice as many white-armored storm troopers behind him, creating an intimidating force." /></p>
+<p>דרת׳ וידר הקטן חוזר לגן. הפעם הוא מביא חילים רבים יותר. הם רוצים לנקם.</p>
+<h3 id="section-2-ההרס-מתחיל">Section 2: ההרס מתחיל</h3>
+<p><img src="subscene/Play%20Area.png" alt="The storm troopers systematically destroy the children’s favorite play area, breaking flower beds and overturning stones while Baby Darth Vader directs them." /></p>
+<p>החילים הורסים את מקום המשחק של הילדים. הם שוברים את הפרחים ומשליכים אבנים.</p>
+<h3 id="section-3-הילדים-כועסים">Section 3: הילדים כועסים</h3>
+<p><img src="subscene/Play%20Area.png" alt="The four children stand together, their faces showing anger and distress as they witness the destruction of their beloved play area." /></p>
+<p>הילדים רואים את ההרס וכועסים מאד. המקום היפה שלהם נהרס. הם רוצים להלחם.</p>
+<h3 id="section-4-הם-נהפכים-להלחם">Section 4: הם נהפכים להלחם</h3>
+<p><img src="subscene/Play%20Area.png" alt="The children transform into their animal forms with more aggressive energy than before, ready for a more serious battle." /></p>
+<p>הילדים נהפכים לחיות שוב. הפעם הם יותר כועסים. הם מוכנים למלחמה גדולה.</p>
+<h3 id="section-5-הקרב-גדל">Section 5: הקרב גדל</h3>
+<p><img src="subscene/Garden%20Overview.png" alt="A fierce battle rages throughout the garden as the animal-children fight against many storm troopers, with destruction spreading everywhere." /></p>
+<p>הקרב גדל ונעשה קשה יותר. החיות נלחמות בחילים רבים. ההרס גדל בכל הגן.</p>
+<h3 id="section-6-אורליה-נעצבת">Section 6: אורליה נעצבת</h3>
+<p><img src="subscene/Stone%20Well.png" alt="Aurelia, back in human form, sits by the well crying as she sees all the destruction around the garden, feeling overwhelmed by the violence." /></p>
+<p>אורליה רואה את כל ההרס ונעצבת מאד. היא בכה ליד הבאר. הקרב קשה מדי.</p>
+<h3 id="section-7-שנצי-באה">Section 7: שנצי באה</h3>
+<p><img src="subscene/Stone%20Well.png" alt="A friendly female dog named Shenzi approaches Aurelia at the well and gives her a comforting hug to help her feel better." /></p>
+<p>שנצי הכלבה באה אל אורליה. היא חובקת אותה ועושה אותה שמחה. שנצי טובה ואוהבת.</p>
+<h3 id="section-8-האויב-נסוג">Section 8: האויב נסוג</h3>
+<p><img src="subscene/Rocky%20Desert.png" alt="Baby Darth Vader and his storm troopers retreat from the garden into the rocky wilderness, but they appear to be regrouping rather than truly defeated." /></p>
+<p>דרת׳ וידר הקטן והחילים בורחים אל המדבר. אבל הם לא מפחדים כמו לפני. הם יחזרו.</p>
+<h3 id="section-9-הילדים-מודאגים">Section 9: הילדים מודאגים</h3>
+<p><img src="subscene/Play%20Area.png" alt="The four children stand in human form among the ruins of their play area, looking worried and troubled rather than victorious like before." /></p>
+<p>הילדים עומדים בין ההרס. הם מודאגים כי הקרב קשה יותר. הניצחון לא קל הפעם.</p>
+<h2 id="chapter-2-המסר-האלהי">Chapter 2: המסר האלהי</h2>
+<h3 id="section-0-התקפות-נעשות-יותר-קשות">Section 0: התקפות נעשות יותר קשות</h3>
+<p><img src="subscene/Play%20Area.png" alt="Baby Darth Vader and many storm troopers are destroying more of the garden, while the children stand watching in dismay. The destruction is more severe than before, with broken branches and scattered stones everywhere." /></p>
+<p>דרת׳ וידר הקטן חוזר עם חילים רבים מאד. הם הורסים את הגן יותר ויותר. הילדים מפחדים.</p>
+<h3 id="section-1-אלהים-מדבר-אל-הילדים">Section 1: אלהים מדבר אל הילדים</h3>
+<p><img src="subscene/Stone%20Well.png" alt="The children gather around the stone well as a divine voice speaks from above. Light seems to emanate from the well as God delivers His message about forgiveness." /></p>
+<p>אלהים קורא אל הילדים: ‘לכו אל דרת׳ וידר הקטן. סלחו לו. אהבו אותו במקום להלחם.’</p>
+<h3 id="section-2-הילדים-מסרבים">Section 2: הילדים מסרבים</h3>
+<p><img src="subscene/Stone%20Well.png" alt="The children stand around the well, clearly upset and refusing God’s command. Their body language shows rebellion and anger at being asked to forgive their enemy." /></p>
+<p>הילדים כועסים על הפקודה הזאת. ‘לא נסלח לו! הוא רע מאד! למה נאהב אותו?’</p>
+<h3 id="section-3-הם-מחליטים-לברח">Section 3: הם מחליטים לברח</h3>
+<p><img src="subscene/Garden%20Overview.png" alt="The children gather together, whispering and planning their escape from God’s presence. They look around nervously as they make their rebellious decision." /></p>
+<p>הילדים מחליטים לברח מאלהים. הם אומרים: ‘נברח אל הים הגדול. שם לא ימצא אותנו אלהים.’</p>
+<h3 id="section-4-אהרן-צריך-שירותים">Section 4: אהרן צריך שירותים</h3>
+<p><img src="subscene/Garden%20Overview.png" alt="Aaron suddenly holds his stomach and looks uncomfortable, needing to use the bathroom during their important discussion about fleeing from God." /></p>
+<p>אהרן פתאם צריך לעשות צואה. הוא רץ מהר לשירותים ואז חוזר לאחיו.</p>
+<h3 id="section-5-אהרן-חוזר">Section 5: אהרן חוזר</h3>
+<p><img src="subscene/Garden%20Overview.png" alt="Aaron returns from the bathroom, rejoining his siblings who are still planning their escape to the seashore." /></p>
+<p>אהרן חוזר מהשירותים. הוא אומר: ‘עכשיו אני מוכן לברח אל הים!’</p>
+<h3 id="section-6-הם-נוסעים-אל-הים">Section 6: הם נוסעים אל הים</h3>
+<p><img src="subscene/Rocky%20Desert.png" alt="The four children walk through the wilderness path, leaving their garden home behind as they flee toward the great sea to escape God’s command." /></p>
+<p>הילדים יוצאים מהגן ונוסעים דרך המדבר. הם הולכים אל הים הגדול לברח מאלהים.</p>
+<h3 id="section-7-הם-מגיעים-אל-החוף">Section 7: הם מגיעים אל החוף</h3>
+<p><img src="subscene/Shoreline%20View.png" alt="The children arrive at the vast shoreline, standing before the endless sea where they hope to hide from God’s presence and avoid His difficult command." /></p>
+<p>הילדים מגיעים אל חוף הים הגדול. הים גדול מאד. הם חושבים שכאן יהיו בטוחים מאלהים.</p>
+<h3 id="section-8-הם-מתחבאים-ליד-המים">Section 8: הם מתחבאים ליד המים</h3>
+<p><img src="subscene/Rocky%20Outcrop.png" alt="The children find shelter among the weathered rocks along the shoreline, trying to hide from God’s presence while the waves crash around them." /></p>
+<p>הילדים מתחבאים בין הסלעים ליד המים. הם אומרים: ‘כאן אלהים לא יכול למצא אותנו.’</p>
+<h3 id="section-9-הם-מסרבים-לקריאת-אלהים">Section 9: הם מסרבים לקריאת אלהים</h3>
+<p><img src="subscene/Sandy%20Beach.png" alt="The children sit defiantly on the beach, their backs turned toward the direction of their home and God’s calling, refusing to accept their divine mission." /></p>
+<p>הילדים יושבים על החוף ומסרבים לשמע בקול אלהים. הם לא רוצים לסלח לאויב שלהם.</p>
+<h2 id="chapter-3-הסער-הגדול">Chapter 3: הסער הגדול</h2>
+<h3 id="section-0-אלהים-שולח-את-הסער">Section 0: אלהים שולח את הסער</h3>
+<p><img src="subscene/Storm%20Clouds.png" alt="Dark storm clouds gather rapidly over the children at the seashore, with lightning beginning to flash within the swirling gray formations. The children look up in fear as they realize God has found them even by the great sea." /></p>
+<p>אלהים שולח סער גדול לחפש את הילדים הבורחים. עננים כהים מתקבצים במהירות מעל הים.</p>
+<h3 id="section-1-הברק-והרעם-מתחילים">Section 1: הברק והרעם מתחילים</h3>
+<p><img src="subscene/Lightning%20Flash.png" alt="Brilliant lightning flashes across the sky while the children huddle together on the rocky shore, their faces illuminated by the electric light as thunder booms around them." /></p>
+<p>ברק מבהיק בשמים והרעם רועם חזק מאד. הילדים מפחדים מכח אלהים.</p>
+<h3 id="section-2-הגשם-יורד-חזק">Section 2: הגשם יורד חזק</h3>
+<p><img src="subscene/Torrential%20Rain.png" alt="Heavy rain pours down on the children as they try to find shelter among the rocks, their clothes becoming soaked as they realize they cannot escape God’s storm." /></p>
+<p>גשם כבד יורד מהעננים. הילדים נרטבים וחוצים מקום להתחבא מהסער.</p>
+<h3 id="section-3-המיניונים-מגיעים">Section 3: המיניונים מגיעים</h3>
+<p><img src="subscene/Torrential%20Rain.png" alt="Three yellow Minions appear through the storm carrying an umbrella and raincoats, slipping and sliding comically in the mud as they try to help the soaked children." /></p>
+<p>שלושה מיניונים מגיעים בסער. הם מביאים מטריה ומעילי גשם כמתנה לילדים. הם מחליקים בבוץ.</p>
+<h3 id="section-4-הם-מנסים-לברח">Section 4: הם מנסים לברח</h3>
+<p><img src="subscene/Sandy%20Beach.png" alt="The children run along the beach trying to escape the storm, but the rain and wind follow them everywhere they go, showing them they cannot flee from God’s presence." /></p>
+<p>הילדים רצים על החוף לנסות לברח מהסער. אבל הסער רודף אחריהם לכל מקום.</p>
+<h3 id="section-5-הם-לא-יכולים-להתחבא">Section 5: הם לא יכולים להתחבא</h3>
+<p><img src="subscene/Rocky%20Outcrop.png" alt="The children huddle behind large rocks trying to hide from the storm, but lightning flashes reveal their location and thunder echoes around them, proving God can find them anywhere." /></p>
+<p>הילדים מתחבאים מאחורי סלעים גדולים. אבל הברק מגלה אותם והרעם מקיף אותם מכל צד.</p>
+<h3 id="section-6-יצחק-קורא-ספר">Section 6: יצחק קורא ספר</h3>
+<p><img src="subscene/Rocky%20Outcrop.png" alt="Isaac pulls out a waterproof book about prophets and reads by lightning flashes, discovering wisdom about obeying God’s calling even when it’s difficult." /></p>
+<p>יצחק מוציא ספר על נביאים וקורא לאור הברק. הוא מוצא חכמה על שמיעה בקול אלהים.</p>
+<h3 id="section-7-הם-לומדים-על-נביאים">Section 7: הם לומדים על נביאים</h3>
+<p><img src="subscene/Rocky%20Outcrop.png" alt="The children gather around Isaac’s book as he reads aloud about prophets who tried to flee from God but learned they must obey His commands, even difficult ones." /></p>
+<p>יצחק קורא בקול רם: ‘נביאים ניסו לברח מאלהים, אבל למדו שחייבים לשמע בפקודותיו.’</p>
+<h3 id="section-8-הם-מבינים-את-האמת">Section 8: הם מבינים את האמת</h3>
+<p><img src="subscene/Lightning%20Flash.png" alt="As lightning illuminates the children’s faces, they look at each other with dawning understanding that they cannot escape God’s will and must accept His difficult mission." /></p>
+<p>הילדים מבינים שאי אפשר לברח מאלהים. הסער מלמד אותם שהם חייבים לקבל את שליחותו.</p>
+<h3 id="section-9-הם-מקבלים-את-שליחות-אלהים">Section 9: הם מקבלים את שליחות אלהים</h3>
+<p><img src="subscene/Storm%20Clouds.png" alt="The children stand together facing the storm with newfound resolve, no longer trying to hide or flee, as they accept that they must obey God’s command to forgive their enemy." /></p>
+<p>הילדים עומדים יחד ואומרים: ‘אלהים, נקבל את שליחותך. נלך אל דרת׳ וידר ונסלח לו.’</p>
+<h2 id="chapter-4-המסע-הקשה">Chapter 4: המסע הקשה</h2>
+<h3 id="section-0-מסע-אל-המבצר">Section 0: מסע אל המבצר</h3>
+<p><img src="subscene/Rocky%20Desert.png" alt="The four children walk reluctantly through the desert wilderness, their animal forms visible as they approach the distant fortress. Dark storm clouds gather overhead as they make their difficult journey toward enemy territory." /></p>
+<p>הילדים הולכים בקשי אל מבצר דרת׳ וידר הקטן. הם מפחדים אבל אלהים שלח אותם.</p>
+<h3 id="section-1-הם-רואים-את-המבצר">Section 1: הם רואים את המבצר</h3>
+<p><img src="subscene/Fortress%20Walls.png" alt="The children stand before the imposing fortress walls, looking up at the dark stone structure that towers above them. Lightning flashes behind the fortress, making it appear even more threatening." /></p>
+<p>המבצר גדול ומפחיד מאד. חומות אבן כהות עולות גבוה אל השמים.</p>
+<h3 id="section-2-הם-רבים-על-השליחות">Section 2: הם רבים על השליחות</h3>
+<p><img src="subscene/Fortress%20Entrance.png" alt="The children stand in front of the fortress entrance, gesturing and arguing with each other. Their faces show frustration and disagreement as they debate the fairness of their divine mission." /></p>
+<p>הילדים רבים ביניהם: ‘למה אנחנו חייבים לסלח לו? זה לא צדק!’</p>
+<h3 id="section-3-הם-זוכרים-לאהב">Section 3: הם זוכרים לאהב</h3>
+<p><img src="subscene/Fortress%20Entrance.png" alt="The children’s argument calms as they remember their lesson about love. They move closer together, their expressions softening as they prepare to apologize to each other." /></p>
+<p>אבן זוכר: ‘לא טוב לריב. אנחנו חייבים לאהב זה את זה.’ הם מתחרטים.</p>
+<h3 id="section-4-הם-מתחבקים-ומתנצלים">Section 4: הם מתחבקים ומתנצלים</h3>
+<p><img src="subscene/Fortress%20Entrance.png" alt="The four children embrace in a group hug, their faces showing love and forgiveness as they apologize to each other. The fortress entrance looms behind them as they reconcile." /></p>
+<p>הילדים מתחבקים חיבוק גדול. הם אומרים: ‘סליחה’ זה לזה. האהבה חוזרת ביניהם.</p>
+<h3 id="section-5-אהרן-מאבד-את-השמיכה">Section 5: אהרן מאבד את השמיכה</h3>
+<p><img src="subscene/Fortress%20Courtyard.png" alt="Aaron looks around frantically in the fortress courtyard, searching for his missing blanket. His siblings notice his distress as he realizes his beloved blanket is gone." /></p>
+<p>אהרן מחפש את השמיכה שלו. ‘איפה השמיכה שלי?’ הוא קורא. היא נעלמה.</p>
+<h3 id="section-6-הם-מחפשים-את-השמיכה">Section 6: הם מחפשים את השמיכה</h3>
+<p><img src="subscene/Fortress%20Courtyard.png" alt="All four children search frantically around the fortress courtyard, looking behind stones, under equipment, and in shadowy corners. Their determined expressions show they won’t give up until they find Aaron’s blanket." /></p>
+<p>כל הילדים מחפשים את השמיכה בחצר המבצר. הם מחפשים מאחורי אבנים ובפינות.</p>
+<h3 id="section-7-הם-שומעים-בכי">Section 7: הם שומעים בכי</h3>
+<p><img src="subscene/Fortress%20Courtyard.png" alt="The children pause in their search as they hear the sound of crying echoing from within the fortress. They look toward the sound with surprised expressions, realizing it’s coming from their enemy." /></p>
+<p>הילדים שומעים קול בכי מבפנים המבצר. מישהו בוכה שם. מי זה?</p>
+<h3 id="section-8-הם-מוצאים-את-דרת-וידר-הקטן-בוכה">Section 8: הם מוצאים את דרת׳ וידר הקטן בוכה</h3>
+<p><img src="subscene/Fortress%20Courtyard.png" alt="The children discover Baby Darth Vader sitting alone in a corner of the courtyard, crying with Aaron’s blanket clutched in his small hands. The children’s expressions show surprise and unexpected sympathy for their enemy." /></p>
+<p>הם מוצאים את דרת׳ וידר הקטן בוכה בפינה. הוא מחזיק את השמיכה של אהרן ובד.</p>
+<h3 id="section-9-הם-מבינים-שהוא-בודד">Section 9: הם מבינים שהוא בודד</h3>
+<p><img src="subscene/Fortress%20Courtyard.png" alt="The children stand around Baby Darth Vader, their expressions changing from surprise to understanding as they realize their enemy is lonely and afraid, not truly evil. The fortress courtyard suddenly seems empty and sad rather than threatening." /></p>
+<p>הילדים מבינים שדרת׳ וידר הקטן בודד ומפחד. הוא לא באמת רע. הוא רק עצוב.</p>
+</body>
+</html>

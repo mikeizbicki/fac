@@ -1,0 +1,69 @@
+{
+  "characters": [
+    {
+      "name": "Bowser",
+      "placement": "stage-center",
+      "description": {
+        "pose": "straight-on",
+        "action": "Bowser roars in frustration as his Koopa Troopers report one failure after another in stopping the children's pranks. Bowser slams his fist on the arm of his throne, cracking the ornate stone."
+      }
+    },
+    {
+      "name": "Koopa1",
+      "placement": "stage-left",
+      "description": {
+        "pose": "profile-left",
+        "action": "The Koopa Trooper continues his frustrated attempts to clean up the slime covering the floor and walls, baffled by its sudden appearance."
+      }
+    },
+    {
+      "name": "Koopa2",
+      "placement": "stage-right",
+      "description": {
+        "pose": "profile-right",
+        "action": "The Koopa Trooper with the eye patch also keeps working to clean the slime, equally confused by the mess."
+      }
+    },
+    {
+      "name": "Evan",
+      "placement": "stage-left",
+      "description": {
+        "pose": "straight-on",
+        "action": "Evan, one of the shapeshifting children, watches Bowser's frustrated outburst with a mischievous grin on his face."
+      }
+    },
+    {
+      "name": "Isaac",
+      "placement": "stage-right",
+      "description": {
+        "pose": "straight-on",
+        "action": "Isaac, another of the shapeshifting children, giggles quietly as he observes the chaos he and his siblings have caused."
+      }
+    },
+    {
+      "name": "Aurelia",
+      "placement": "stage-center",
+      "description": {
+        "pose": "straight-on",
+        "action": "The youngest of the shapeshifting children, Aurelia, watches the scene with wide-eyed wonder, fascinated by the colorful butterflies fluttering around the throne room."
+      }
+    }
+  ],
+  "movements": [
+    {
+      "character": "Evan",
+      "action": "enter-stage-left",
+      "final-placement": "stage-left"
+    },
+    {
+      "character": "Isaac",
+      "action": "enter-stage-right",
+      "final-placement": "stage-right"
+    },
+    {
+      "character": "Aurelia",
+      "action": "enter-stage-center",
+      "final-placement": "stage-center"
+    }
+  ]
+}

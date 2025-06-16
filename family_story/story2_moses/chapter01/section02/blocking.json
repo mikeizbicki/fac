@@ -1,0 +1,53 @@
+{
+  "characters": [
+    {
+      "name": "Evan",
+      "placement": "stage-left",
+      "description": {
+        "pose": "straight-on",
+        "action": "His human form shimmers and transforms into a brown owl with large wings spread wide, the magical transformation causing him to glow briefly."
+      }
+    },
+    {
+      "name": "Aaron",
+      "placement": "center",
+      "description": {
+        "pose": "straight-on",
+        "action": "Watching Evan's transformation with wide eyes and an expression of complete amazement, his mouth slightly open in wonder."
+      }
+    },
+    {
+      "name": "Isaac",
+      "placement": "center",
+      "description": {
+        "pose": "profile-left",
+        "action": "Staring at Evan in astonishment, his face showing shock and fascination at witnessing the magical transformation."
+      }
+    },
+    {
+      "name": "Aurelia",
+      "placement": "stage-right",
+      "description": {
+        "pose": "profile-left",
+        "action": "Looking at Evan with wonder and amazement, her small face lit up with excitement at seeing the incredible transformation."
+      }
+    },
+    {
+      "name": "Koopa1",
+      "placement": "stage-left",
+      "description": {
+        "pose": "straight-on",
+        "action": "Standing with a confused and startled expression, his arms no longer crossed as he reacts with shock to the unexpected transformation."
+      }
+    },
+    {
+      "name": "Koopa2",
+      "placement": "stage-right",
+      "description": {
+        "pose": "profile-left",
+        "action": "Looking bewildered and alarmed, his eye patch visible as he stares in confusion at the child who just transformed into an owl."
+      }
+    }
+  ],
+  "movements": []
+}

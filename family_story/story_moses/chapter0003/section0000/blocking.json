@@ -1,0 +1,46 @@
+{
+  "characters": [
+    {
+      "name": "Evan",
+      "placement": "off-screen",
+      "description": {
+        "pose": "profile-right",
+        "action": "Evan, as an owl, swoops down to distract Bowser."
+      },
+      "movements": [
+        {
+          "character": "Evan",
+          "action": "enter-stage-left",
+          "final-placement": "center"
+        }
+      ]
+    },
+    {
+      "name": "Isaac",
+      "placement": "stage-left",
+      "description": {
+        "pose": "profile-left",
+        "action": "Isaac, as a koala, clings to the side of the throne."
+      },
+      "movements": []
+    },
+    {
+      "name": "Aurelia",
+      "placement": "stage-right",
+      "description": {
+        "pose": "straight-on",
+        "action": "Aurelia, as a panda, blocks Bowser's path."
+      },
+      "movements": []
+    },
+    {
+      "name": "Bowser",
+      "placement": "center",
+      "description": {
+        "pose": "straight-on",
+        "action": "Bowser sits angrily on his large, ornate chair."
+      },
+      "movements": []
+    }
+  ]
+}

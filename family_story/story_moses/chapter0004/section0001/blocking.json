@@ -1,0 +1,65 @@
+{
+  "characters": [
+    {
+      "name": "Evan",
+      "placement": "center",
+      "description": {
+        "pose": "straight-on",
+        "action": "Evan, still in his owl form, hoots softly as he approaches the captive children. His large eyes are filled with concern, and he gently nuzzles them, encouraging them to follow."
+      }
+    },
+    {
+      "name": "Isaac",
+      "placement": "stage-left",
+      "description": {
+        "pose": "profile-left",
+        "action": "Isaac, the koala, climbs closer to the captives, his soft fur brushing against them. He lets out a low, soothing sound, trying to comfort the frightened children."
+      }
+    },
+    {
+      "name": "Aaron",
+      "placement": "stage-right",
+      "description": {
+        "pose": "profile-right",
+        "action": "Aaron, the small dinosaur, stands guard, his sharp eyes scanning the dungeon for any threats. He makes a series of gentle, rumbling noises, encouraging the captives to follow."
+      }
+    },
+    {
+      "name": "Aurelia",
+      "placement": "stage-left",
+      "movements": [
+        {
+          "character": "Aurelia",
+          "action": "enter-stage-left",
+          "final-placement": "stage-left"
+        }
+      ],
+      "description": {
+        "pose": "straight-on",
+        "action": "Aurelia, the panda, approaches the captives with a caring expression. She nuzzles them gently, her large eyes filled with compassion, and begins to lead the way out of the dungeon."
+      }
+    },
+    {
+      "name": "Koopa1",
+      "placement": "stage-right",
+      "movements": [
+        {
+          "character": "Koopa1",
+          "action": "enter-stage-right",
+          "final-placement": "stage-right"
+        }
+      ]
+    },
+    {
+      "name": "Koopa2",
+      "placement": "stage-right",
+      "movements": [
+        {
+          "character": "Koopa2",
+          "action": "enter-stage-right",
+          "final-placement": "stage-right"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "chapter": "הַתְּחִלָּה הַשְּׁקֵטָה",
+  "subscenes": [
+    {
+      "name": "Garden View",
+      "description": "A beautiful garden spreads before the children with lush green trees bearing ripe fruit and colorful flowers blooming along stone pathways. A small stone well sits in the center, providing fresh water that sparkles in the sunlight. Vegetable patches with herbs and greens line the edges of the garden, creating a peaceful paradise that reminds one of the Garden of Eden. The children's favorite play areas are scattered throughout, with space for running and transforming."
+    },
+    {
+      "name": "Fruit Trees",
+      "description": "Tall fruit trees tower over the garden with branches heavy with apples, pomegranates, and figs ready for picking. The stone pathways wind between these magnificent trees, leading to different areas of the garden. A small stone well provides fresh water nearby, while colorful flowers and herb patches create a fragrant border around the trees. This area serves as both a source of food and a favorite gathering place for the children."
+    },
+    {
+      "name": "Well Center",
+      "description": "The stone well stands proudly in the heart of the garden, surrounded by the most beautiful flowers and herbs. Clear, fresh water reflects the sky from within its depths, while fruit trees create a canopy overhead. Stone pathways radiate outward from this central point, connecting all areas of the garden. The children often gather here to drink and rest between their adventures."
+    }
+  ],
+  "sections": [
+    {
+      "title_english": "The Children in the Garden",
+      "title_target": "הַיְלָדִים בַ

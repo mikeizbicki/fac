@@ -1,0 +1,35 @@
+{
+  "story_structure": "Freytag's Pyramid",
+  "chapters": [
+    {
+      "name": "The Children Under Bowser's Rule",
+      "element": "Exposition",
+      "plot": "Evan, Aaron, Isaac, and Aurelia live in a land where Bowser and his Koopas force all children to work building his castle with heavy blocks. The children discover they can transform into their favorite animals (Evan into an owl, Aaron into a dinosaur, Isaac into a koala, and Aurelia into a panda) when they are too tired to continue working. Using their animal forms, they escape from Bowser's guards and flee to safety in the wilderness, where they can rest and play freely."
+    },
+    {
+      "name": "The Voice from Above",
+      "element": "Rising Action",
+      "plot": "While the children are enjoying their freedom, they hear God's voice telling them they must return to save all the other children still trapped under Bowser's rule. Evan reads a book that gives them courage and wisdom about helping others. Initially, the children are scared and don't want to go back, but after some squabbling among themselves, they remember they should love and help others, apologize to each other, and decide to obey God's command."
+    },
+    {
+      "name": "The Silly Plagues Begin",
+      "element": "Rising Action",
+      "plot": "The children return and demand Bowser free all the children, but he refuses. God helps them bring funny but annoying plagues upon Bowser's kingdom: all the water turns into sticky honey, frogs that sing off-key songs appear everywhere, and tiny gnats that tickle everyone constantly. During this time, one child needs to use the bathroom urgently and runs off quickly, while Minions arrive with gifts to help the children. Bowser remains stubborn and will not let the children go."
+    },
+    {
+      "name": "The Final Plague and Escape",
+      "element": "Climax",
+      "plot": "After several more silly plagues (including one where all of Bowser's Koopas can only speak in rhymes), God brings the most serious plague: all of Bowser's favorite pizza disappears. Bowser finally agrees to let the children go, but as they are leaving with all the freed children, he changes his mind and chases after them with his army. The children use their animal transformations to help everyone escape across a river that miraculously parts for them, then closes on Bowser's forces."
+    },
+    {
+      "name": "Freedom and Celebration",
+      "element": "Falling Action",
+      "plot": "All the children are now free and celebrate their liberation from Bowser's rule. However, one child becomes sad and starts to cry because they are overwhelmed by the journey. Shenzi the dog appears and gives the crying child a hug, making them happy again. The children realize they are truly free and can now live as God intended them to live."
+    },
+    {
+      "name": "The Lost Blanket",
+      "element": "Resolution",
+      "plot": "As the children settle into their new life of freedom, Aurelia loses her favorite blanket. All the children search everywhere, reviewing the places they've been and the adventures they've had. When they finally find the blanket under a tree where they first heard God's voice, they realize how much God has helped them throughout their journey and give thanks for their freedom and new life together."
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "characters": [
+    {
+      "name": "Evan",
+      "placement": "center",
+      "description": {
+        "pose": "profile-right",
+        "action": "Evan, still in owl form, swoops down and grabs Bowser's cape in his talons, pulling it over the Koopa King's head to blind him."
+      },
+      "movements": []
+    },
+    {
+      "name": "Isaac",
+      "placement": "stage-left",
+      "description": {
+        "pose": "profile-left",
+        "action": "Isaac, as a koala, clings to the side of the throne, watching the action unfold."
+      },
+      "movements": []
+    },
+    {
+      "name": "Aurelia",
+      "placement": "stage-right",
+      "description": {
+        "pose": "straight-on",
+        "action": "Aurelia, as a panda, blocks Bowser's path, ready to spring into action."
+      },
+      "movements": []
+    },
+    {
+      "name": "Aaron",
+      "placement": "off-screen",
+      "description": {
+        "pose": "profile-left",
+        "action": "Aaron, as a dinosaur, charges at Bowser, knocking him off balance."
+      },
+      "movements": [
+        {
+          "character": "Aaron",
+          "action": "enter-stage-left",
+          "final-placement": "center"
+        }
+      ]
+    },
+    {
+      "name": "Bowser",
+      "placement": "center",
+      "description": {
+        "pose": "back",
+        "action": "Bowser, blinded by Evan's attack, stumbles around the throne room, trying to swat at the children."
+      },
+      "movements": []
+    }
+  ]
+}

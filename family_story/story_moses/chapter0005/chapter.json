@@ -1,0 +1,36 @@
+{
+  "name": "Returning Home",
+  "element": "Resolution",
+  "sections": [
+    {
+      "sublocation": "Courtyard",
+      "image_description": "The children, now back in their human forms, stand together in the castle courtyard, celebrating their victory over Bowser. They are surrounded by the other freed children, all of whom are smiling and laughing.",
+      "text": "וַיִּשְׂמְחוּ הַיְלָדִים וַיָּרִינוּ שִירָה."
+    },
+    {
+      "sublocation": "Courtyard",
+      "image_description": "The children reflect on their journey, remembering how they used their animal transformations to outwit Bowser and his minions. They talk animatedly, recounting their favorite moments and the ways their abilities helped them along the way.",
+      "text": "וַיְדַבְּרוּ הַיְלָדִים עַל דְּרָכֵיהֶם וְעַל אֲשֶׁר עָשׂוּ בְּכֹחַ הַמּוּטָציָה שֶׁלָּהֶם."
+    },
+    {
+      "sublocation": "Courtyard",
+      "image_description": "As the children prepare to leave, they each transform back into their animal forms one last time. Evan becomes an owl, Isaac a koala, and Aurelia a panda. They say their goodbyes to the other freed children, promising to return soon for another adventure.",
+      "text": "וַיִּתְהַפְּכוּ הַיְלָדִים שׁוּב לְצוּרָתָם הָאוֹרְגָנִית וַיִּפְרְדוּ מֵהַיְלָדִים הָאֲחֵרִים, מַבְטִיחִים לַחְזֹר בְּקָרוב לְפִקְפוּק אַחֵר."
+    },
+    {
+      "sublocation": "Village - Town Square",
+      "image_description": "The children, now back in their human forms, walk through the town square, waving goodbye to the friendly villagers. They feel a sense of pride and accomplishment, knowing that they were able to use their unique abilities to help others in need.",
+      "text": "וַיְלַוּוּ הַיְלָדִים אֶת הָאַזְרָחִים הַטּוֹבִים וַיָּשׁוּבוּ לְבֵיתָם, גֵּאִים וְשִׂמְחִים עַל אֲשֶׁר עָשׂוּ."
+    },
+    {
+      "sublocation": "Village - Town Square",
+      "image_description": "As the children walk through the town square, they spot Shenzi the dog. The children greet the dog happily, and Shenzi gives them each a warm hug, celebrating their safe return home.",
+      "text": "וְהִנֵּה שֶׁנְזִי הַכֶּלֶב בָּא לִקְרַאת הַיְלָדִים וַיְחַבְּקֵם בְּחִבּוּק חָם וּמְבוֹרָך."
+    },
+    {
+      "sublocation": "Village - Town Square",
+      "image_description": "The children continue on their way, excited for their next adventure. They know that they have the power to make a difference, and they can't wait to see what challenges await them in the future.",
+      "text": "וַיֵּלְכוּ הַיְלָדִים לְדַרְכָּם, מְצַפִּים לְפִקְפוּק הַבָּא. הֵם יוֹדְעִים שֶׁיֵּשׁ לָהֶם אֶת הַכֹּחַ לְהַשְׂפִּיעַ, וְאֵינָם מְחַכִּים לִרְאוֹת מָה יְחַכֶּה לָהֶם בָּעָתִיד."
+    }
+  ]
+}

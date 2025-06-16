@@ -1,0 +1,69 @@
+{
+  "name": "The Final Plague and Escape",
+  "sections": [
+    {
+      "sublocation": "Kingdom Courtyard",
+      "text": "אורליה מרימה את המטה. כל השׁומרים מדברים רק בחרוזים מצחיקים!"
+    },
+    {
+      "sublocation": "Guard Barracks",
+      "text": "השׁומרים אומרים: רצינו לצאת, אבל אין לנו דעת! המלים שׁלנו חרוזים!"
+    },
+    {
+      "sublocation": "Bowser's Throne Room",
+      "text": "באוזר כעס מאד! השׁומרים שׁלו מצחיקים ולא יכולים לעבד!"
+    },
+    {
+      "sublocation": "Kingdom Courtyard",
+      "text": "יצחק צריך לעשׂות צואה! הוא רץ מהר לבית הכסא ושׁב!"
+    },
+    {
+      "sublocation": "Bowser's Throne Room",
+      "text": "הילדים אומרים: שׁלח את הילדים! באוזר עוד אומר: לא!"
+    },
+    {
+      "sublocation": "Kingdom Courtyard",
+      "text": "אבן מרים את המטה למכה האחרונה. זאת המכה החמורה ביותר!"
+    },
+    {
+      "sublocation": "Bowser's Throne Room",
+      "text": "כל הפיצה שׁל באוזר נעלמה! הוא מחפשׂ אבל אין פיצה!"
+    },
+    {
+      "sublocation": "Bowser's Throne Room",
+      "text": "באוזר עצב מאד! הוא לא יכול לחיות בלי הפיצה שׁלו!"
+    },
+    {
+      "sublocation": "Bowser's Throne Room",
+      "text": "באוזר אומר: לכו! קחו את כל הילדים! רק תחזירו לי את הפיצה!"
+    },
+    {
+      "sublocation": "Castle Construction Site",
+      "text": "כל הילדים שׂמחים ובורחים! הם רצים מן הבנין ועוזבים את האבנים!"
+    },
+    {
+      "sublocation": "Kingdom Courtyard",
+      "text": "באוזר מתחרט! הוא רודף אחרי הילדים עם השׁומרים שׁלו!"
+    },
+    {
+      "sublocation": "Miracle River",
+      "text": "הילדים מגיעים לנהר הגדול. המים זורמים ואין דרך לעבר!"
+    },
+    {
+      "sublocation": "Miracle River",
+      "text": "אבן מרים את המטה והנהר נפרד! דרך יבשׁה נראית בתוך המים!"
+    },
+    {
+      "sublocation": "Miracle River",
+      "text": "כל הילדים עוברים בדרך היבשׁה. הם מתפלאים על הנס הגדול!"
+    },
+    {
+      "sublocation": "Miracle River",
+      "text": "באוזר והשׁומרים מגיעים לנהר. המים חוזרים וסוגרים על הדרך!"
+    },
+    {
+      "sublocation": "Stream Bank",
+      "text": "הילדים בטוחים בצד השׁני! באוזר לא יכול לעבר את הנהר!"
+    }
+  ]
+}
