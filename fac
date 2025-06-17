@@ -89,7 +89,8 @@ logger.propagate = False
 logger.setLevel(logging.INFO)
 
 # imports
-from collections import namedtuple, Counter
+from collections import namedtuple, Counter, defaultdict
+import base64
 import copy
 import glob
 import json
@@ -127,12 +128,13 @@ class LLM():
         }
 
     models = {
-        'anthropic/claude-3-haiku-20240307':    {'in_price': 0.25, 'out_price':  1.25},
-        'anthropic/claude-sonnet-4-0':          {'in_price': 3.00, 'out_price': 15.00},
-        'anthropic/claude-3-5-haiku-latest':    {'in_price': 0.80, 'out_price':  4.00},
-        'groq/llama-3.3-70b-versatile':         {'in_price': 0.00, 'out_price':  0.00},
-        'openai/gpt-4.1':                       {'in_price': 2.00, 'out_price':  8.00},
-        'openai/gpt-4.1-mini':                  {'in_price': 0.40, 'out_price':  1.60},
+        'anthropic/claude-3-haiku-20240307':    {'text/in': 0.25, 'text/out':  1.25},
+        'anthropic/claude-sonnet-4-0':          {'text/in': 3.00, 'text/out': 15.00},
+        'anthropic/claude-3-5-haiku-latest':    {'text/in': 0.80, 'text/out':  4.00},
+        'groq/llama-3.3-70b-versatile':         {'text/in': 0.00, 'text/out':  0.00},
+        'openai/gpt-4.1':                       {'text/in': 2.00, 'text/out':  8.00},
+        'openai/gpt-4.1-mini':                  {'text/in': 0.40, 'text/out':  1.60},
+        'openai/gpt-image-1':                   {'text/in': 5.00, 'image/in': 10.00, 'image/out': 40.00},
         }
 
     def __init__(self):
@@ -142,7 +144,8 @@ class LLM():
         #self.model = 'anthropic/claude-sonnet-4-0'
         #self.model = 'anthropic/claude-3-5-haiku-latest'
         self.model = 'anthropic/claude-3-haiku-20240307'
-        self.usage = Counter()
+        self.model_image = 'openai/gpt-image-1'
+        self.usage = defaultdict(lambda: Counter())
 
         # connect to the API
         self.provider = self.model.split('/')[0]
@@ -156,8 +159,40 @@ class LLM():
         # load the system prompt dynamically
         self.system_prompt = '''You are a creative writing assistant with expert knowledge in storytelling, linguistics, and education.  Whenever you write about copyrighted characters, you do so in a way that constitutes fair use.  You are not having a conversation, and only provide the requested output with no further discussion.'''
 
+    def image(self, fout, prompt, *, seed=None):
+        logger.debug(f'llm.image; prompt_length={len(prompt)}')
+        client = openai.Client()
+        model = 'gpt-image-1'
+        size = '1536x1024'
+        quality = 'low'
+
+        # generate a new image
+        result = client.images.generate(
+            model=model,
+            prompt=prompt,
+            size=size,
+            quality=quality,
+        )
+
+        # save the image
+        image_base64 = result.data[0].b64_json
+        image_bytes = base64.b64decode(image_base64)
+        fout.write(image_bytes)
+
+        # update usage info
+        usage = Counter({
+            'text/in': result.usage.input_tokens_details.text_tokens,
+            'text/out': 0,
+            'image/in': result.usage.input_tokens_details.image_tokens,
+            'image/out': result.usage.output_tokens,
+            })
+        self.usage[self.model_image] += usage
+
+        logger.info(f'self._tokens_to_prices()={self._tokens_to_prices(self.usage)}')
+        logger.info(f'self._total_price()={self._total_price(self.usage)}')
+
     def text(self, prompt, *, seed=None):
-        logger.debug(f'connecting to LLM; prompt_length={len(self.system_prompt) + len(prompt)}')
+        logger.debug(f'llm.text; prompt_length={len(self.system_prompt) + len(prompt)}')
         result = self.client.chat.completions.create(
             messages=[
                 {
@@ -174,20 +209,28 @@ class LLM():
         )
 
         # update usage info
-        usage_counter = Counter({
-            'completion_tokens': result.usage.completion_tokens,
-            'prompt_tokens': result.usage.prompt_tokens,
+        usage = Counter({
+            'text/completion_tokens': result.usage.completion_tokens,
+            'text/prompt_tokens': result.usage.prompt_tokens,
             })
-        self.usage += usage_counter
+        self.usage[self.model] += usage
 
-        #logger.info('LLM.text: ' + self._usage_to_str(usage_counter))
-        logger.info(self._usage_to_str(self.usage))
+        logger.info(f'self._tokens_to_prices()={self._tokens_to_prices(self.usage)}')
+        logger.info(f'self._total_price()={self._total_price(self.usage)}')
         return result.choices[0].message.content
 
-    def _usage_to_str(self, usage):
-        in_price = usage['prompt_tokens'] * self.models[self.model]['in_price'] / 1000000
-        out_price = usage['completion_tokens'] * self.models[self.model]['out_price'] / 1000000
-        return f'total_price=${in_price + out_price:0.2f} ({usage["prompt_tokens"]} in-tokens = ${in_price:0.2f}, {usage["completion_tokens"]} out-tokens = ${out_price:0.2f})'
+    def _total_price(self, tokens):
+        prices = self._tokens_to_prices(tokens)
+        total = {model: sum(prices[model].values()) for model in prices}
+        return total
+
+    def _tokens_to_prices(self, tokens):
+        prices = {}
+        for model in tokens:
+            prices[model] = {}
+            for event in tokens[model]:
+                prices[model][event] = self.models[model][event] * tokens[model][event] / 1000000.0
+        return prices
 
 
 def process_template(template_content, env_vars=None):
@@ -776,7 +819,7 @@ class BuildSystem:
             # we could probably push the native-python file generation code up to this point,
             # but it would result in more complicated code for fixing a very minor/theoretical problem
             if os.path.exists(path_to_generate) and not self.overwrite:
-                logger.warning(f'path exists, skiping: {path_to_generate}')
+                logger.warning(f'path exists, skipping: {path_to_generate}')
                 continue
 
             # build with a custom shell command
@@ -826,6 +869,9 @@ class BuildSystem:
 
     def context_to_file(self, path_to_generate, config, context):
 
+        filename = os.path.basename(path_to_generate)
+        _, extension = os.path.splitext(filename)
+
         # compute files_prompt
         files_prompt = '<documents>\n'
         for path in context.include_paths:
@@ -841,9 +887,6 @@ class BuildSystem:
         files_prompt += '</documents>'
 
         # compute the instructions prompt
-        filename = os.path.basename(path_to_generate)
-        _, extension = os.path.splitext(filename)
-
         if 'prompt' in config:
             prompt_cmd = config['prompt']
         else:
@@ -859,6 +902,7 @@ class BuildSystem:
                 sys.exit(1)
         prompt_cmd = process_template(prompt_cmd, env_vars=context.variables)
         
+        # add formatting instructions
         if extension == '.json':
             format_cmd = '<formatting>JSON with no markdown codeblocks.</formatting>\n'
         else:
@@ -873,11 +917,15 @@ class BuildSystem:
             return
 
         # write to the output file
-        mode = 'wt' if self.overwrite else 'xt'
+        mode = 'wb' if self.overwrite else 'xb'
         try:
-            text = self.llm.text(prompt)
             with open(path_to_generate, mode) as fout:
-                fout.write(text)
+                if extension == '.png':
+                    self.llm.image(fout, prompt)
+                else:
+                    text = self.llm.text(prompt)
+                    blob = text.encode('utf-8')
+                    fout.write(blob)
         except FileExistsError:
             logger.warning(f'file "{path_to_generate}" exists; skipping')
 
