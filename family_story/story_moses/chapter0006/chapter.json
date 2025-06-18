@@ -1,0 +1,64 @@
+{
+  "name": "The Strange Plagues Begin",
+  "sections": [
+    {
+      "sublocation": "Main Sand Castle Construction Site",
+      "content": [
+        {
+          "speaker": "narrator",
+          "audience": [],
+          "text": "מִיָּד לְאַחַר שֶׁהָאֱלֹקִים קָרָא לַיְלָדִים לָלֶכֶת וּלְשַׁחֵרַר אֶת כָּל יֶתֶר הַיְלָדִים הָאֲחֵרִים, הֵחֵלוּ לְקִרּוֹת דְּבָרִים מַעֲנָיִים בְּקַסְטֵל שֶׁל בּוֹצֶר.",
+          "text_en": "Immediately after God called the children to go and free all the other children, strange things began to happen in Bowser's castle."
+        },
+        {
+          "speaker": "narrator",
+          "audience": [],
+          "text": "כָּל הַמַּיִם בַּקַּסְטֵל הָפְכוּ לְחָלָב שוֹקוֹלָד, מַה שֶּׁגָּרַם לַכֹּל לִהְיוֹת דַּבְקָנִי וּמְלֻכְלָך.",
+          "text_en": "All the water in the castle turned into chocolate milk, making everything sticky and messy."
+        },
+        {
+          "speaker": "narrator",
+          "audience": [],
+          "text": "וְאַחֲרֵי זֶה, הֵתְחִילוּ לְהֵיפָּלֵט אַלְפֵי בַּלּוֹנֵי גּוּמִי בְּכָל מְקוֹם, מַעֲשִׂים קּוֹלוֹת צִפְצּוּף חֲזָקִים.",
+          "text_en": "Then, thousands of rubber ducks began appearing everywhere, making loud squeaking noises."
+        },
+        {
+          "speaker": "Evan",
+          "audience": ["Isaac", "Aaron", "Aurelia"],
+          "text": "הַאִם אַתֶּם רוֹאִים אֵיךְ הַמַּכּוֹת הָאֵלֶּה עוֹבְדוֹת עַל בּוֹצֶר? הוּא בְּוַדַּאי יִתֵּן לָנוּ לָלֶכֶת עַכְשָׁו!",
+          "text_en": "Do you see how these plagues are working on Bowser? He will surely let us go now!"
+        },
+        {
+          "speaker": "Isaac",
+          "audience": ["Evan", "Aaron", "Aurelia"],
+          "text": "אֲנִי לֹא יוֹדֵעַ. אוּלַי הֵן לֹא עוֹבְדוֹת כָּל כָּך טוֹב.",
+          "text_en": "I'm not sure. Maybe they aren't working so well."
+        },
+        {
+          "speaker": "Aaron",
+          "audience": ["Evan", "Isaac", "Aurelia"],
+          "text": "אֲהָהָה! אֲנִי כָּל כָּך עָצוּב וּמְפֻחָד! מָה אִם בּוֹצֶר לֹא יִרְצֶה לְהַפְקִיר אֶת כָּל הַיְלָדִים?",
+          "text_en": "Ahhh! I'm so sad and scared! What if Bowser doesn't want to let all the children go?"
+        },
+        {
+          "speaker": "narrator",
+          "audience": [],
+          "text": "אֲבָל אָז, הַכֶּלֶב שֶׁנְזִי הִגִּיעָה וְחִבְּקָה אֶת אַהֲרֹן בְּעַדְנוּת, וּפִיזְּרָה אֶת עָצְבוֹ בְּיָפִים וּבְשָׂמֵחַ.",
+          "text_en": "But then, the dog Shenzi came and gently hugged Aaron, and dispersed his sadness with joy and happiness."
+        },
+        {
+          "speaker": "Aaron",
+          "audience": ["Evan", "Isaac", "Aurelia"],
+          "text": "אָה, אֲנִי מַרְגִּישׁ טוֹב עַכְשָׁו. אֵלֹקִים בְּוַדַּאי יִפְרֹץ דֶּרֶךְ וְיַצִּיל אֶת כֻּלָּנוּ.",
+          "text_en": "Oh, I feel better now. God will surely break through and save us all."
+        },
+        {
+          "speaker": "narrator",
+          "audience": [],
+          "text": "וּבַיְּחִידָה אֲחֵרֶת, עֲנָק הַמִּתְנוֹת שֶׁל הַמִּנְיוֹנִים הֵבִיא לַיְלָדִים מַטֶּה קַסָּם כְּמַתָּנָה, כְּדֵי לְעָזֹר לָהֶם בְּמִשְׁלָחוּתָם.",
+          "text_en": "And in another section, the minions' gift giant brought the children a magic staff as a present, to help them in their mission."
+        }
+      ]
+    }
+  ]
+}

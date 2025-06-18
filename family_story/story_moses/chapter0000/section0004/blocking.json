@@ -1,0 +1,40 @@
+{
+  "characters": [
+    {
+      "name": "Evan",
+      "placement": "stage-left",
+      "description": {
+        "pose": "profile-left"
+      }
+    },
+    {
+      "name": "Isaac",
+      "placement": "stage-right",
+      "description": {
+        "pose": "profile-right"
+      }
+    },
+    {
+      "name": "Aaron",
+      "placement": "center",
+      "description": {
+        "pose": "straight-on"
+      }
+    },
+    {
+      "name": "Aurelia",
+      "placement": "stage-right"
+    },
+    {
+      "name": "God",
+      "placement": "off-screen"
+    }
+  ],
+  "movements": [
+    {
+      "character": "God",
+      "action": "enter-stage-right",
+      "final-placement": "off-screen"
+    }
+  ]
+}

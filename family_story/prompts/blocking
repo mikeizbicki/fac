@@ -10,15 +10,14 @@ The output should be a JSON dictionary (without markdown codeblocks) with the fo
         - "profile-right" (facing sideways to the camera, looking to the right)
         - "straight-on" (facing directly at the camera)
         - "back" (facing away from the camera)
-      - "action": a 1-2 sentence description of what the character is doing; the description should be designed for an animator to decide what to draw; the descriptions of all characters should tie together into the overall scene
-  - "movements": a JSON list that describes how the characters will move in the scene; it is okay for the list to be empty; each entry is a dict with the following keys:
-    - "character": must exactly match the name of a character in the scene
-    - "action": must exactly match one of the following strings
-      - "enter-stage-left"
-      - "enter-stage-right"
-      - "exit-stage-left"
-      - "exit-stage-right"
-    - "final-placement": the final placement of the character after the action (if exiting, the final placement must be "off-screen")
+- "movements": a JSON list that describes how the characters will move in the scene; it is okay for the list to be empty; each entry is a dict with the following keys:
+  - "character": must exactly match the name of a character in the scene
+  - "action": must exactly match one of the following strings
+    - "enter-stage-left"
+    - "enter-stage-right"
+    - "exit-stage-left"
+    - "exit-stage-right"
+  - "final-placement": the final placement of the character after the action (if exiting, the final placement must be "off-screen")
 
 ---
 current beat
@@ -39,7 +38,7 @@ else
 ---
 previous blocking
 ---
-$(cat "$SERIES/$STORY/chapter$CHAPTER/section$PREV_SECTION/blocking.json")
+$(cat "$STORY/chapter$CHAPTER/section$PREV_SECTION/blocking.json")
 "
 fi
 )

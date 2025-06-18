@@ -1,0 +1,1 @@
+{"__fac_version__": "0.0.0-dev", "time": "2025-06-18T07:12:22.386390+00:00", "path": "story_moses/outline.json", "build_id": 55322462053531547531148007882603027472, "cost": 0.0020317499999999997, "usage": {"anthropic/claude-3-haiku-20240307": {"text/out": 806, "text/in": 4097}}}

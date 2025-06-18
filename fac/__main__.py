@@ -92,6 +92,7 @@ logger.setLevel(logging.INFO)
 from collections import namedtuple, Counter, defaultdict
 import base64
 import copy
+import datetime
 import glob
 import json
 import os
@@ -101,137 +102,17 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
+import yaml
 
-import clize
 import groq
+import jsonschema
+import mdformat
 import openai
 
 ################################################################################
 # helper functions
 ################################################################################
-
-class LLM():
-
-    providers = {
-        'anthropic': {
-            'base_url': 'https://api.anthropic.com/v1/',
-            'apikey': 'ANTHROPIC_API_KEY'
-            },
-        'groq': {
-            'base_url': 'https://api.groq.com/openai/v1',
-            'apikey': 'GROQ_API_KEY'
-            },
-        'openai': {
-            'base_url': 'https://api.openai.com/v1',
-            'apikey': 'OPENAI_API_KEY'
-            },
-        }
-
-    models = {
-        'anthropic/claude-3-haiku-20240307':    {'text/in': 0.25, 'text/out':  1.25},
-        'anthropic/claude-sonnet-4-0':          {'text/in': 3.00, 'text/out': 15.00},
-        'anthropic/claude-3-5-haiku-latest':    {'text/in': 0.80, 'text/out':  4.00},
-        'groq/llama-3.3-70b-versatile':         {'text/in': 0.00, 'text/out':  0.00},
-        'openai/gpt-4.1':                       {'text/in': 2.00, 'text/out':  8.00},
-        'openai/gpt-4.1-mini':                  {'text/in': 0.40, 'text/out':  1.60},
-        'openai/gpt-image-1':                   {'text/in': 5.00, 'image/in': 10.00, 'image/out': 40.00},
-        }
-
-    def __init__(self):
-        #self.model = 'groq/llama-3.3-70b-versatile'
-        #self.model = 'openai/gpt-4.1'
-        #self.model = 'openai/gpt-4.1-mini'
-        #self.model = 'anthropic/claude-sonnet-4-0'
-        #self.model = 'anthropic/claude-3-5-haiku-latest'
-        self.model = 'anthropic/claude-3-haiku-20240307'
-        self.model_image = 'openai/gpt-image-1'
-        self.usage = defaultdict(lambda: Counter())
-
-        # connect to the API
-        self.provider = self.model.split('/')[0]
-        self.model_name = self.model.split('/')[1]
-        self.client = openai.Client(
-            api_key = os.environ.get(self.providers[self.provider]['apikey']),
-            base_url = self.providers[self.provider]['base_url'],
-        )
-
-        # FIXME:
-        # load the system prompt dynamically
-        self.system_prompt = '''You are a creative writing assistant with expert knowledge in storytelling, linguistics, and education.  Whenever you write about copyrighted characters, you do so in a way that constitutes fair use.  You are not having a conversation, and only provide the requested output with no further discussion.'''
-
-    def image(self, fout, prompt, *, seed=None):
-        logger.debug(f'llm.image; prompt_length={len(prompt)}')
-        client = openai.Client()
-        model = 'gpt-image-1'
-        size = '1536x1024'
-        quality = 'low'
-
-        # generate a new image
-        result = client.images.generate(
-            model=model,
-            prompt=prompt,
-            size=size,
-            quality=quality,
-        )
-
-        # save the image
-        image_base64 = result.data[0].b64_json
-        image_bytes = base64.b64decode(image_base64)
-        fout.write(image_bytes)
-
-        # update usage info
-        usage = Counter({
-            'text/in': result.usage.input_tokens_details.text_tokens,
-            'text/out': 0,
-            'image/in': result.usage.input_tokens_details.image_tokens,
-            'image/out': result.usage.output_tokens,
-            })
-        self.usage[self.model_image] += usage
-
-        logger.info(f'self._tokens_to_prices()={self._tokens_to_prices(self.usage)}')
-        logger.info(f'self._total_price()={self._total_price(self.usage)}')
-
-    def text(self, prompt, *, seed=None):
-        logger.debug(f'llm.text; prompt_length={len(self.system_prompt) + len(prompt)}')
-        result = self.client.chat.completions.create(
-            messages=[
-                {
-                    'role': 'system',
-                    'content': self.system_prompt,
-                },
-                {
-                    "role": "user",
-                    "content": prompt,
-                },
-            ],
-            model=self.model_name,
-            seed=seed,
-        )
-
-        # update usage info
-        usage = Counter({
-            'text/completion_tokens': result.usage.completion_tokens,
-            'text/prompt_tokens': result.usage.prompt_tokens,
-            })
-        self.usage[self.model] += usage
-
-        logger.info(f'self._tokens_to_prices()={self._tokens_to_prices(self.usage)}')
-        logger.info(f'self._total_price()={self._total_price(self.usage)}')
-        return result.choices[0].message.content
-
-    def _total_price(self, tokens):
-        prices = self._tokens_to_prices(tokens)
-        total = {model: sum(prices[model].values()) for model in prices}
-        return total
-
-    def _tokens_to_prices(self, tokens):
-        prices = {}
-        for model in tokens:
-            prices[model] = {}
-            for event in tokens[model]:
-                prices[model][event] = self.models[model][event] * tokens[model][event] / 1000000.0
-        return prices
-
 
 def process_template(template_content, env_vars=None):
     """
@@ -616,112 +497,329 @@ def match_pattern(patterns, input_string):
         return (None, {})
 
 
+def validate_file(path, schema_file=None, fix=True):
+    _, extension = os.path.splitext(path)
+
+    # ensure the input path exists
+    if not os.path.exists(path):
+        raise RuntimeError(f'path="{path}" does not exist')
+    
+    # ensure the file is non-empty
+    if not path.startswith('/dev/') and os.path.getsize(path) == 0:
+        raise RuntimeError(f'os.path.getsize("{path}")=0')
+
+    # validate JSON files
+    if extension == '.json':
+
+        # ensure that the JSON can be parsed
+        with open(path) as fin:
+            text = fin.read()
+        try:
+            json.loads(text)
+        except json.JSONDecodeError as e:
+            if fix:
+                logger.debug(f'fixing JSONDecodeError in path={path}')
+                import json_repair
+                with open(path, 'wt') as fout:
+                    obj = json_repair.loads(text, skip_json_loads=True)
+                    json.dump(obj, fout)
+            else:
+                raise e
+
+        # verify that the JSON matches the schema
+        if schema_file:
+            logger.debug(f'verifying that "{path}" satisfies schema "{schema_file}"')
+            with open(path) as fin:
+                data = json.load(fin)
+            with open(schema_file) as fin:
+                schema = json.load(fin)
+                jsonschema.validate(instance=data, schema=schema)
+
+    # fix markdown files
+    if fix and extension in ['.md' or '.markdown']:
+        logger.debug(f'fixing markdown formatting in path={path}')
+        with open(path, "r+") as fout:
+            markdown_text = fout.read()
+            formatted_text = mdformat.text(markdown_text)
+            fout.seek(0)
+            fout.write(formatted_text)
+            fout.truncate()
+
+    # no errors, return True
+    return True
+
 ################################################################################
-# main function
+# main functions
 ################################################################################
 
+def generate_uuid7():
+    timestamp = int(time.time() * 1000)
+    random_number = uuid.uuid4().int
+    uuid7 = (timestamp << 64) | random_number
+    return uuid7
+
+class LLM():
+
+    providers = {
+        'anthropic': {
+            'base_url': 'https://api.anthropic.com/v1/',
+            'apikey': 'ANTHROPIC_API_KEY'
+            },
+        'groq': {
+            'base_url': 'https://api.groq.com/openai/v1',
+            'apikey': 'GROQ_API_KEY'
+            },
+        'openai': {
+            'base_url': 'https://api.openai.com/v1',
+            'apikey': 'OPENAI_API_KEY'
+            },
+        }
+
+    models = {
+        'anthropic/claude-3-haiku-20240307':    {'text/in': 0.25, 'text/out':  1.25},
+        'anthropic/claude-sonnet-4-0':          {'text/in': 3.00, 'text/out': 15.00},
+        'anthropic/claude-3-5-haiku-latest':    {'text/in': 0.80, 'text/out':  4.00},
+        'groq/llama-3.3-70b-versatile':         {'text/in': 0.00, 'text/out':  0.00},
+        'openai/gpt-4.1':                       {'text/in': 2.00, 'text/out':  8.00},
+        'openai/gpt-4.1-mini':                  {'text/in': 0.40, 'text/out':  1.60},
+        'openai/gpt-image-1':                   {'text/in': 5.00, 'image/in': 10.00, 'image/out': 40.00},
+        }
+
+    def __init__(self):
+        #self.model = 'groq/llama-3.3-70b-versatile'
+        #self.model = 'openai/gpt-4.1'
+        #self.model = 'openai/gpt-4.1-mini'
+        #self.model = 'anthropic/claude-sonnet-4-0'
+        #self.model = 'anthropic/claude-3-5-haiku-latest'
+        self.model = 'anthropic/claude-3-haiku-20240307'
+        self.model_image = 'openai/gpt-image-1'
+        self.usage = defaultdict(lambda: Counter())
+        self.build_id = generate_uuid7()
+
+        # connect to the API
+        self.provider = self.model.split('/')[0]
+        self.model_name = self.model.split('/')[1]
+        self.client = openai.Client(
+            api_key = os.environ.get(self.providers[self.provider]['apikey']),
+            base_url = self.providers[self.provider]['base_url'],
+        )
+
+        # FIXME:
+        # load the system prompt dynamically
+        self.system_prompt = '''You are a creative writing assistant with expert knowledge in storytelling, linguistics, and education.  Whenever you write about copyrighted characters, you do so in a way that constitutes fair use.  You are not having a conversation, and only provide the requested output with no further discussion.'''
+
+    def image(self, fout, prompt, *, seed=None):
+        logger.debug(f'llm.image; prompt_length={len(prompt)}')
+        client = openai.Client()
+        model = 'gpt-image-1'
+        size = '1536x1024'
+        quality = 'low'
+
+        # generate a new image
+        result = client.images.generate(
+            model=model,
+            prompt=prompt,
+            size=size,
+            quality=quality,
+        )
+
+        # save the image
+        image_base64 = result.data[0].b64_json
+        image_bytes = base64.b64decode(image_base64)
+        fout.write(image_bytes)
+
+        # update usage info
+        usage = Counter({
+            'text/in': result.usage.input_tokens_details.text_tokens,
+            'text/out': 0,
+            'image/in': result.usage.input_tokens_details.image_tokens,
+            'image/out': result.usage.output_tokens,
+            })
+        self.usage[self.model_image] += usage
+
+        logger.info(f'self._tokens_to_prices()={self._tokens_to_prices(self.usage)}')
+        logger.info(f'self._total_price()={self._total_price(self.usage)}')
+        return usage
+
+    def text(self, prompt, *, seed=None):
+        logger.debug(f'llm.text; prompt_length={len(self.system_prompt) + len(prompt)}')
+        result = self.client.chat.completions.create(
+            messages=[
+                {
+                    'role': 'system',
+                    'content': self.system_prompt,
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                },
+            ],
+            model=self.model_name,
+            seed=seed,
+        )
+
+        # update usage info
+        usage = {
+            self.model: {
+                'text/out': result.usage.completion_tokens,
+                'text/in': result.usage.prompt_tokens,
+                },
+            }
+        self.usage[self.model] += usage[self.model]
+
+        logger.info(f'self._tokens_to_prices()={self._tokens_to_prices(self.usage)}')
+        logger.info(f'self._total_price()={self._total_price(self.usage)}')
+        return result.choices[0].message.content, usage
+
+    def generate_file(self, path, prompt, *, overwrite=False, seed=None):
+        mode = 'wb' if overwrite else 'xb'
+        try:
+            # generate the file
+            _, extension = os.path.splitext(path)
+            with open(path, mode) as fout:
+                if extension == '.png':
+                    usage = self.image(fout, prompt)
+                else:
+                    text, usage = self.text(prompt)
+                    blob = text.encode('utf-8')
+                    fout.write(blob)
+
+            # generate build info JSON
+            buildinfo = {
+                "__fac_version__": '0.0.0-dev',
+                "time": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "path": path,
+                "build_id": self.build_id,
+                "cost": self._total_price(usage),
+                "usage": usage,
+                }
+            buildinfo_str = json.dumps(buildinfo) + '\n'
+
+            buildinfo_path = os.path.join(os.path.dirname(path), '.' + os.path.basename(path) + '.fac')
+            with open(buildinfo_path, 'wt') as fout:
+                fout.write(buildinfo_str)
+
+            # register action globally
+            with open('.fac.jsonl', 'ta') as fout:
+                fout.write(buildinfo_str)
+
+        except FileExistsError:
+            logger.warning(f'file "{path}" exists; skipping')
+
+    def _total_price(self, tokens):
+        prices = self._tokens_to_prices(tokens)
+        total = sum([sum(prices[model].values()) for model in prices])
+        return total
+
+    def _tokens_to_prices(self, tokens):
+        prices = {}
+        for model in tokens:
+            prices[model] = {}
+            for event in tokens[model]:
+                prices[model][event] = self.models[model][event] * tokens[model][event] / 1000000.0
+        return prices
+
+
+from dataclasses import dataclass, fields
+
+@dataclass
 class BuildSystem:
+    targets: [str]
+    project_dir: str = '.'
+    prompt_dir: str = 'prompts'
+    config_file: str = 'fac.yaml'
+    overwrite: bool = False
+    print_prompt: bool = False
+    print_contexts: bool = False
+    debug: bool = False
 
-    def __init__(
-            self,
-            project_dir,
-            pattern_to_build='/dev/stdout',
-            *,
-            prompt_dir='prompts',
-            config_file='fac.yaml',
-            overwrite=False,
-            print_prompt=False,
-            print_contexts=False,
-            simple_logger=False,
-            quiet=False,
-            debug=False,
-            collapse_display=False,
-            ):
-        if debug:
+    def __post_init__(self):
+        self.llm = LLM()
+        if self.debug:
             logger.setLevel(logging.DEBUG)
 
-        # update attributes;
-        # these are all the command line args from clize
-        self.pattern_to_build = pattern_to_build
-        self.prompt_dir = prompt_dir
-        self.overwrite = overwrite
-        self.print_prompt = print_prompt
-        self.print_contexts = print_contexts
-        self.collapse_display = collapse_display
-
-        # all paths will be relative to project_dir
-        os.chdir(project_dir)
-
         # load config file
-        import yaml
-        config_path = config_file
-        with open(config_path) as fin:
+        with open(self.config_file) as fin:
             self.full_config = yaml.safe_load(fin)
 
-        self.llm = LLM()
-
-        # setup logging
-        if pattern_to_build:
-            self.build_pattern(pattern_to_build, {})
+        # build all targets
+        for target in self.targets:
+            logger.info(f'target="{target}"')
+            self.build_target(target, {})
 
     @with_subtree(logger)
-    def build_pattern(self, pattern_to_build, input_env):
-        logger.debug(f'pattern_to_build="{pattern_to_build}"')
+    def build_target(self, target_to_build, input_env):
 
-        # load pattern config
-        config_patterns = self.full_config.keys()
-        transformed_pattern, pattern_env = match_pattern(config_patterns, pattern_to_build)
-        logger.debug(f"transformed_pattern={transformed_pattern}; pattern_env={pattern_env}")
-        assert transformed_pattern, f'transformed_pattern={transformed_pattern}, pattern_to_build={pattern_to_build}, input_env={input_env}, config_patterns={config_patterns}'
-        assert transformed_pattern in self.full_config
-        config = self.full_config[transformed_pattern]
+        # load target config
+        config_targets = self.full_config.keys()
+        transformed_target, target_env = match_pattern(config_targets, target_to_build)
+        logger.debug(f"transformed_target={transformed_target}; target_env={target_env}")
+        if not transformed_target:
+            logger.error(f'target_to_build="{target_to_build}" not found in config')
+            sys.exit(1)
+        assert transformed_target
+        assert transformed_target in self.full_config
+        config = self.full_config[transformed_target]
 
-        # compute the variables and resolve dependencies
+        # a BuildContext contains all the information needed to build a file;
+        # contexts contains a BuildContext for each file that will be generated;
+        # we start with a list that contains a single BuildContext but many unresolved_dependencies;
+        # as we process the dependencies/variables in the config,
+        # the unresolved_dependencies list should shrink to [],
+        # but the total number of contexts (i.e. files needed to build) may grow;
+        # the algorithm for generating the final contexts list is a bit subtle
         BuildContext = namedtuple('Context', [
             'variables',
             'include_paths',
             'unresolved_dependencies'
             ])
         contexts = [BuildContext(
-            {**input_env, **pattern_env},
+            {**input_env, **target_env},
             [],
-            config['dependencies'].split(),
+            config.get('dependencies', '').split(),
             )]
         
         DUMMY_VAR = '__NONE__'
         config_variables = config.get('variables', {DUMMY_VAR: 'DUMMY_VAL'})
         assert type(config_variables) is dict, "did you write `variables: |` instead of `variables:`?"
+
         for var, expr in config_variables.items():
             expr = expr.strip()
-
-            # compute the variables
             logger.debug(f'computing {var}=$({expr})')
+
+            # compute the new contexts list after resolving this variable;
+            # since we will be modifying the contexts list,
+            # we need to loop over a copy
             contexts0 = contexts
             contexts = []
             for context in contexts0:
 
                 # compute the dependencies
-                logger.debug(f'computing dependencies for "{pattern_to_build}"')
+                logger.debug(f'computing dependencies for "{target_to_build}"')
                 include_paths1 = []
                 unresolved_dependencies1 = []
-                for dep_pattern in context.unresolved_dependencies:
-                    logger.info(f'resolving dependency {dep_pattern}')
+                for dep_target in context.unresolved_dependencies:
+                    logger.info(f'resolving dependency: "{dep_target}"')
                     try:
-                        dep_paths = expand_path(dep_pattern, context.variables)
+                        dep_paths = expand_path(dep_target, context.variables)
                         if not dep_paths:
-                            logger.debug(f'no paths found for dep_pattern={dep_pattern}, building')
-                            self.build_pattern(dep_pattern, context.variables)
+                            logger.debug(f'no paths found for dep_target={dep_target}, building')
+                            self.build_target(dep_target, context.variables)
                         else:
-                            logger.debug(f'matched: dep_pattern="{dep_pattern}"')
+                            logger.debug(f'matched: dep_target="{dep_target}"')
+                        for dep_path in dep_paths:
+                            logger.debug(f'validating dep_path={dep_path}')
+                            if not validate_file(dep_path, fix=False):
+                                logger.warning(f'failed to validate dep_path={dep_path}')
                         include_paths1.extend(dep_paths)
 
                     # if expand_path failed, there is an unresolved dependency in the path;
                     # so we must keep it around and try to resolve it again after computing more variables
                     except TemplateProcessingError:
-                        if dep_pattern in self.full_config:
-                            self.build_pattern(dep_pattern, context.variables)
+                        if dep_target in self.full_config:
+                            self.build_target(dep_target, context.variables)
                         else:
-                            unresolved_dependencies1.append(dep_pattern)
+                            unresolved_dependencies1.append(dep_target)
 
                 logger.debug(f"include_paths1={include_paths1}")
                 logger.debug(f"unresolved_dependencies1={unresolved_dependencies1}")
@@ -729,12 +827,12 @@ class BuildSystem:
                 # do not evaluate the variable if it is DUMMY_VAR,
                 # since it was created only to force the unresolved_dependencies to run once
                 if var == DUMMY_VAR:
-                    vals = ''
+                    value = ''
 
                 # the var was specified in the environment,
                 # so we do not execute the expr
                 elif var in context.variables:
-                    vals = context.variables[var]
+                    value = context.variables[var]
 
                 # run the expr in the bash shell
                 else:
@@ -749,26 +847,26 @@ class BuildSystem:
                         )
                     if result.returncode != 0 or result.stdout.strip() == '':
                         raise VariableEvaluationError(var, expr, context, result)
-                    vals = result.stdout
+                    value = result.stdout
 
-                    if vals.strip() == '':
+                    if value.strip() == '':
                         raise EmptyVariableError(var, expr, result)
 
                 # lists are separated by null characters;
                 # for each entry in the list,
                 # we will add a new context with the entry added
-                vals_split = [val.strip() for val in vals.split('\0')]
+                value_list = [val.strip() for val in value.split('\0')]
 
                 # don't add val to the contexts list when it is empty;
                 # this is because when doing the split on \0,
                 # we will always have the last entry be '',
                 # because of the tr '\n' '\0' command
                 # and all outputs ending in a '\n'
-                vals_split = [val for val in vals_split if len(val) > 0]
-                if len(vals_split) == 0:
-                    vals_split = ['']
+                value_list = [val for val in value_list if len(val) > 0]
+                if len(value_list) == 0:
+                    value_list = ['']
 
-                for val in vals_split:
+                for val in value_list:
 
                     # if val is an integer, pad it with zeros
                     try:
@@ -787,9 +885,6 @@ class BuildSystem:
 
             if var != DUMMY_VAR:
                 logger.info(f'resolved variable {var}; len(contexts)={len(contexts)}')
-                vals_split_disp = vals_split
-                if len(vals_split) == 1:
-                    vals_split_disp = vals_split[0]
 
         # print contexts debug information
         if self.print_contexts:
@@ -802,8 +897,8 @@ class BuildSystem:
         for i, context in enumerate(contexts):
 
             # output debug info about the context to process
-            path_to_generate = process_template(pattern_to_build, context.variables)
-            infostr = f'building {i+1}/{len(contexts)} "{path_to_generate}"'
+            path_to_generate = process_template(target_to_build, context.variables)
+            infostr = f'building file {i+1}/{len(contexts)} "{path_to_generate}"'
             logger.info(infostr)
             logger.debug(f'context={context}')
 
@@ -832,7 +927,6 @@ class BuildSystem:
                     executable="/bin/bash",
                     env=context.variables,
                     )
-                print(result.stdout)
                 if result.returncode != 0:
                     raise CommandExecutionError(result)
 
@@ -841,31 +935,7 @@ class BuildSystem:
                 self.context_to_file(path_to_generate, config, context)
 
             # validate file
-            self.validate_file(path_to_generate)
-
-    def validate_file(self, path, fix_json=True):
-        # ensure the input path exists
-        if not os.path.exists(path):
-            raise RuntimeError(f'path="{path}" does not exist')
-        
-        # ensure the file is non-empty
-        if not path.startswith('/dev/') and os.path.getsize(path) == 0:
-            raise RuntimeError(f'os.path.getsize("{path}")=0')
-
-        # if the file is JSON, ensure that it is valid JSON
-        _, extension = os.path.splitext(path)
-        if extension == '.json':
-            with open(path) as fin:
-                text = fin.read()
-            try:
-                json.loads(text)
-            except json.JSONDecodeError as e:
-                if fix_json:
-                    print('fixing JSONDecodeError')
-                    import json_repair
-                    with open(path, 'wt') as fout:
-                        obj = json_repair.loads(text, skip_json_loads=True)
-                        json.dump(obj, fout)
+            validate_file(path_to_generate, config.get('schema_file'))
 
     def context_to_file(self, path_to_generate, config, context):
 
@@ -917,18 +987,29 @@ class BuildSystem:
             return
 
         # write to the output file
-        mode = 'wb' if self.overwrite else 'xb'
-        try:
-            with open(path_to_generate, mode) as fout:
-                if extension == '.png':
-                    self.llm.image(fout, prompt)
-                else:
-                    text = self.llm.text(prompt)
-                    blob = text.encode('utf-8')
-                    fout.write(blob)
-        except FileExistsError:
-            logger.warning(f'file "{path_to_generate}" exists; skipping')
+        self.llm.generate_file(path_to_generate, prompt, overwrite=self.overwrite)
 
+
+################################################################################
+# CLI
+################################################################################
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('targets', nargs='+')
+
+    # add all other fields from the dataclass as optional arguments
+    for field in fields(BuildSystem):
+        if field.name != 'targets':
+            name = f'--{field.name}'
+            if field.type == bool and field.default == False:
+                parser.add_argument(name, action='store_true', help=f'{field.name}')
+            else:
+                parser.add_argument(name, default=field.default, help=f'{field.name}')
+    
+    args = parser.parse_args()
+    build_system = BuildSystem(**vars(args))
 
 if __name__ == '__main__':
-    clize.run(BuildSystem)
+    main()

@@ -16,8 +16,8 @@
   variables:
     SEARCH_BREADTH: echo 20
 
-"$TOPIC/search/$DOMAIN/$TERM":
-  cmd: echo $DOMAIN
+"$TOPIC/search/$DOMAIN/$TERM/results.json":
+  cmd: scripts/search.py "$DOMAIN/$TERM/results.json" "site:$DOMAIN $TERM"
   dependencies: |
     $TOPIC/search_terms.json
     $TOPIC/search_websites.json

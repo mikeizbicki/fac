@@ -1,5 +1,9 @@
+"hebrew/vocabulary.md":
+  prompt_file: hebrew/prompt
+
 "$STORY/outline.json":
   prompt_file: prompts/outline
+  schema_file: prompts/outline.json-schema
   dependencies: |
     prompts/story_structures/freytag
     about
@@ -7,6 +11,7 @@
     characters/*/about.json
 
 "$STORY/locations.json":
+  prompt_file: prompts/locations
   dependencies: |
     prompts/story_structures/freytag
     about
@@ -14,12 +19,46 @@
     $STORY/outline.json
     characters/*/about.json
 
+"$STORY/scenes/$LOCATION.png":
+  prompt_file: prompts/scene_png
+  filetype: image
+  dependencies: |
+    $STORY/locations.json
+  variables:
+    LOCATION: |
+      jq -r '.[].sublocations[].name' $STORY/locations.json | tr '\n' '\0'
+
+"$STORY/chapter$CHAPTER/vocab.md":
+  prompt:
+    Prepare the list of vocabulary to introduce in chapter $CHAPTER.
+    The vocabulary should be simple.
+    Young children should be able to understand the meaning of the vocab through context.
+    Whenever possible, restrict your vocabulary to only biblical hebrew provided in the 'hebrew/vocabulary.md' file, and introduce related terms at the same time.
+    Each chapter should introduce at most 10 new words.
+
+    Format the output in markdown tables, one table for each part of speech.
+    Do not provide transliterations, but do provide English glosses.
+
+    The text of the chapter is
+    $CHAPTER_TEXT
+  dependencies: |
+    about
+    hebrew/vocabulary.md
+    $STORY/about
+  variables:
+    CHAPTER: |
+      jq -r 'range(0; .chapters | length)' $STORY/outline.json | tr '\n' '\0'
+    CHAPTER_TEXT: |
+      jq ".chapters[$CHAPTER]" $STORY/outline.json
+
 "$STORY/chapter$CHAPTER/chapter.json":
+  prompt_file: prompts/chapter
   dependencies: |
     about
     $STORY/about
     $STORY/outline.json
     $STORY/locations.json
+    $STORY/chapter$CHAPTER/vocab.md
     characters/*/about.json
   variables:
     CHAPTER: |
@@ -43,20 +82,15 @@
       echo $STORY/chapter$CHAPTER/chapter.json
     SECTION: |
       jq -r 'range(0; .sections | length)' $STORY/chapter$CHAPTER/chapter.json | tr '\n' '\0'
-      #NUM_SECTIONS: |
-      #jq '.sections | length' $STORY/chapter$CHAPTER/chapter.json
-      #SECTION: |
-      #seq 0 $(($NUM_SECTIONS - 1)) | tr '\n' '\0'
     PREV_SECTION: |
       echo $(($(bc <<< "scale=0; $SECTION") - 1))
-      #echo $(($SECTION - 1))
     SECTION_TEXT: |
       jq ".sections[$SECTION]" $STORY/chapter$CHAPTER/chapter.json
 
 "$STORY/text.md":
   cmd: ./scripts/gen_markdown.py "$STORY/"
   dependencies: |
-    $STORY/chapter$CHAPTER/section$SECTION/blocking.json
+    $STORY/chapter$CHAPTER/chapter.json
 
 "$STORY/text.html":
   cmd: ./scripts/gen_html.sh "$STORY/text.md"

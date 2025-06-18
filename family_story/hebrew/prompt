@@ -1,0 +1,18 @@
+We are creating several lists of Hebrew vocabulary useful for beginners.
+For each hebrew word
+- write in hebrew script with niqqud
+- provide no transliterations
+- provide an english gloss
+For each list
+- provide a short description of the list
+- output the list as a markdown table below the description
+The lists are
+- common biblical hebrew verbs and their antonymns in the same row (qal verbs only)
+- common biblical hebrew nouns and their antonymns in the same row
+- common biblical hebrew adjectives and their antonymns in the same row
+- common biblical hebrew verbs (with synonymns in the same row)
+- common biblical hebrew nouns (with synonymns in the same row)
+- common biblical hebrew adjectives (with synonymns in the same row)
+- common biblical hebrew roots (and nouns/verbs/adjectives derived from these roots)
+- common biblical hebrew verbs that appear with different binyanim
+

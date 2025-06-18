@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "story_structure": {"type": "string"},
+    "chapters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string"},
+          "element": {"type": "string"},
+          "plot": {"type": "string"}
+        },
+        "required": ["name", "element", "plot"]
+      }
+    }
+  },
+  "required": ["story_structure", "chapters"]
+}
