@@ -1,0 +1,724 @@
+[
+    {
+        "title": "Big and Small",
+        "picture_context": "Aaron stands tall like a dinosaur, while Aurelia sits tiny like a mouse beside him.",
+        "vignette": "אִיזָק גָּדוֹל. אָרוֹן קָטָן. גָּדוֹל. קָטָן. אִיזָק גָּדוֹל. אָרוֹן קָטָן.",
+        "main_vocab": [
+            "גָּדוֹל (big)",
+            "קָטָן (small)"
+        ],
+        "other_vocab": [
+            "אִיזָק (Isaac)",
+            "אָרוֹן (Aaron)"
+        ],
+        "description": "This vignette teaches the adjectives big (גָּדוֹל) and small (קָטָן) using simple repetition and contrast with two characters."
+    },
+    {
+        "title": "Happy and Sad",
+        "picture_context": "Aurelia cries with a tear, but then Shenzi the dog hugs her, and she smiles.",
+        "vignette": "אוֹרֵלְיָה עָצֵב. שֵׁנְזִי חָבַק אוֹרֵלְיָה. אוֹרֵלְיָה שָׂמֵחַ. עָצֵב. שָׂמֵחַ.",
+        "main_vocab": [
+            "עָצֵב (sad)",
+            "שָׂמֵחַ (happy)"
+        ],
+        "other_vocab": [
+            "אוֹרֵלְיָה (Aurelia)",
+            "שֵׁנְזִי (Shenzi)",
+            "חָבַק (hug)"
+        ],
+        "description": "This vignette shows the adjectives sad (עָצֵב) and happy (שָׂמֵחַ), using a familiar comfort scene with repetition."
+    },
+    {
+        "title": "Found and Lost",
+        "picture_context": "Evan holds his blanket high with a big smile, after looking for it everywhere.",
+        "vignette": "אֶבֶן בִּקֵּשׁ שְׂמִיכָה. אֶבֶן מָצָא שְׂמִיכָה. בִּקֵּשׁ. מָצָא.",
+        "main_vocab": [
+            "בִּקֵּשׁ (look for)",
+            "מָצָא (find)"
+        ],
+        "other_vocab": [
+            "אֶבֶן (Evan)",
+            "שְׂמִיכָה (blanket)"
+        ],
+        "description": "Illustrates the key verbs to seek (בִּקֵּשׁ) and find (מָצָא) using the familiar lost-and-found blanket scene."
+    },
+    {
+        "title": "Near and Far",
+        "picture_context": "Aurelia stands close to Isaac, while Aaron is far away, waving.",
+        "vignette": "אוֹרֵלְיָה קָרוֹב לְאִיזָק. אָרוֹן רָחוֹק. קָרוֹב. רָחוֹק.",
+        "main_vocab": [
+            "קָרוֹב (near)",
+            "רָחוֹק (far)"
+        ],
+        "other_vocab": [
+            "אוֹרֵלְיָה (Aurelia)",
+            "אִיזָק (Isaac)",
+            "אָרוֹן (Aaron)"
+        ],
+        "description": "Teaches the contrasting spatial concepts near (קָרוֹב) and far (רָחוֹק) with repetition and illustration."
+    },
+    {
+        "title": "Do and Rest",
+        "picture_context": "Evan builds a block tower, then lies down for a nap.",
+        "vignette": "אֶבֶן עָשָׂה. אֶבֶן שָׁבַת. עָשָׂה. שָׁבַת.",
+        "main_vocab": [
+            "עָשָׂה (do)",
+            "שָׁבַת (rest)"
+        ],
+        "other_vocab": [
+            "אֶבֶן (Evan)"
+        ],
+        "description": "Uses juxtaposition and repetition of do (עָשָׂה) and rest (שָׁבַת) to show simple action versus stillness."
+    },
+    {
+        "title": "Sit and Stand",
+        "picture_context": "Aaron sits on the floor like a dinosaur, then stands up tall next to him.",
+        "vignette": "אָרוֹן יָשַׁב. אָרוֹן עָמַד. יָשַׁב. עָמַד.",
+        "main_vocab": [
+            "יָשַׁב (sit)",
+            "עָמַד (stand)"
+        ],
+        "other_vocab": [
+            "אָרוֹן (Aaron)"
+        ],
+        "description": "Highlights simple posture verbs sit (יָשַׁב) and stand (עָמַד) through repetition and demonstration."
+    },
+    {
+        "title": "Eat and Drink",
+        "picture_context": "Aurelia munches on pizza, then drinks from a little cup.",
+        "vignette": "אוֹרֵלְיָה אָכַל. אוֹרֵלְיָה שָׁתָה. אָכַל. שָׁתָה.",
+        "main_vocab": [
+            "אָכַל (eat)",
+            "שָׁתָה (drink)"
+        ],
+        "other_vocab": [
+            "אוֹרֵלְיָה (Aurelia)"
+        ],
+        "description": "Demonstrates the basic verbs eat (אָכַל) and drink (שָׁתָה) for food and mealtime contexts."
+    },
+    {
+        "title": "Take and Give",
+        "picture_context": "Isaac takes a toy car, then gives it to Aurelia, who smiles.",
+        "vignette": "אִיזָק לָקַח. אִיזָק נָתַן לאוֹרֵלְיָה. לָקַח. נָתַן.",
+        "main_vocab": [
+            "לָקַח (take)",
+            "נָתַן (give)"
+        ],
+        "other_vocab": [
+            "אִיזָק (Isaac)",
+            "אוֹרֵלְיָה (Aurelia)"
+        ],
+        "description": "Introduces take (לָקַח) and give (נָתַן) with repetition and props to reinforce both actions."
+    },
+    {
+        "title": "Up and Down",
+        "picture_context": "Aaron leaps up high as a dinosaur, then crouches low, playing.",
+        "vignette": "אָרוֹן עָלָה. אָרוֹן יָרַד. עָלָה. יָרַד.",
+        "main_vocab": [
+            "עָלָה (go up)",
+            "יָרַד (go down)"
+        ],
+        "other_vocab": [
+            "אָרוֹן (Aaron)"
+        ],
+        "description": "Uses up (עָלָה) and down (יָרַד) with actions to teach the vertical motion verbs to young children."
+    },
+    {
+        "title": "Open and Close",
+        "picture_context": "Isaac opens a toy box wide and then shuts it tight.",
+        "vignette": "אִיזָק פָּתַח. אִיזָק סָגַר. פָּתַח. סָגַר.",
+        "main_vocab": [
+            "פָּתַח (open)",
+            "סָגַר (close)"
+        ],
+        "other_vocab": [
+            "אִיזָק (Isaac)"
+        ],
+        "description": "Demonstrates the verbs to open (פָּתַח) and to close (סָגַר) with simple object interaction."
+    },
+    {
+        "title": "More and Less",
+        "picture_context": "Evan has many legos, Aurelia has just a few, shown side by side.",
+        "vignette": "אֶבֶן רַב לְגוֹ. אוֹרֵלְיָה מְעַט לְגוֹ. רַב. מְעַט.",
+        "main_vocab": [
+            "רַב (many)",
+            "מְעַט (few)"
+        ],
+        "other_vocab": [
+            "אֶבֶן (Evan)",
+            "אוֹרֵלְיָה (Aurelia)",
+            "לְגוֹ (Lego)"
+        ],
+        "description": "Contrasts many (רַב) and few (מְעַט) with repeated use for clarity and memorability."
+    },
+    {
+        "title": "Hot and Cold",
+        "picture_context": "Aaron shivers wrapped in a blanket, then fans himself using a book.",
+        "vignette": "אָרוֹן קָר. אָרוֹן חַם. קָר. חַם.",
+        "main_vocab": [
+            "קָר (cold)",
+            "חַם (hot)"
+        ],
+        "other_vocab": [
+            "אָרוֹן (Aaron)"
+        ],
+        "description": "Repetition of hot (חַם) and cold (קָר) shows temperature use in a relatable home environment."
+    },
+    {
+        "title": "Come and Go",
+        "picture_context": "Aurelia runs toward a big door, then away out to the field.",
+        "vignette": "אוֹרֵלְיָה בָּא. אוֹרֵלְיָה הָלַךְ. בָּא. הָלַךְ.",
+        "main_vocab": [
+            "בָּא (come)",
+            "הָלַךְ (go)"
+        ],
+        "other_vocab": [
+            "אוֹרֵלְיָה (Aurelia)"
+        ],
+        "description": "This scene teaches come (בָּא) and go (הָלַךְ) through repeated movement."
+    },
+    {
+        "title": "Laugh and Cry",
+        "picture_context": "Evan laughs with a wide grin, then turns and cries a big tear.",
+        "vignette": "אֶבֶן צָחַק. אֶבֶן בָּכָה. צָחַק. בָּכָה.",
+        "main_vocab": [
+            "צָחַק (laugh)",
+            "בָּכָה (cry)"
+        ],
+        "other_vocab": [
+            "אֶבֶן (Evan)"
+        ],
+        "description": "Juxtaposes laughing (צָחַק) and crying (בָּכָה) for emotional vocabulary practice."
+    },
+    {
+        "title": "Light and Dark",
+        "picture_context": "Aaron switches on a lamp for bright light, then off for darkness.",
+        "vignette": "אָרוֹן אוֹר. אָרוֹן חֹשֶׁךְ. אוֹר. חֹשֶׁךְ.",
+        "main_vocab": [
+            "אוֹר (light)",
+            "חֹשֶׁךְ (dark)"
+        ],
+        "other_vocab": [
+            "אָרוֹן (Aaron)"
+        ],
+        "description": "Contrasts light (אוֹר) with dark (חֹשֶׁךְ) for basic environmental vocabulary."
+    },
+    {
+        "title": "Love and Fight",
+        "picture_context": "Isaac and Evan frown at each other, then after a hug they both smile.",
+        "vignette": "אִיזָק אָהַב אֶבֶן. אִיזָק רָב. אִיזָק אָהַב אֶבֶן. אָהַב. רָב.",
+        "main_vocab": [
+            "אָהַב (love)",
+            "רָב (fight)"
+        ],
+        "other_vocab": [
+            "אִיזָק (Isaac)",
+            "אֶבֶן (Evan)"
+        ],
+        "description": "Illustrates positive and negative interactions with love (אָהַב) and fight (רָב), reinforcing both through storyline repetition."
+    },
+    {
+        "title": "Help! Help!",
+        "picture_context": "Aurelia falls on the floor; Isaac runs to help her up.",
+        "vignette": "אוֹרֵלְיָה נָפַל. אִיזָק עָזַר אוֹרֵלְיָה. עָזַר. נָפַל.",
+        "main_vocab": [
+            "עָזַר (help)",
+            "נָפַל (fall)"
+        ],
+        "other_vocab": [
+            "אוֹרֵלְיָה (Aurelia)",
+            "אִיזָק (Isaac)"
+        ],
+        "description": "Introduces 'fall' (נָפַל) and 'help' (עָזַר) with an action sequence and peer support."
+    },
+    {
+        "title": "Read and Write",
+        "picture_context": "Evan reads a scroll, then Isaac writes in a book, both seated.",
+        "vignette": "אֶבֶן קָרָא סֵפֶר. אִיזָק כָּתַב סֵפֶר. קָרָא. כָּתַב.",
+        "main_vocab": [
+            "קָרָא (read/call)",
+            "כָּתַב (write)"
+        ],
+        "other_vocab": [
+            "אֶבֶן (Evan)",
+            "אִיזָק (Isaac)",
+            "סֵפֶר (book)"
+        ],
+        "description": "Reinforces 'read' (קָרָא) and 'write' (כָּתַב) in a literacy setting, supporting emergent Hebrew literacy."
+    },
+    {
+        "title": "Blanket Search",
+        "picture_context": "All the children look under the table, behind the sofa, and inside boxes for the missing blanket.",
+        "vignette": "יֶלֶד בִּקֵּשׁ שְׂמִיכָה. בִּקֵּשׁ תַּחַת שֻׁלְחָן, בִּקֵּשׁ בַּתֵּיבָה. שְׂמִיכָה לֹא שָׁם. מָצָא שְׂמִיכָה.",
+        "main_vocab": [
+            "בִּקֵּשׁ (seek)",
+            "מָצָא (find)",
+            "שְׂמִיכָה (blanket)"
+        ],
+        "other_vocab": [
+            "יֶלֶד (child)",
+            "תַּחַת (under)",
+            "שֻׁלְחָן (table)",
+            "תֵּיבָה (box)",
+            "שָׁם (there)"
+        ],
+        "description": "Practices the verbs for seeking (בִּקֵּשׁ) and finding (מָצָא), while focusing on the word for blanket (שְׂמִיכָה) with strong context repetition."
+    },
+    {
+        "title": "Need and Gift",
+        "picture_context": "Minions rush in carrying a silly, oversized sandwich and drop it with a bow.",
+        "vignette": "יֶלֶד צָרַךְ. מִינְיוֹן הֵבִיא מַתָּנָה. מַתָּנָה.",
+        "main_vocab": [
+            "צֹרֶךְ (need)",
+            "הֵבִיא (bring)",
+            "מַתָּנָה (present)"
+        ],
+        "other_vocab": [
+            "יֶלֶד (child)",
+            "מִינְיוֹן (minion)"
+        ],
+        "description": "Teaches need (צֹרֶךְ), bring (הֵבִיא), and gift (מַתָּנָה) through a humorous and memorable minion scene."
+    },
+    {
+        "title": "Poop Break",
+        "picture_context": "Aaron holds his tummy, races to the bathroom, then comes back looking relieved.",
+        "vignette": "אָרוֹן צָרִיךְ צוֹאָה. אָרוֹן רָץ. אָרוֹן שָׁב.",
+        "main_vocab": [
+            "צוֹאָה (poop)"
+        ],
+        "other_vocab": [
+            "אָרוֹן (Aaron)",
+            "רָץ (ran)",
+            "שָׁב (return/come back)",
+            "צָרִיךְ (need)"
+        ],
+        "description": "Briefly and humorously illustrates the need to go to the bathroom using simple, repeated vocabulary."
+    },
+    {
+        "title": "Fight and Hug",
+        "picture_context": "Isaac and Aurelia scowl with crossed arms, then both hug and smile.",
+        "vignette": "אִיזָק רָב אוֹרֵלְיָה. אִיזָק זָכַר: אָהַב טוֹב. רָב. אָהַב. חָבַק.",
+        "main_vocab": [
+            "רָב (fight)",
+            "אָהַב (love)",
+            "חָבַק (hug)"
+        ],
+        "other_vocab": [
+            "אִיזָק (Isaac)",
+            "אוֹרֵלְיָה (Aurelia)",
+            "זָכַר (remember)",
+            "טוֹב (good)"
+        ],
+        "description": "Addresses fighting and reconciliation through fight (רָב), love (אָהַב), and hug (חָבַק), underlining good behavior."
+    },
+    {
+        "title": "Book Help",
+        "picture_context": "Evan sits with a big open scroll and points to a bright picture inside.",
+        "vignette": "אֶבֶן קָרָא סֵפֶר. סֵפֶר עָזַר אֶבֶן.",
+        "main_vocab": [
+            "קָרָא (read)",
+            "סֵפֶר (book)",
+            "עָזַר (help)"
+        ],
+        "other_vocab": [
+            "אֶבֶן (Evan)"
+        ],
+        "description": "Reinforces the verbs for read (קָרָא) and help (עָזַר), showing how a book can help a child."
+    },
+    {
+        "title": "Jump High",
+        "picture_context": "Aaron, as a dinosaur, jumps as high as he can, arms up.",
+        "vignette": "אָרוֹן קָפַץ. אָרוֹן עָלָה.",
+        "main_vocab": [
+            "קָפַץ (jump)",
+            "עָלָה (go up)"
+        ],
+        "other_vocab": [
+            "אָרוֹן (Aaron)"
+        ],
+        "description": "Combines jump (קָפַץ) with up (עָלָה), showing action and direction."
+    },
+    {
+        "title": "Many Colors",
+        "picture_context": "Aurelia lines up bright blocks: red, blue, yellow, green.",
+        "vignette": "בְּלוֹק צָהוֹב. בְּלוֹק כָּחוֹל. בְּלוֹק אָדוֹם. בְּלוֹק יָרוֹק.",
+        "main_vocab": [
+            "צָהוֹב (yellow)",
+            "כָּחוֹל (blue)",
+            "אָדוֹם (red)",
+            "יָרוֹק (green)"
+        ],
+        "other_vocab": [
+            "בְּלוֹק (block)"
+        ],
+        "description": "Practices color adjectives, each with a simple repetitive noun structure."
+    },
+    {
+        "title": "Sleep and Awake",
+        "picture_context": "Isaac snoozes on a blanket, then wakes up with arms stretched.",
+        "vignette": "אִיזָק יָשֵׁן. אִיזָק עֵר. יָשֵׁן. עֵר.",
+        "main_vocab": [
+            "יָשֵׁן (sleep)",
+            "עֵר (awake)"
+        ],
+        "other_vocab": [
+            "אִיזָק (Isaac)"
+        ],
+        "description": "Contrasts sleep (יָשֵׁן) and awake (עֵר), showing morning and night routines."
+    },
+    {
+        "title": "Hear and Silent",
+        "picture_context": "Evan cups his ear, listening; then everyone is silent holding a finger to lips.",
+        "vignette": "אֶבֶן שָׁמַע. אֶבֶן חָרַשׁ. שָׁמַע. חָרַשׁ.",
+        "main_vocab": [
+            "שָׁמַע (hear)",
+            "חָרַשׁ (be silent)"
+        ],
+        "other_vocab": [
+            "אֶבֶן (Evan)"
+        ],
+        "description": "Contrasts the verb 'hear' (שָׁמַע) and 'be silent' (חָרַשׁ), useful for group listening times."
+    },
+    {
+        "title": "See and Hide",
+        "picture_context": "Aurelia peeks out from under a big pillow while Isaac pretends not to see her.",
+        "vignette": "אוֹרֵלְיָה נִסְתָּר. אִיזָק רָאָה. נִסְתָּר. רָאָה.",
+        "main_vocab": [
+            "נִסְתָּר (hidden)",
+            "רָאָה (see)"
+        ],
+        "other_vocab": [
+            "אוֹרֵלְיָה (Aurelia)",
+            "אִיזָק (Isaac)"
+        ],
+        "description": "Practices contrasting perception verbs: hidden (נִסְתָּר) and see (רָאָה)."
+    },
+    {
+        "title": "Hungry and Full",
+        "picture_context": "Aaron rubs his belly hungrily, then leans back after a big meal.",
+        "vignette": "אָרוֹן רָעֵב. אָרוֹן שָׂבֵעַ. רָעֵב. שָׂבֵעַ.",
+        "main_vocab": [
+            "רָעֵב (hungry)",
+            "שָׂבֵעַ (full, after eating)"
+        ],
+        "other_vocab": [
+            "אָרוֹן (Aaron)"
+        ],
+        "description": "Shows food-related adjectives hungry (רָעֵב) and full (שָׂבֵעַ) in a meal context."
+    },
+    {
+        "title": "Outside! Inside!",
+        "picture_context": "Isaac steps outside through the door, then returns inside, waving.",
+        "vignette": "אִיזָק בַּיִת. אִיזָק חוּץ. בַּיִת. חוּץ.",
+        "main_vocab": [
+            "בַּיִת (inside)",
+            "חוּץ (outside)"
+        ],
+        "other_vocab": [
+            "אִיזָק (Isaac)"
+        ],
+        "description": "Reinforces inside (בַּיִת) and outside (חוּץ) with repeated action."
+    },
+    {
+        "title": "Fast and Slow",
+        "picture_context": "Aaron races around as a dinosaur, then moves slowly, crawling.",
+        "vignette": "אָרוֹן מָהֵר. אָרוֹן לְאַט. מָהֵר. לְאַט.",
+        "main_vocab": [
+            "מָהֵר (fast)",
+            "לְאַט (slow)"
+        ],
+        "other_vocab": [
+            "אָרוֹן (Aaron)"
+        ],
+        "description": "Contrasts speed concepts fast (מָהֵר) and slow (לְאַט) with action."
+    },
+    {
+        "title": "Old and New",
+        "picture_context": "Evan hugs his old blanket, then Aurelia opens a new colorful book.",
+        "vignette": "אֶבֶן שְׂמִיכָה יָשָׁן. אוֹרֵלְיָה סֵפֶר חָדָשׁ. יָשָׁן. חָדָשׁ.",
+        "main_vocab": [
+            "יָשָׁן (old, of things)",
+            "חָדָשׁ (new)"
+        ],
+        "other_vocab": [
+            "אֶבֶן (Evan)",
+            "אוֹרֵלְיָה (Aurelia)",
+            "שְׂמִיכָה (blanket)",
+            "סֵפֶר (book)"
+        ],
+        "description": "Contrasts old (יָשָׁן) and new (חָדָשׁ) objects for vocabulary practice."
+    },
+    {
+        "title": "Quiet and Loud",
+        "picture_context": "Isaac whispers to Aurelia, then all the children shout with joy.",
+        "vignette": "אִיזָק שָׁקֵט. יֶלֶד רָעַשׁ. שָׁקֵט. רָעַשׁ.",
+        "main_vocab": [
+            "שָׁקֵט (quiet)",
+            "רָעַשׁ (noise)"
+        ],
+        "other_vocab": [
+            "אִיזָק (Isaac)",
+            "יֶלֶד (child)"
+        ],
+        "description": "Practices the adjectives quiet (שָׁקֵט) and noisy (רָעַשׁ) for contrasting group moods."
+    },
+    {
+        "title": "Strong and Weak",
+        "picture_context": "Aaron lifts a big book, then pretends to struggle with a tiny feather.",
+        "vignette": "אָרוֹן חָזָק. אָרוֹן חַלָּשׁ. חָזָק. חַלָּשׁ.",
+        "main_vocab": [
+            "חָזָק (strong)",
+            "חַלָּשׁ (weak)"
+        ],
+        "other_vocab": [
+            "אָרוֹן (Aaron)"
+        ],
+        "description": "Contrasts strong (חָזָק) and weak (חַלָּשׁ) through exaggerated action."
+    },
+    {
+        "title": "Go Up! Go Down!",
+        "picture_context": "Evan climbs stairs, then slides down a ramp.",
+        "vignette": "אֶבֶן עָלָה. אֶבֶן יָרַד. עָלָה. יָרַד.",
+        "main_vocab": [
+            "עָלָה (go up)",
+            "יָרַד (go down)"
+        ],
+        "other_vocab": [
+            "אֶבֶן (Evan)"
+        ],
+        "description": "Reinforces up (עָלָה) and down (יָרַד) in the context of motion."
+    },
+    {
+        "title": "Together and Alone",
+        "picture_context": "All kids hold hands in a circle, then Aurelia sits apart by herself for a moment.",
+        "vignette": "יְלָדִים יַחַד. אוֹרֵלְיָה לְבַד. יַחַד. לְבַד.",
+        "main_vocab": [
+            "יַחַד (together)",
+            "לְבַד (alone)"
+        ],
+        "other_vocab": [
+            "יְלָדִים (children)",
+            "אוֹרֵלְיָה (Aurelia)"
+        ],
+        "description": "Contrasts social roles together (יַחַד) and alone (לְבַד) with clear visuals."
+    },
+    {
+        "title": "Dog Hug",
+        "picture_context": "Shenzi the dog snuggles with each sad child in turn, making them smile.",
+        "vignette": "עוֹצֵב. שֵׁנְזִי חָבַק. שָׂמֵחַ.",
+        "main_vocab": [
+            "עָצֵב (sad)",
+            "חָבַק (hug)",
+            "שָׂמֵחַ (happy)"
+        ],
+        "other_vocab": [
+            "שֵׁנְזִי (Shenzi)"
+        ],
+        "description": "Combines sad, hug, and happy (עָצֵב, חָבַק, שָׂמֵחַ) in a repetitive, comforting sequence."
+    },
+    {
+        "title": "Blanket Lost Again",
+        "picture_context": "The children lift cushions, peer under cabinets, and search the dog bed for the missing blanket.",
+        "vignette": "בִּקֵּשׁ שְׂמִיכָה בְּתוֹךְ בַּיִת. בִּקֵּשׁ שְׂמִיכָה תַּחַת כִּסֵּא. בִּקֵּשׁ. לֹא שָׁם. מָצָא שְׂמִיכָה.",
+        "main_vocab": [
+            "בִּקֵּשׁ (seek)",
+            "מָצָא (find)",
+            "שְׂמִיכָה (blanket)"
+        ],
+        "other_vocab": [
+            "בְּתוֹךְ (inside)",
+            "בַּיִת (house)",
+            "תַּחַת (under)",
+            "כִּסֵּא (chair)",
+            "לֹא (not)",
+            "שָׁם (there)"
+        ],
+        "description": "Strengthens comprehension of seek and find phrases and place vocabulary, always focused on the central blanket hunt theme."
+    },
+    {
+        "title": "Rain and Sun",
+        "picture_context": "Isaac presses his face to the window to watch rain, then jumps outside when the sun comes out.",
+        "vignette": "אִיזָק גֶּשֶׁם. אִיזָק שֶׁמֶשׁ. גֶּשֶׁם. שֶׁמֶשׁ.",
+        "main_vocab": [
+            "גֶּשֶׁם (rain)",
+            "שֶׁמֶשׁ (sun)"
+        ],
+        "other_vocab": [
+            "אִיזָק (Isaac)"
+        ],
+        "description": "Practices weather vocabulary through visual contrast and repetition."
+    },
+    {
+        "title": "Run and Stop",
+        "picture_context": "Aaron runs across the room, then stops suddenly with arms stretched wide.",
+        "vignette": "אָרוֹן רָץ. אָרוֹן עָצַר. רָץ. עָצַר.",
+        "main_vocab": [
+            "רָץ (run)",
+            "עָצַר (stop)"
+        ],
+        "other_vocab": [
+            "אָרוֹן (Aaron)"
+        ],
+        "description": "Contrasts motion (run, רָץ) and stillness (stop, עָצַר) with action-focused verbs."
+    },
+    {
+        "title": "Blanket Again!",
+        "picture_context": "Everyone piles on the couch, looking everywhere for the blanket.",
+        "vignette": "בִּקֵּשׁ שְׂמִיכָה. בִּקֵּשׁ בִּקֵּשׁ. מָצָא שְׂמִיכָה.",
+        "main_vocab": [
+            "בִּקֵּשׁ (seek)",
+            "מָצָא (find)",
+            "שְׂמִיכָה (blanket)"
+        ],
+        "other_vocab": [],
+        "description": "Continually reinforces key verbs for search and discovery within an everyday setting."
+    },
+    {
+        "title": "Minions Bring Food",
+        "picture_context": "Goofy minions tumble in with platters balanced on their heads, surprising everyone at the table.",
+        "vignette": "יֶלֶד רָעֵב. מִינְיוֹן הֵבִיא לֶחֶם. הֵבִיא. לֶחֶם.",
+        "main_vocab": [
+            "רָעֵב (hungry)",
+            "הֵבִיא (bring)",
+            "לֶחֶם (bread)"
+        ],
+        "other_vocab": [
+            "יֶלֶד (child)",
+            "מִינְיוֹן (minion)"
+        ],
+        "description": "Connects the act of bringing food with hunger, using simple nouns and verbs, and repeated minion humor."
+    },
+    {
+        "title": "Give and Say",
+        "picture_context": "Evan gives Isaac a toy; Isaac says \"thank you!\" with a big smile.",
+        "vignette": "אֶבֶן נָתַן אִיזָק. אִיזָק אָמַר טוֹב.",
+        "main_vocab": [
+            "נָתַן (give)",
+            "אָמַר (say)"
+        ],
+        "other_vocab": [
+            "אֶבֶן (Evan)",
+            "אִיזָק (Isaac)",
+            "טוֹב (good)"
+        ],
+        "description": "Pairs giving (נָתַן) and speaking (אָמַר), linking social and conversational language."
+    },
+    {
+        "title": "Blanket Under Table",
+        "picture_context": "Children crawl under the table and find the missing blanket hiding with Shenzi the dog.",
+        "vignette": "בִּקֵּשׁ שְׂמִיכָה תַּחַת שֻׁלְחָן. מָצָא שְׂמִיכָה תַּחַת שֵׁנְזִי.",
+        "main_vocab": [
+            "בִּקֵּשׁ (seek)",
+            "מָצָא (find)",
+            "שְׂמִיכָה (blanket)",
+            "תַּחַת (under)"
+        ],
+        "other_vocab": [
+            "שֻׁלְחָן (table)",
+            "שֵׁנְזִי (Shenzi)"
+        ],
+        "description": "Reuses the theme of seeking and finding, introducing place word 'under' (תַּחַת)."
+    },
+    {
+        "title": "Gift Surprise",
+        "picture_context": "The minions arrive with a giant bow on a toy box, making everyone laugh.",
+        "vignette": "יֶלֶד צָחַק מִינְיוֹן. מִינְיוֹן הֵבִיא מַתָּנָה. צָחַק. מַתָּנָה.",
+        "main_vocab": [
+            "צָחַק (laugh)",
+            "הֵבִיא (bring)",
+            "מַתָּנָה (present)"
+        ],
+        "other_vocab": [
+            "יֶלֶד (child)",
+            "מִינְיוֹן (minion)"
+        ],
+        "description": "Blends humor, gifting, and laughter, reinforcing verbs and nouns with joyful imagery."
+    },
+    {
+        "title": "Water and Fire",
+        "picture_context": "Isaac pours water on toy blocks, then waves a picture of big flames.",
+        "vignette": "אִיזָק מַיִם. אִיזָק אֵשׁ. מַיִם. אֵשׁ.",
+        "main_vocab": [
+            "מַיִם (water)",
+            "אֵשׁ (fire)"
+        ],
+        "other_vocab": [
+            "אִיזָק (Isaac)"
+        ],
+        "description": "Compares elemental nouns water (מַיִם) and fire (אֵשׁ), supporting differentiation."
+    },
+    {
+        "title": "After and Before",
+        "picture_context": "Aaron eats before the game, then plays after everyone finishes eating.",
+        "vignette": "אָרוֹן אָכַל לִפְנֵי. אָרוֹן שִׂיחֵק אַחֲרֵי.",
+        "main_vocab": [
+            "לִפְנֵי (before)",
+            "אַחֲרֵי (after)"
+        ],
+        "other_vocab": [
+            "אָרוֹן (Aaron)",
+            "אָכַל (eat)",
+            "שִׂיחֵק (play)"
+        ],
+        "description": "Introduces temporal adverbs before (לִפְנֵי) and after (אַחֲרֵי) in the context of action sequence."
+    },
+    {
+        "title": "Go Fast, Go Slow",
+        "picture_context": "Isaac hurries with long dinosaur strides, while Aurelia tiptoes slowly beside him.",
+        "vignette": "אִיזָק רָץ מָהֵר. אוֹרֵלְיָה הָלַךְ לְאַט.",
+        "main_vocab": [
+            "מָהֵר (fast)",
+            "לְאַט (slow)"
+        ],
+        "other_vocab": [
+            "אִיזָק (Isaac)",
+            "אוֹרֵלְיָה (Aurelia)",
+            "רָץ (run)",
+            "הָלַךְ (walk/go)"
+        ],
+        "description": "Reinforces speed adverbs as children move together, utilizing both running and walking verbs."
+    },
+    {
+        "title": "Secret and Open",
+        "picture_context": "Evan whispers a secret prayer, then shouts 'shalom' to everyone.",
+        "vignette": "אֶבֶן בְּסֵתֶר. אֶבֶן בְּגָלוּי. בְּסֵתֶר. בְּגָלוּי.",
+        "main_vocab": [
+            "בְּסֵתֶר (secretly)",
+            "בְּגָלוּי (openly)"
+        ],
+        "other_vocab": [
+            "אֶבֶן (Evan)"
+        ],
+        "description": "Contrasts the concepts of secrecy and openness, embedding them in prayerful and joyful scenes."
+    },
+    {
+        "title": "Laugh Loud, Whisper Soft",
+        "picture_context": "Aurelia shouts with laughter, then softly whispers to Shenzi the dog.",
+        "vignette": "אוֹרֵלְיָה קוֹל גָּדוֹל. אוֹרֵלְיָה לָחַשׁ קָטָן.",
+        "main_vocab": [
+            "קוֹל (voice)",
+            "גָּדוֹל (loud)",
+            "קָטָן (soft/small)"
+        ],
+        "other_vocab": [
+            "אוֹרֵלְיָה (Aurelia)",
+            "שֵׁנְזִי (Shenzi)",
+            "לָחַשׁ (whisper)"
+        ],
+        "description": "Practices loud and soft expression with voice, linking to communicative acts."
+    },
+    {
+        "title": "Blanket Celebration",
+        "picture_context": "Children wave streamers around the finally-found blanket and cheer.",
+        "vignette": "יְלָדִים שָׂמֵחַ. מָצָא שְׂמִיכָה. שָׂמֵחַ. שְׂמִיכָה.",
+        "main_vocab": [
+            "שָׂמֵחַ (happy)",
+            "מָצָא (find)",
+            "שְׂמִיכָה (blanket)"
+        ],
+        "other_vocab": [
+            "יְלָדִים (children)"
+        ],
+        "description": "Links celebration and happiness to the act of finding the missing blanket through joyful repetition."
+    }
+]

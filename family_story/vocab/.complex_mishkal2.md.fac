@@ -1,0 +1,1 @@
+{"__fac_version__": "0.0.0-dev", "time": "2025-06-19T19:14:00.858088+00:00", "path": "hebrew/complex_mishkal2.md", "build_id": 302573186091830248510921651420979263534, "cost": 0.026674, "usage": {"openai/gpt-4.1": {"text/out": 3254, "text/in": 321}}}

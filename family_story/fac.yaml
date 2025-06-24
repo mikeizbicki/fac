@@ -1,8 +1,21 @@
-"hebrew/vocabulary.md":
-  prompt_file: hebrew/prompt
+"vocab/$FILE.md":
+  prompt_file: vocab/$FILE.prompt
+  variables:
+    FILE: |
+      ls vocab | grep '\.prompt$' | sed 's/.prompt$//' | tr '\n' '\0'
+    NUM_WORDS:
+      echo 50
+
+"grammar/vignette.jsonl":
+  schema_file: grammar/vignette.json-schema
+  dependencies: |
+    about
+    characters/*/about.json
+
+"grammar/grammar.jsonl":
+  schema_file: grammar/grammar.json-schema
 
 "$STORY/outline.json":
-  prompt_file: prompts/outline
   schema_file: prompts/outline.json-schema
   dependencies: |
     prompts/story_structures/freytag

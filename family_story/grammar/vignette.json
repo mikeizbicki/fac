@@ -1,0 +1,1205 @@
+[
+    {
+        "title": "Eat, Eat",
+        "picture_context": "Children sitting and eating bread together on the floor.",
+        "vignette": "יִצְחָק אוֹכֵל לֶחֶם. אֶבֶן אוֹכֵל לֶחֶם. אַבָּל לֶחֶם אֵין. אֲרוּאֵלְיָה צְרִיכָה לֶחֶם! מִינְיוֹנִים הֵבִיאוּ לֶחֶם. אַחְשָׁו כֻּלָּם אוֹכְלִים לֶחֶם.",
+        "vocab": [
+            {
+                "word": "לֶחֶם",
+                "gloss": "bread",
+                "importance": "primary"
+            },
+            {
+                "word": "אוֹכֵל",
+                "gloss": "eats",
+                "importance": "primary"
+            },
+            {
+                "word": "אֵין",
+                "gloss": "there is not",
+                "importance": "secondary"
+            },
+            {
+                "word": "צֹרֶךְ",
+                "gloss": "need",
+                "importance": "secondary"
+            },
+            {
+                "word": "הֵבִיא",
+                "gloss": "brought",
+                "importance": "secondary"
+            }
+        ],
+        "description": "Shows subject-verb agreement, simple present action ('eat'), and repeated nominal subject for clarity and repetition. Also illustrates the use of negatives."
+    },
+    {
+        "title": "Sit and Stand",
+        "picture_context": "Children change from sitting to standing, sometimes as humans, sometimes as animals.",
+        "vignette": "יִצְחָק יוֹשֵׁב. אֶבֶן עוֹמֵד. אָרוּאֵלְיָה יוֹשֶׁבֶת. יִצְחָק עוֹמֵד. וְאָבוֹ אֲרוּאֵלְיָה יוֹשֵׁב.",
+        "vocab": [
+            {
+                "word": "יֹשֵׁב",
+                "gloss": "sit",
+                "importance": "primary"
+            },
+            {
+                "word": "עוֹמֵד",
+                "gloss": "stand",
+                "importance": "primary"
+            }
+        ],
+        "description": "Uses basic nominal and verb forms to contrast 'sit' and 'stand,' highlighting simple verb paradigms and subject agreement."
+    },
+    {
+        "title": "The Blanket",
+        "picture_context": "A child looks for a missing blanket, others help.",
+        "vignette": "אֵין שְׂמִיכָה. יִצְחָק מְבַקֵּשׁ שְׂמִיכָה. אֶבֶן מְבַקֵּשׁ שְׂמִיכָה. אָרוּאֵלְיָה מְצָא שְׂמִיכָה!",
+        "vocab": [
+            {
+                "word": "שְׂמִיכָה",
+                "gloss": "blanket",
+                "importance": "primary"
+            },
+            {
+                "word": "בִּקֵּשׁ",
+                "gloss": "seek",
+                "importance": "primary"
+            },
+            {
+                "word": "מָצָא",
+                "gloss": "found",
+                "importance": "primary"
+            }
+        ],
+        "description": "Exposes repetitive verb usage, especially searching and finding, with direct object agreement on feminine nouns."
+    },
+    {
+        "title": "Big and Small",
+        "picture_context": "Children measure stacks of blocks—one tall, one short.",
+        "vignette": "הַמִּגְדָּל גָּדוֹל. גָּדוֹל מְאֹד. הַמִּגְדָּל קָטָן. קָטָן מְאֹד.",
+        "vocab": [
+            {
+                "word": "גָּדוֹל",
+                "gloss": "big",
+                "importance": "primary"
+            },
+            {
+                "word": "קָטָן",
+                "gloss": "small",
+                "importance": "primary"
+            },
+            {
+                "word": "מִגְדָּל",
+                "gloss": "tower",
+                "importance": "secondary"
+            }
+        ],
+        "description": "Illustrates attribute adjective placement and repetition to reinforce the agreement and comparison of adjectives (big vs. small)."
+    },
+    {
+        "title": "Cry and Hug",
+        "picture_context": "A sad child is comforted by a dog hugging them.",
+        "vignette": "אֶבֶן עָצֵב. אֶבֶן בּוֹכֶה. שֶׁנְזִי בָּאָה. שֶׁנְזִי חוֹבֶקֶת אֶת אֶבֶן. אֶבֶן שָׂמֵחַ.",
+        "vocab": [
+            {
+                "word": "בָּכָה",
+                "gloss": "cried",
+                "importance": "primary"
+            },
+            {
+                "word": "עָצֵב",
+                "gloss": "sad",
+                "importance": "primary"
+            },
+            {
+                "word": "חָבַק",
+                "gloss": "hug",
+                "importance": "primary"
+            },
+            {
+                "word": "שָׂמֵחַ",
+                "gloss": "happy",
+                "importance": "primary"
+            }
+        ],
+        "description": "Demonstrates simple emotional state verbs and verbs with pronominal direct objects."
+    },
+    {
+        "title": "Book with Advice",
+        "picture_context": "A child reading a book, smiling with a 'light bulb' expression.",
+        "vignette": "יִצְחָק קוֹרֵא סֵפֶר. בַּסֵּפֶר עֵצָה טוֹבָה. עֵצָה טוֹבָה לְיִצְחָק.",
+        "vocab": [
+            {
+                "word": "קָרָא",
+                "gloss": "read",
+                "importance": "primary"
+            },
+            {
+                "word": "סֵפֶר",
+                "gloss": "book",
+                "importance": "primary"
+            },
+            {
+                "word": "עֵצָה",
+                "gloss": "advice",
+                "importance": "secondary"
+            },
+            {
+                "word": "טוֹב",
+                "gloss": "good",
+                "importance": "secondary"
+            }
+        ],
+        "description": "Shows the use of verbs for reading with an object, and simple noun-adjective agreement."
+    },
+    {
+        "title": "Need and Gift",
+        "picture_context": "A group of minions presents a toy to the children.",
+        "vignette": "אַבָּל יֵשׁ צֹרֶךְ. יֵשׁ לָנוּ צֹרֶךְ. הַמִּינְיוֹנִים הֵבִיאוּ מַתָּנָה. הִנֵּה מַתָּנָה!",
+        "vocab": [
+            {
+                "word": "צֹרֶךְ",
+                "gloss": "need",
+                "importance": "primary"
+            },
+            {
+                "word": "הֵבִיא",
+                "gloss": "bring",
+                "importance": "primary"
+            },
+            {
+                "word": "מַתָּנָה",
+                "gloss": "gift",
+                "importance": "primary"
+            }
+        ],
+        "description": "Emphasizes existential 'יש/אין' structures and uses verbs for giving/bringing with repeated direct object."
+    },
+    {
+        "title": "Poop and Return",
+        "picture_context": "A child runs to the bathroom; other kids wave.",
+        "vignette": "אַרוּאֵלְיָה צוֹעֶקֶת: צוֹאָה! אַרוּאֵלְיָה רָצָה. אַרוּאֵלְיָה חוֹזֶרֶת.",
+        "vocab": [
+            {
+                "word": "צוֹאָה",
+                "gloss": "poop",
+                "importance": "primary"
+            },
+            {
+                "word": "רָצָה",
+                "gloss": "ran",
+                "importance": "secondary"
+            },
+            {
+                "word": "חוֹזֵר",
+                "gloss": "return",
+                "importance": "secondary"
+            }
+        ],
+        "description": "Provides use of exclamation and present/returning actions, with succinct action sequence."
+    },
+    {
+        "title": "We Love Each Other",
+        "picture_context": "All the children hug after a quarrel.",
+        "vignette": "יִצְחָק כּוֹעֵס עַל אֶבֶן. אֶבֶן כּוֹעֵס עַל יִצְחָק. אָרוּאֵלְיָה זוֹכֶרֶת אַהֲבָה. עַכְשָׁו כֻּלָּם חוֹבְקִים.",
+        "vocab": [
+            {
+                "word": "כָּעַס",
+                "gloss": "was angry",
+                "importance": "primary"
+            },
+            {
+                "word": "חָבַק",
+                "gloss": "hug",
+                "importance": "primary"
+            },
+            {
+                "word": "זָכַר",
+                "gloss": "remembered",
+                "importance": "secondary"
+            },
+            {
+                "word": "אַהֲבָה",
+                "gloss": "love",
+                "importance": "primary"
+            }
+        ],
+        "description": "Highlights verbs for emotional states (anger, remembering), and group action (hugging each other) with repetition."
+    },
+    {
+        "title": "Take and Give",
+        "picture_context": "Children passing a toy from one to another.",
+        "vignette": "יִצְחָק לוֹקֵחַ דֹּבֶר. אָרוּאֵלְיָה נוֹתֶנֶת אֵל יִצְחָק. יִצְחָק נוֹתֵן לְאֶבֶן.",
+        "vocab": [
+            {
+                "word": "לָקַח",
+                "gloss": "take",
+                "importance": "primary"
+            },
+            {
+                "word": "נָתַן",
+                "gloss": "give",
+                "importance": "primary"
+            }
+        ],
+        "description": "Reinforces subject-verb-object structure and direct object transfer, highlighting the change of possession."
+    },
+    {
+        "title": "See and Hear",
+        "picture_context": "One child points to an animal, another listens.",
+        "vignette": "אֶבֶן רוֹאֶה דּוֹב. יִצְחָק שׁוֹמֵעַ קוֹל. אַרוּאֵלְיָה רוֹאָה.",
+        "vocab": [
+            {
+                "word": "רָאָה",
+                "gloss": "see",
+                "importance": "primary"
+            },
+            {
+                "word": "שָׁמַע",
+                "gloss": "hear",
+                "importance": "primary"
+            },
+            {
+                "word": "קוֹל",
+                "gloss": "voice/noise",
+                "importance": "secondary"
+            }
+        ],
+        "description": "Exemplifies perception verbs with matching subjects/objects; repetition builds recognition of action and participant."
+    },
+    {
+        "title": "Up and Down",
+        "picture_context": "Children climb stairs, then come down.",
+        "vignette": "אֶבֶן עוֹלֶה. אֶבֶן יוֹרֵד. יִצְחָק עוֹלֶה. יִצְחָק יוֹרֵד.",
+        "vocab": [
+            {
+                "word": "עָלָה",
+                "gloss": "go up",
+                "importance": "primary"
+            },
+            {
+                "word": "יָרַד",
+                "gloss": "go down",
+                "importance": "primary"
+            }
+        ],
+        "description": "Contrasts two simple, highly frequent motion verbs while showing inflection for different subjects."
+    },
+    {
+        "title": "Open and Close",
+        "picture_context": "Children open and close a door together.",
+        "vignette": "יִצְחָק פֹּתֵחַ דֶּלֶת. אָרוּאֵלְיָה סוֹגֶרֶת דֶּלֶת. דֶּלֶת פְּתוּחָה. דֶּלֶת סְגוּרָה.",
+        "vocab": [
+            {
+                "word": "פָּתַח",
+                "gloss": "open",
+                "importance": "primary"
+            },
+            {
+                "word": "סָגַר",
+                "gloss": "close",
+                "importance": "primary"
+            },
+            {
+                "word": "דֶּלֶת",
+                "gloss": "door",
+                "importance": "secondary"
+            }
+        ],
+        "description": "Demonstrates basic verb-object and adjective-noun forms with alternation and repetition."
+    },
+    {
+        "title": "Book Inside, Book Outside",
+        "picture_context": "A child reading inside a house, another outdoors.",
+        "vignette": "יִצְחָק קוֹרֵא סֵפֶר בַּבַּיִת. אֶבֶן קוֹרֵא סֵפֶר בַּחוּץ.",
+        "vocab": [
+            {
+                "word": "בַּיִת",
+                "gloss": "house",
+                "importance": "primary"
+            },
+            {
+                "word": "חוּץ",
+                "gloss": "outside",
+                "importance": "primary"
+            },
+            {
+                "word": "קוֹרֵא",
+                "gloss": "read",
+                "importance": "primary"
+            },
+            {
+                "word": "סֵפֶר",
+                "gloss": "book",
+                "importance": "primary"
+            }
+        ],
+        "description": "Shows the use of simple locative prepositions with direct objects."
+    },
+    {
+        "title": "Many and Few",
+        "picture_context": "Children with many blocks; another with just one.",
+        "vignette": "יֵשׁ רַב קוּבְיוֹת. יֵשׁ מְעַט קוּבְיוֹת.",
+        "vocab": [
+            {
+                "word": "רַב",
+                "gloss": "many",
+                "importance": "primary"
+            },
+            {
+                "word": "מְעַט",
+                "gloss": "few",
+                "importance": "primary"
+            },
+            {
+                "word": "קוּבְיָה",
+                "gloss": "block",
+                "importance": "secondary"
+            }
+        ],
+        "description": "Contrasts quantity adjectives and use of existential phrases with plural objects."
+    },
+    {
+        "title": "Who Has?",
+        "picture_context": "Children look at each other and check their hands.",
+        "vignette": "לְמִי יֵשׁ סֵפֶר? לְיִצְחָק יֵשׁ סֵפֶר.",
+        "vocab": [
+            {
+                "word": "סֵפֶר",
+                "gloss": "book",
+                "importance": "primary"
+            },
+            {
+                "word": "יֵשׁ",
+                "gloss": "has/there is",
+                "importance": "primary"
+            }
+        ],
+        "description": "Demonstrates possessive structure using ל־ and emphasizes question/answer pairing."
+    },
+    {
+        "title": "Day and Night",
+        "picture_context": "Children play under the sun, later under the stars.",
+        "vignette": "בַּיּוֹם נִשְׂחָקִים. בַּלַּיְלָה נִשְׁכָּבִים. בַּיּוֹם נִקְרָא סֵפֶר.",
+        "vocab": [
+            {
+                "word": "יוֹם",
+                "gloss": "day",
+                "importance": "primary"
+            },
+            {
+                "word": "לַיְלָה",
+                "gloss": "night",
+                "importance": "primary"
+            },
+            {
+                "word": "נִשְׂחָק",
+                "gloss": "play(ed)",
+                "importance": "secondary"
+            }
+        ],
+        "description": "Simple use of temporal adverbs and passive verbs; shows context of activity."
+    },
+    {
+        "title": "Together and Alone",
+        "picture_context": "Children hold hands (together); one stands apart (alone).",
+        "vignette": "כֻּלָּם יַחַד. אָרוּאֵלְיָה לְבַד.",
+        "vocab": [
+            {
+                "word": "יַחַד",
+                "gloss": "together",
+                "importance": "primary"
+            },
+            {
+                "word": "לְבַד",
+                "gloss": "alone",
+                "importance": "primary"
+            }
+        ],
+        "description": "Direct adverb usage for together/alone as predicate modifiers."
+    },
+    {
+        "title": "Now and Then",
+        "picture_context": "Children point to a clock for 'now' and one for 'then.'",
+        "vignette": "עַתָּה אוֹכִים. אָז שָׁחַקְנוּ.",
+        "vocab": [
+            {
+                "word": "עַתָּה",
+                "gloss": "now",
+                "importance": "primary"
+            },
+            {
+                "word": "אָז",
+                "gloss": "then",
+                "importance": "primary"
+            }
+        ],
+        "description": "Shows simple time adverb and past tense contrast within the same sentence."
+    },
+    {
+        "title": "Laugh and Weep",
+        "picture_context": "Children alternate between laughing and wiping tears.",
+        "vignette": "יִצְחָק צָחַק. אָרוּאֵלְיָה בָּכְתָה. אַחְשָׁו כֻּלָּם שָׂמֵחַ.",
+        "vocab": [
+            {
+                "word": "צָחַק",
+                "gloss": "laughed",
+                "importance": "primary"
+            },
+            {
+                "word": "בָּכָה",
+                "gloss": "wept",
+                "importance": "primary"
+            },
+            {
+                "word": "שָׂמֵחַ",
+                "gloss": "happy",
+                "importance": "secondary"
+            }
+        ],
+        "description": "Contrasts opposite emotional actions with clear simple verbs and final group state."
+    },
+    {
+        "title": "Before and After",
+        "picture_context": "Children line up; a minion stands before and after them.",
+        "vignette": "מִינְיוֹן לִפְנֵי. מִינְיוֹן אַחֲרֵי.",
+        "vocab": [
+            {
+                "word": "לִפְנֵי",
+                "gloss": "before/in front of",
+                "importance": "primary"
+            },
+            {
+                "word": "אַחֲרֵי",
+                "gloss": "after",
+                "importance": "primary"
+            }
+        ],
+        "description": "Demonstrates opposite prepositions with repeated noun, reinforcing order concepts."
+    },
+    {
+        "title": "House or Field?",
+        "picture_context": "Children in house, others outside in a field.",
+        "vignette": "יִצְחָק בַּבַּיִת. אֶבֶן בַּשָּׂדֶה.",
+        "vocab": [
+            {
+                "word": "בַּיִת",
+                "gloss": "house",
+                "importance": "primary"
+            },
+            {
+                "word": "שָּׂדֶה",
+                "gloss": "field",
+                "importance": "primary"
+            }
+        ],
+        "description": "Simple use of prepositions and definite articles for contrasting locations."
+    },
+    {
+        "title": "Eat or Drink?",
+        "picture_context": "A child with bread, another with a cup.",
+        "vignette": "יִצְחָק אוֹכֵל לֶחֶם. אֶבֶן שֹׁתֶה מַיִם.",
+        "vocab": [
+            {
+                "word": "שָׁתָה",
+                "gloss": "drink",
+                "importance": "primary"
+            },
+            {
+                "word": "מַיִם",
+                "gloss": "water",
+                "importance": "primary"
+            },
+            {
+                "word": "אוֹכֵל",
+                "gloss": "eat",
+                "importance": "primary"
+            }
+        ],
+        "description": "Demonstrates coordination of different action verbs (eat/drink) with objects."
+    },
+    {
+        "title": "Sun and Moon",
+        "picture_context": "Children look at the sun, then at the moon.",
+        "vignette": "בַּבֹּקֶר יֵשׁ שֶׁמֶשׁ. בַּלַּיְלָה יֵשׁ יָרֵחַ.",
+        "vocab": [
+            {
+                "word": "שֶׁמֶשׁ",
+                "gloss": "sun",
+                "importance": "primary"
+            },
+            {
+                "word": "יָרֵחַ",
+                "gloss": "moon",
+                "importance": "primary"
+            },
+            {
+                "word": "בַּבֹּקֶר",
+                "gloss": "in the morning",
+                "importance": "secondary"
+            },
+            {
+                "word": "לַיְלָה",
+                "gloss": "night",
+                "importance": "secondary"
+            }
+        ],
+        "description": "Reinforces basic nouns for celestial objects and their typical times."
+    },
+    {
+        "title": "Fast and Slow",
+        "picture_context": "Children race: one runs quickly, another walks slowly.",
+        "vignette": "יִצְחָק רָץ מַהֵר. אֶבֶן הוֹלֵךְ לְאַט.",
+        "vocab": [
+            {
+                "word": "רָץ",
+                "gloss": "run",
+                "importance": "primary"
+            },
+            {
+                "word": "מַהֵר",
+                "gloss": "fast",
+                "importance": "primary"
+            },
+            {
+                "word": "לְאַט",
+                "gloss": "slow(ly)",
+                "importance": "primary"
+            }
+        ],
+        "description": "Contrasts manner adverbs modifying verbs for speed of action."
+    },
+    {
+        "title": "High and Low",
+        "picture_context": "One child stands on a chair, another sits on the floor.",
+        "vignette": "אֶבֶן עָלוֹהַּ. אָרוּאֵלְיָה נָמוּכָה.",
+        "vocab": [
+            {
+                "word": "גָּבֹהַּ",
+                "gloss": "high/tall",
+                "importance": "primary"
+            },
+            {
+                "word": "נָמוּךְ",
+                "gloss": "low/short",
+                "importance": "primary"
+            }
+        ],
+        "description": "Simple use of adjectives to describe relative position."
+    },
+    {
+        "title": "On or Under?",
+        "picture_context": "A dog on a table; a cat under the table.",
+        "vignette": "כֶּלֶב עַל שֻׁלְחָן. חָתוּל תַּחַת שֻׁלְחָן.",
+        "vocab": [
+            {
+                "word": "עַל",
+                "gloss": "on",
+                "importance": "primary"
+            },
+            {
+                "word": "תַּחַת",
+                "gloss": "under",
+                "importance": "primary"
+            },
+            {
+                "word": "שֻׁלְחָן",
+                "gloss": "table",
+                "importance": "secondary"
+            }
+        ],
+        "description": "Contrasts spatial prepositions; reinforces object identification."
+    },
+    {
+        "title": "Time to Sleep",
+        "picture_context": "Children lie down and cover with a blanket.",
+        "vignette": "בֵּין בַּיְלָה יִצְחָק שֹׁכֵב. אָרוּאֵלְיָה עֵינֵיהָ סְגוּרוֹת.",
+        "vocab": [
+            {
+                "word": "שָׁכַב",
+                "gloss": "lie down",
+                "importance": "primary"
+            },
+            {
+                "word": "עֵין",
+                "gloss": "eye",
+                "importance": "primary"
+            },
+            {
+                "word": "סָגוּר",
+                "gloss": "closed",
+                "importance": "secondary"
+            },
+            {
+                "word": "לַיְלָה",
+                "gloss": "night",
+                "importance": "secondary"
+            }
+        ],
+        "description": "Demonstrates present participle and adjective agreement, integrated with time."
+    },
+    {
+        "title": "Door Open, Door Closed",
+        "picture_context": "One scene with an open door, one with it closed.",
+        "vignette": "הַדֶּלֶת פְּתוּחָה. הַדֶּלֶת סְגוּרָה.",
+        "vocab": [
+            {
+                "word": "פָּתוּחַ",
+                "gloss": "open",
+                "importance": "primary"
+            },
+            {
+                "word": "סָגוּר",
+                "gloss": "closed",
+                "importance": "primary"
+            },
+            {
+                "word": "דֶּלֶת",
+                "gloss": "door",
+                "importance": "secondary"
+            }
+        ],
+        "description": "Focuses on participial adjectives for states of objects."
+    },
+    {
+        "title": "Eat with Hands",
+        "picture_context": "Children eat bread, using their hands.",
+        "vignette": "אֶבֶן אוֹכֵל לֶחֶם בְּיָד. יִצְחָק אוֹכֵל לֶחֶם בְּיָד.",
+        "vocab": [
+            {
+                "word": "יָד",
+                "gloss": "hand",
+                "importance": "primary"
+            },
+            {
+                "word": "אוֹכֵל",
+                "gloss": "eat",
+                "importance": "primary"
+            },
+            {
+                "word": "לֶחֶם",
+                "gloss": "bread",
+                "importance": "secondary"
+            }
+        ],
+        "description": "Practices use of the instrumental preposition with repeated verb-object phrase."
+    },
+    {
+        "title": "Hot and Cold",
+        "picture_context": "Children stand by a fire, then shiver in the snow.",
+        "vignette": "אֶשׁ חַם. שֶׁלֶג קָר.",
+        "vocab": [
+            {
+                "word": "חַם",
+                "gloss": "warm/hot",
+                "importance": "primary"
+            },
+            {
+                "word": "קַר",
+                "gloss": "cold",
+                "importance": "primary"
+            },
+            {
+                "word": "אֵשׁ",
+                "gloss": "fire",
+                "importance": "secondary"
+            },
+            {
+                "word": "שֶׁלֶג",
+                "gloss": "snow",
+                "importance": "secondary"
+            }
+        ],
+        "description": "Demonstrates use of adjectives as predicates with inanimate subjects."
+    },
+    {
+        "title": "Go and Come",
+        "picture_context": "Children leave a room and return in another frame.",
+        "vignette": "יִצְחָק הוֹלֵךְ. יִצְחָק בָּא.",
+        "vocab": [
+            {
+                "word": "הָלַךְ",
+                "gloss": "go",
+                "importance": "primary"
+            },
+            {
+                "word": "בָּא",
+                "gloss": "come",
+                "importance": "primary"
+            }
+        ],
+        "description": "Contrasts opposing verbs of motion in simple singular subject context."
+    },
+    {
+        "title": "Where Is?",
+        "picture_context": "A child looks behind a curtain, another under a bed.",
+        "vignette": "אֵיפֹה שְׂמִיכָה? שְׂמִיכָה תַּחַת הַמִּטָּה.",
+        "vocab": [
+            {
+                "word": "אֵיפֹה",
+                "gloss": "where",
+                "importance": "primary"
+            },
+            {
+                "word": "שְׂמִיכָה",
+                "gloss": "blanket",
+                "importance": "primary"
+            },
+            {
+                "word": "תַּחַת",
+                "gloss": "under",
+                "importance": "secondary"
+            }
+        ],
+        "description": "Integrates question structure (location inquiry) with prepositional answer."
+    },
+    {
+        "title": "We Sing, We Dance",
+        "picture_context": "Children sing and dance in a circle.",
+        "vignette": "כֻּלָּם שָׁרִים. כֻּלָּם רוֹקְדִים.",
+        "vocab": [
+            {
+                "word": "שִׁיר",
+                "gloss": "sing",
+                "importance": "primary"
+            },
+            {
+                "word": "רָקַד",
+                "gloss": "dance",
+                "importance": "primary"
+            }
+        ],
+        "description": "Plural subject with simple present verbs and collective activity."
+    },
+    {
+        "title": "Give Thanks",
+        "picture_context": "Children (and minions) smile, hands outstretched.",
+        "vignette": "נֹדִים לַמִּינְיוֹנִים. נֹדִים לְכֻּלָּם.",
+        "vocab": [
+            {
+                "word": "נוֹדָה",
+                "gloss": "give thanks",
+                "importance": "primary"
+            },
+            {
+                "word": "מִינְיוֹן",
+                "gloss": "minion",
+                "importance": "secondary"
+            }
+        ],
+        "description": "Simple polite phrase structure, regular indirect object preposition."
+    },
+    {
+        "title": "Good and Bad",
+        "picture_context": "Children clean their room, then make a mess.",
+        "vignette": "יֵשׁ דָּבָר טוֹב. יֵשׁ דָּבָר רַע.",
+        "vocab": [
+            {
+                "word": "טוֹב",
+                "gloss": "good",
+                "importance": "primary"
+            },
+            {
+                "word": "רַע",
+                "gloss": "bad",
+                "importance": "primary"
+            },
+            {
+                "word": "דָּבָר",
+                "gloss": "thing",
+                "importance": "secondary"
+            }
+        ],
+        "description": "Juxtaposition of positive and negative adjective for recurring concept."
+    },
+    {
+        "title": "Help and Thank",
+        "picture_context": "Child falls; another helps them up.",
+        "vignette": "נָפַל יִצְחָק. אֶבֶן עוֹזֵר. יִצְחָק אוֹמֵר: תּוֹדָה.",
+        "vocab": [
+            {
+                "word": "נָפַל",
+                "gloss": "fall",
+                "importance": "primary"
+            },
+            {
+                "word": "עָזַר",
+                "gloss": "help",
+                "importance": "primary"
+            },
+            {
+                "word": "תּוֹדָה",
+                "gloss": "thanks",
+                "importance": "secondary"
+            }
+        ],
+        "description": "Action sequence with helper and polite closure; subject changes highlighted."
+    },
+    {
+        "title": "Strong and Weak",
+        "picture_context": "Children arm-wrestle; one wins, one loses.",
+        "vignette": "אֶבֶן חָזָק. אָרוּאֵלְיָה חַלָּשָׁה.",
+        "vocab": [
+            {
+                "word": "חָזָק",
+                "gloss": "strong",
+                "importance": "primary"
+            },
+            {
+                "word": "חַלָּשׁ",
+                "gloss": "weak",
+                "importance": "primary"
+            }
+        ],
+        "description": "Opposite adjectives for contrasting strength; gender agreement shown."
+    },
+    {
+        "title": "Look and Find",
+        "picture_context": "Children search a room, one finds a toy.",
+        "vignette": "הֵם מְחַפְּשִׂים. אֶחָד מָצָא.",
+        "vocab": [
+            {
+                "word": "חִפֵּשׂ",
+                "gloss": "look/search",
+                "importance": "primary"
+            },
+            {
+                "word": "מָצָא",
+                "gloss": "find",
+                "importance": "primary"
+            }
+        ],
+        "description": "Search and discovery verbs in plural and singular context."
+    },
+    {
+        "title": "Want and Have",
+        "picture_context": "Child wants a ball; minion hands it to them.",
+        "vignette": "אָדָם רוֹצֶה כַּדוּר. יֵשׁ לְאָדָם כַּדוּר.",
+        "vocab": [
+            {
+                "word": "רָצָה",
+                "gloss": "want",
+                "importance": "primary"
+            },
+            {
+                "word": "יֵשׁ",
+                "gloss": "have",
+                "importance": "primary"
+            },
+            {
+                "word": "כַּדוּר",
+                "gloss": "ball",
+                "importance": "secondary"
+            }
+        ],
+        "description": "Expresses desire; existential structure ties to object possession."
+    },
+    {
+        "title": "Remember and Forget",
+        "picture_context": "Child tries to recall where they put something.",
+        "vignette": "אֶבֶן זוֹכֵר. יִצְחָק שׁוֹכֵחַ.",
+        "vocab": [
+            {
+                "word": "זָכַר",
+                "gloss": "remember",
+                "importance": "primary"
+            },
+            {
+                "word": "שָׁכַח",
+                "gloss": "forget",
+                "importance": "primary"
+            }
+        ],
+        "description": "Contrasts opposite verbs of memory; subject alignment shown."
+    },
+    {
+        "title": "Show and Hide",
+        "picture_context": "A child reveals a toy; another covers it.",
+        "vignette": "אֶבֶן מַרְאֶה. אָרוּאֵלְיָה מַסְתִּירָה.",
+        "vocab": [
+            {
+                "word": "הִרְאָה",
+                "gloss": "show",
+                "importance": "primary"
+            },
+            {
+                "word": "הִסְתִּיר",
+                "gloss": "hide",
+                "importance": "primary"
+            }
+        ],
+        "description": "Causative verb patterns; contrasting actions with same subject type."
+    },
+    {
+        "title": "Strong Wind",
+        "picture_context": "Children hold onto their hats against the wind.",
+        "vignette": "רוּחַ חֲזָקָה. מְאֹד חֲזָקָה.",
+        "vocab": [
+            {
+                "word": "רוּחַ",
+                "gloss": "wind",
+                "importance": "primary"
+            },
+            {
+                "word": "חָזָק",
+                "gloss": "strong",
+                "importance": "secondary"
+            },
+            {
+                "word": "מְאֹד",
+                "gloss": "very",
+                "importance": "secondary"
+            }
+        ],
+        "description": "Adjective-noun agreement and intensifier adverb in short phrase."
+    },
+    {
+        "title": "Voice and Silence",
+        "picture_context": "A child shouts, another sits quietly.",
+        "vignette": "קוֹל גָּדוֹל. שֶׁקֶט בַּחֶדֶר.",
+        "vocab": [
+            {
+                "word": "קוֹל",
+                "gloss": "voice/sound",
+                "importance": "primary"
+            },
+            {
+                "word": "שֶׁקֶט",
+                "gloss": "quiet/silence",
+                "importance": "primary"
+            },
+            {
+                "word": "חֶדֶר",
+                "gloss": "room",
+                "importance": "secondary"
+            }
+        ],
+        "description": "Simple noun use for contrasting noise and silence within place."
+    },
+    {
+        "title": "Bless and Curse",
+        "picture_context": "Children bless each other; a mischievous minion frowns.",
+        "vignette": "עוֹשִׂים בְּרָכָה. אֵין קְלָלָה.",
+        "vocab": [
+            {
+                "word": "בְּרָכָה",
+                "gloss": "blessing",
+                "importance": "primary"
+            },
+            {
+                "word": "קְלָלָה",
+                "gloss": "curse",
+                "importance": "primary"
+            }
+        ],
+        "description": "Juxtaposition of positive and negative noun forms; use of negation."
+    },
+    {
+        "title": "Love and Hate",
+        "picture_context": "Children hug each other; a mean Koopa frowns.",
+        "vignette": "אֶבֶן אוֹהֵב אֶת יִצְחָק. הַקוּפָּה שׂוֹנֵא.",
+        "vocab": [
+            {
+                "word": "אֹהֵב",
+                "gloss": "love",
+                "importance": "primary"
+            },
+            {
+                "word": "שָׂנֵא",
+                "gloss": "hate",
+                "importance": "primary"
+            }
+        ],
+        "description": "Direct object marker used to reinforce verb-object construction; shows polar opposites."
+    },
+    {
+        "title": "Full and Empty",
+        "picture_context": "Children pour out a cup; one is full, one empty.",
+        "vignette": "הַכּוֹס מְלֵאָה. הַכּוֹס רֵיקָה.",
+        "vocab": [
+            {
+                "word": "מָלֵא",
+                "gloss": "full",
+                "importance": "primary"
+            },
+            {
+                "word": "רֵיק",
+                "gloss": "empty",
+                "importance": "primary"
+            },
+            {
+                "word": "כּוֹס",
+                "gloss": "cup",
+                "importance": "secondary"
+            }
+        ],
+        "description": "Adjective-noun agreement for states of being; repeated objects highlighted."
+    },
+    {
+        "title": "Tell and Listen",
+        "picture_context": "One child speaks, others listen.",
+        "vignette": "יְסַפֵּר אֶבֶן. יִצְחָק שׁוֹמֵעַ.",
+        "vocab": [
+            {
+                "word": "סִפֵּר",
+                "gloss": "tell",
+                "importance": "primary"
+            },
+            {
+                "word": "שָׁמַע",
+                "gloss": "listen",
+                "importance": "primary"
+            }
+        ],
+        "description": "Integration of piel/paal binyan verbs in context."
+    },
+    {
+        "title": "Go and Return",
+        "picture_context": "Children leave a house and later come back.",
+        "vignette": "כֻּלָּם הָלְכוּ. כֻּלָּם חָזְרוּ.",
+        "vocab": [
+            {
+                "word": "הָלַךְ",
+                "gloss": "go",
+                "importance": "primary"
+            },
+            {
+                "word": "חָזַר",
+                "gloss": "return",
+                "importance": "primary"
+            }
+        ],
+        "description": "Simple group movement with subject-verb agreement."
+    },
+    {
+        "title": "Way and Path",
+        "picture_context": "Children choose different paths in a park.",
+        "vignette": "דֶּרֶךְ אַחַת. דֶּרֶךְ שֵׁנִית.",
+        "vocab": [
+            {
+                "word": "דֶּרֶךְ",
+                "gloss": "way/path",
+                "importance": "primary"
+            },
+            {
+                "word": "אַחַת",
+                "gloss": "one",
+                "importance": "primary"
+            },
+            {
+                "word": "שֵׁנִית",
+                "gloss": "second",
+                "importance": "secondary"
+            }
+        ],
+        "description": "Ordinal use and noun repetition for differentiating options."
+    },
+    {
+        "title": "Ask and Answer",
+        "picture_context": "Children take turns asking and answering questions.",
+        "vignette": "יִצְחָק שׁוֹאֵל. אֶבֶן עוֹנֶה.",
+        "vocab": [
+            {
+                "word": "שָׁאַל",
+                "gloss": "ask",
+                "importance": "primary"
+            },
+            {
+                "word": "עָנָה",
+                "gloss": "answer",
+                "importance": "primary"
+            }
+        ],
+        "description": "Simple dialogue structure; clear subject assignment."
+    },
+    {
+        "title": "Rise and Fall",
+        "picture_context": "Child jumps up, then sits down on the ground.",
+        "vignette": "יִצְחָק קָם. יִצְחָק נָפַל.",
+        "vocab": [
+            {
+                "word": "קָם",
+                "gloss": "arise",
+                "importance": "primary"
+            },
+            {
+                "word": "נָפַל",
+                "gloss": "fall",
+                "importance": "primary"
+            }
+        ],
+        "description": "Contrasting active movement verbs with same subject."
+    },
+    {
+        "title": "Guard and Leave",
+        "picture_context": "Minion guards a bag while children walk away.",
+        "vignette": "מִינְיוֹן שׁוֹמֵר. יִצְחָק עָזַב.",
+        "vocab": [
+            {
+                "word": "שָׁמַר",
+                "gloss": "guard",
+                "importance": "primary"
+            },
+            {
+                "word": "עָזַב",
+                "gloss": "leave",
+                "importance": "primary"
+            }
+        ],
+        "description": "Guard/leave actions in unity for subject-verb mastery."
+    },
+    {
+        "title": "Give and Take",
+        "picture_context": "Children exchange toys.",
+        "vignette": "יִצְחָק נָתַן. אֶבֶן לָקַח.",
+        "vocab": [
+            {
+                "word": "נָתַן",
+                "gloss": "give",
+                "importance": "primary"
+            },
+            {
+                "word": "לָקַח",
+                "gloss": "take",
+                "importance": "primary"
+            }
+        ],
+        "description": "Action swap highlights direct mode of transfer."
+    },
+    {
+        "title": "Choose and Refuse",
+        "picture_context": "Children select items; one rejects a choice.",
+        "vignette": "יִצְחָק בָּחַר. אֶבֶן מֵאֵן.",
+        "vocab": [
+            {
+                "word": "בָּחַר",
+                "gloss": "choose",
+                "importance": "primary"
+            },
+            {
+                "word": "מֵאֵן",
+                "gloss": "refuse",
+                "importance": "primary"
+            }
+        ],
+        "description": "Presents opposite verbs of volition as a pair."
+    },
+    {
+        "title": "Begin and End",
+        "picture_context": "Start and finish a block tower.",
+        "vignette": "הַמִּגְדָּל רֵאשִׁית. הַמִּגְדָּל סוֹף.",
+        "vocab": [
+            {
+                "word": "רֵאשִׁית",
+                "gloss": "beginning",
+                "importance": "primary"
+            },
+            {
+                "word": "סוֹף",
+                "gloss": "end",
+                "importance": "primary"
+            }
+        ],
+        "description": "Integration of nouns for event markers; beginning and end."
+    }
+]

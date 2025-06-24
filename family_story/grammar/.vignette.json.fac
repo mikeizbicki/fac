@@ -1,0 +1,1 @@
+{"__fac_version__": "0.0.0-dev", "time": "2025-06-23T19:46:22.005580+00:00", "path": "grammar/vignette.json", "build_id": 155342523216797898260132284827071948817, "cost": 0.14105, "usage": {"openai/gpt-4.1": {"text/out": 9726, "text/in": 31621}}}

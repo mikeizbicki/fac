@@ -1,5 +1,7 @@
-{ "Name": "Evan"
-, "Name_Note": "In Hebrew, the name is אֶבֶן"
+{ "Name": 
+    { "en": "Evan"
+    , "he": "אֶבֶן"
+    }
 , "Appearance":
     { "Age": "7 years"
     , "Sex": "Male"

@@ -1,0 +1,1 @@
+{"__fac_version__": "0.0.0-dev", "time": "2025-06-19T19:29:17.966216+00:00", "path": "hebrew/confusing_nouns.md", "build_id": 281457899640723152039835703618125622684, "cost": 0.021096, "usage": {"openai/gpt-4.1": {"text/out": 2561, "text/in": 304}}}

@@ -1,0 +1,1 @@
+{"__fac_version__": "0.0.0-dev", "time": "2025-06-19T18:26:20.680423+00:00", "path": "hebrew/adjectives.md", "build_id": 12615859060241223720772683392607820827, "cost": 0.019440000000000002, "usage": {"anthropic/claude-sonnet-4-0": {"text/out": 1230, "text/in": 330}}}

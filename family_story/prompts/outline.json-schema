@@ -2,18 +2,28 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
-    "story_structure": {"type": "string"},
+    "story_structure": {
+      "type": "string",
+      "description": "This should exactly match one of the story structure names.  The structure listed here is used to determine the structure of the chapters array below."
+    },
     "chapters": {
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
           "name": {"type": "string"},
-          "element": {"type": "string"},
-          "plot": {"type": "string"}
+          "element": {
+            "type": "string",
+            "description": "exactly matches one of the element names of the selected story_structure"
+          },
+          "plot": {
+            "type": "string",
+            "description": "A 2-5 sentence plot description that is guided by the element from the story_structure. The description is highly specific and avoids generalities.  For example: (1) instead of saying that 'the characters faced difficulties', the description will specifiy exactly which chracters were involved, what the difficulties were, and why they were difficult; (2) instead of saying that 'event always happens', the description will specifically list the number of times event happens and why.  The description does not duplicate information that can be found in other locations (e.g. in the character dictionaries)." 
+          }
         },
         "required": ["name", "element", "plot"]
-      }
+      },
+      "description": "The list of chapters that tell the story.  The flow of the chapters should follow the specified story_structure."
     }
   },
   "required": ["story_structure", "chapters"]

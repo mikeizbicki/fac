@@ -1,4 +1,7 @@
-{ "Name": "Isaac"
+{ "Name": 
+    { "en": "Isaac"
+    , "he": "יִצְחָק"
+    }
 , "Appearance":
     { "Age": "4 years"
     , "Sex": "Male"

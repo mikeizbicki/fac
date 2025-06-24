@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Biblical Hebrew Grammar Vignette",
+  "description": "A short illustration of a biblical hebrew grammar point that uses examples to help young students learn the language.",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "A 2-3 word name of the vignette.  The title should use technical linguistics jargon as appropriate.",
+      "maxLength": 20
+    },
+    "picture_context": {
+      "type": "string",
+      "description": "A 1 sentence English language description of any accompanying pictures.  This field should be null if the vignette does not require a picture."
+    },
+    "vignette": {
+      "type": "string",
+      "description": "A 1-10 sentence example illustrating a key grammar point.  The vignette should: (1) be focused in order to teach only a single grammar point; (2) use common vocabulary useful for young language learners; (3) be fun and engaging; (4) use repetition so that the grammar point is demonstrated as many times as possible"
+    },
+    "vocab": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "word": {
+            "type": "string",
+            "description": "The Hebrew word (with niqqud, no transliteration)"
+          },
+          "gloss": {
+            "type": "string",
+            "description": "An English gloss"
+          },
+          "importance": {
+            "type": "string",
+            "enum": ["primary", "secondary"],
+            "description": "Words of primary importance are directly related to the grammar point being used.  (For example, if the grammar point is about conjugating verbs in the past tense, and both יָשַׁב and עָמַד are conjugated in the past tense, then these words would have a primary label.)  Words of secondary importance are any other word used in the sentence that are required to make the vignette interesting/grammatical but are not used directly to illustrate the grammar.  (For example, if אָב and בֵּן are performing the actions they would be secondary vocabulary.)"
+          }
+        },
+        "required": ["word", "gloss", "importance"],
+      "description": "A list of all vocabulary that occurs in the vignette.  The vignette should be self-contained so that a student can use the vocab list plus the vignette to study.  Proper names from the characters/about file do not need an entry."
+      }
+    },
+    "description": {
+      "type": "string",
+      "description": "A 1-2 sentence description of the grammar/vocab principle being taught.  The description uses technical jargon from linguistics and is targetted at an expert teacher to help them decide when to use this vignette."
+    }
+  },
+  "required": ["title", "vignette", "vocab", "description"]
+}

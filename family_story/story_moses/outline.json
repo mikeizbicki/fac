@@ -1,35 +1,35 @@
 {
-  "story_structure": "Freytag's Pyramid",
-  "chapters": [
-    {
-      "name": "The Oppression of the Israelites",
-      "element": "Exposition",
-      "plot": "The family of shape-shifting children, representing the Israelites, are living under the oppressive rule of Bowser, who represents the Pharaoh. Bowser and his Koopa minions, representing the Egyptian slave masters, force the children to work tirelessly, not allowing them to rest or play. The children use their shapeshifting abilities to try and escape Bowser's clutches, but their efforts are always thwarted."
-    },
-    {
-      "name": "The Call to Action",
-      "element": "Rising Action",
-      "plot": "One day, while the children are working, they hear a booming voice that they recognize as God. God tells them that they must go back and free the other Israelite children from Bowser's rule. The children are hesitant at first, but eventually agree to heed God's call. They begin to strategize ways to sneak into Bowser's castle and rescue the other captive children."
-    },
-    {
-      "name": "The Plagues",
-      "element": "Rising Action",
-      "plot": "The children attempt to infiltrate Bowser's castle but are met with fierce resistance from the Koopa minions. As they push forward, they unleash a series of 'plagues' upon Bowser and his forces, such as an invasion of colorful, bouncing rubber duckies that flood the castle, or a swarm of tickling feathers that send the Koopas into uncontrollable laughter. These plagues continue to escalate, causing increasing chaos and frustration for Bowser."
-    },
-    {
-      "name": "The Showdown at the Castle",
-      "element": "Climax",
-      "plot": "After withstanding the plagues, Bowser becomes enraged and leads his full army of Koopas in a direct assault on the children. In the climactic battle, the children use their shapeshifting abilities to their fullest, transforming into powerful animals to fend off the Koopa horde. The clash reaches a fever pitch as Bowser himself enters the fray, determined to crush the children's rebellion once and for all."
-    },
-    {
-      "name": "Escape from Bowser's Clutches",
-      "element": "Falling Action",
-      "plot": "In the aftermath of the battle, the children manage to overpower Bowser and his Koopa army. With Bowser defeated, the captive Israelite children are freed from their bonds. The family of shape-shifting children gathers the other liberated children and begin their exodus, leaving Bowser's ruined castle behind them as they set out to find a new, safer home."
-    },
-    {
-      "name": "A New Beginning",
-      "element": "Resolution",
-      "plot": "As the children journey away from Bowser's domain, they reflect on their harrowing ordeal and the bravery they displayed in standing up to the oppressive Koopa regime. The family of shape-shifters feels a renewed sense of purpose, knowing that they have not only freed themselves but also their fellow Israelite children. With God's guidance, they look forward to starting a new chapter in their lives, free from Bowser's tyranny."
-    }
-  ]
+    "story_structure": "Freytag's Pyramid",
+    "chapters": [
+        {
+            "name": "בְּנֵי־חַיּוֹת בְּבֵית עַבְדוּת",
+            "element": "Exposition",
+            "plot": "The four shapeshifter children (Evan as owl, Isaac as koala, Aaron as dinosaur, and Aurelia as panda) live in slavery under Bowser's castle, forced to build pyramids and carry heavy stones. Koopa1 with his spear and Koopa2 with his eye patch guard them harshly, making them work from dawn to dusk. When Aaron tries to rest because he's tired, Koopa1 strikes him with his spear and forces him back to work. The exciting force occurs when the children discover they can secretly transform into animals to make their work easier and plan their escape."
+        },
+        {
+            "name": "בְּרִיחָה בְּכֹחַ הַחַיּוֹת",
+            "element": "Rising Action",
+            "plot": "Using their animal forms, the children escape Bowser's castle - Evan as an owl flies overhead to scout, Isaac as a koala climbs the walls, Aaron as a dinosaur breaks through barriers, and Aurelia as a panda squeezes through small spaces. They reach the wilderness where they think they're safe, but they discover hundreds of other children still trapped in slavery. One child cries from exhaustion and Shenzi the dog comes to comfort him. The children realize they need help when they can't lift a heavy boulder blocking their path, and the minions arrive with ropes as a present."
+        },
+        {
+            "name": "קוֹל אֱלֹהִים וְהַשְּׁלִיחוּת",
+            "element": "Rising Action",
+            "plot": "While hiding in a cave, the children hear God's voice telling them to return and free all the enslaved children from Bowser's tyranny. Evan reads from an ancient scroll he finds in the cave, learning about the power of faith and courage. Isaac suddenly needs to run to find a private place to poop, leaving the others briefly. When the children argue about whether it's too dangerous to return, they remember to love each other and apologize with hugs. God promises to help them with special powers to defeat Bowser and his koopa army."
+        },
+        {
+            "name": "מַכּוֹת מְצַחְקוֹת נֶגֶד בָּאוּזֶר",
+            "element": "Climax",
+            "plot": "The children return to confront Bowser, and God sends ten silly but effective plagues: all of Bowser's food turns into vegetables he hates, his castle fills with rubber balls that make everyone slip, all his koopas' shells turn bright pink making them embarrassed, and his throne becomes a whoopee cushion that makes funny noises. Each plague makes Bowser angrier but weaker, while the enslaved children laugh and gain hope. In the final confrontation, Bowser refuses to let the children go free, so God sends the ultimate plague - all of Bowser's video games disappear, making him powerless and defeated."
+        },
+        {
+            "name": "חֹפֶשׁ וְחִפּוּשׂ הַשְּׂמִיכָה",
+            "element": "Falling Action",
+            "plot": "All the enslaved children are freed and celebrate their liberation from Bowser's rule, dancing and singing songs of freedom. As they prepare to leave the castle forever, little Aurelia realizes she lost her special blanket during the escape. All the children search throughout the castle, looking under beds, behind doors, and in every corner until Isaac finally finds the blanket in Bowser's defeated throne room. The discovery of the blanket symbolizes that they have truly left their enslavement behind and can take their cherished possessions with them to freedom."
+        },
+        {
+            "name": "בַּמִּדְבָּר - דֶּרֶךְ חֲדָשָׁה",
+            "element": "Resolution",
+            "plot": "The children lead all the freed slaves into the wilderness toward their promised land, using their animal forms to help guide and protect the large group. They set up camp under the stars, and the children transform one final time - Evan as an owl watches over everyone during the night, Isaac as a koala gathers food from tall trees, Aaron as a dinosaur protects the camp from wild animals, and Aurelia as a panda comforts the younger children who are scared. The story ends with all the children sleeping peacefully under God's protection, finally free from Bowser's tyranny and ready to build their new life together."
+        }
+    ]
 }
