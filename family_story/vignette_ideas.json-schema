@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Biblical Hebrew Vignette",
+  "description": "A short story that illustrates biblical hebrew grammar and vocabulary in a fun way for young children. Hebrew is always written in Hebrew script (with niqqud) and no transliterations are provided.",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "A 1 sentence name of the vignette in English.  The title should describe both the story and the introduced grammar/vocab."
+    },
+    "plot": {
+      "type": "string",
+      "description": "A 3-5 sentence English description of the plot of the vignette.  The plot should be designed to illustrate a single vocab/grammar concept, and the description of the plot should explain why this story will illustrate the concept."
+    },
+    "example_sentences": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "A 1 sentence example of a Hebrew sentence from the story that illustrates the vocab/grammar concept."
+      }
+    },
+    "concept": {
+      "type": "string",
+      "description": "A 1 sentence description of the vocab/grammar concept introduced.  The description should use technical linguistic jargon as appropriate.  The grammar concept must be strongly tied to the plot."
+    }
+  }
+}
+

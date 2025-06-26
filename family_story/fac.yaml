@@ -15,6 +15,25 @@
 "grammar/grammar.jsonl":
   schema_file: grammar/grammar.json-schema
 
+"vignette_ideas.jsonl":
+  schema_file: vignette_ideas.json-schema
+  dependencies: |
+    about
+    characters/*/about.json
+    vocab/*.md
+
+"vignettes/$VIG.json":
+  schema_file: vignettes/vignette.json-schema
+  dependencies: |
+    about
+    characters/*/about.json
+    vignettes/$VIG.prompt
+  variables:
+    VIG: |
+      ls vocab | grep '\.prompt$' | sed 's/.prompt$//' | tr '\n' '\0'
+
+####################
+
 "$STORY/outline.json":
   schema_file: prompts/outline.json-schema
   dependencies: |
