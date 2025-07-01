@@ -650,6 +650,31 @@ class LLM():
         logger.info(f'self._total_price()={self._total_price(self.usage)}')
         return usage
 
+    def audio(self, path, data):
+        client = openai.Client()
+        assert set(data.keys()) == set(['input', 'instructions', 'voice'])
+        with client.audio.speech.with_streaming_response.create(
+            model="gpt-4o-mini-tts",
+            response_format="wav",
+            **data,
+        ) as response:
+            response.stream_to_file(path)
+
+        # FIXME:
+        # I don't know how to get usage info out of the TTS API,
+        # so we have this janky very rough estimate here.
+        usage = {
+            self.model: {
+                'text/out': 0,
+                'text/in': 0,
+                },
+            }
+        self.usage[self.model] += usage[self.model]
+
+        logger.info(f'self._tokens_to_prices()={self._tokens_to_prices(self.usage)}')
+        logger.info(f'self._total_price()={self._total_price(self.usage)}')
+        return usage
+
     def text(self, messages, *, seed=None):
         result = self.client.chat.completions.create(
             messages=messages,
@@ -670,16 +695,18 @@ class LLM():
         logger.info(f'self._total_price()={self._total_price(self.usage)}')
         return result.choices[0].message.content, usage
 
-    def generate_file(self, path, messages, *, mode='xb', seed=None):
+    def generate_file(self, filetype, path, data, *, mode='xb', seed=None):
         try:
             # generate the file
             _, extension = os.path.splitext(path)
-            with open(path, mode) as fout:
-                if extension == '.png':
-                    FIXME
-                    usage = self.image(fout, prompt)
-                else:
-                    text, usage = self.text(messages)
+            if extension == '.png':
+                FIXME
+                usage = self.image(fout, prompt)
+            elif extension == '.wav':
+                usage = self.audio(path, data)
+            else:
+                with open(path, mode) as fout:
+                    text, usage = self.text(data)
                     blob = text.encode('utf-8')
                     fout.write(blob)
 
@@ -778,6 +805,7 @@ class BuildSystem:
             'include_paths',
             'unresolved_dependencies'
             ])
+        print(f"config={config}")
         contexts = [BuildContext(
             {**input_env, **target_env},
             [],
@@ -937,6 +965,7 @@ class BuildSystem:
 
             # build the target with the LLM
             else:
+                filename = os.path.basename(path_to_generate)
                 self.context_to_file(path_to_generate, config, context)
 
             # validate file
@@ -947,113 +976,133 @@ class BuildSystem:
 
         filename = os.path.basename(path_to_generate)
         _, extension = os.path.splitext(filename)
+        if extension == '.png':
+            filetype = 'image'
+            logger.debug('filetype={filetype}')
+            FIXME
 
-        # the messages list will contain the full set of instructions passed to the llm;
-        # it always starts with a sytem prompt
-        messages = []
-        messages.append({
-            'role': 'system',
-            'content': self.global_settings['system_prompt'],
-            })
+        elif extension == '.wav':
+            filetype = 'audio'
+            logger.debug('filetype={filetype}')
+            assert 'raw_data' in config
+            path = process_template(config['raw_data'], env_vars=context.variables)
+            logger.debug(f"path={path}")
+            with open(path) as fin:
+                data = json.load(fin)
 
-        # the largest and most complicated part of the prompt is the "user" role,
-        # which specifies the instructions that the LLM should follow for generating the content
-        # it is divided into several portions, all logically related, and so indented
-        if True:
+        # process text output by default
+        else:
+            filetype = 'text'
+            logger.debug('filetype={filetype}')
 
-            # `prompt_cmd` contains the actual instructions
-            if 'prompt' in config:
-                prompt_cmd = config['prompt']
-            elif 'prompt_file' in config:
-                prompt_path_template = config['prompt_file']
-                prompt_path = process_template(prompt_path_template, env_vars=context.variables)
-                try:
-                    with open(prompt_path) as fin:
-                        prompt_cmd = fin.read()
-                except FileNotFoundError:
-                    logger.error(f'prompt_path={prompt_path} not found')
+            # the messages list will contain the full set of instructions passed to the llm;
+            # it always starts with a system prompt
+            data = []
+            messages = data
+            messages.append({
+                'role': 'system',
+                'content': self.global_settings['system_prompt'],
+                })
+
+            # the largest and most complicated part of the prompt is the "user" role,
+            # which specifies the instructions that the LLM should follow for generating the content
+            # it is divided into several portions, all logically related, and so indented
+            if True:
+
+                # `prompt_cmd` contains the actual instructions
+                if 'prompt' in config:
+                    prompt_cmd = config['prompt']
+                elif 'prompt_file' in config:
+                    prompt_path_template = config['prompt_file']
+                    prompt_path = process_template(prompt_path_template, env_vars=context.variables)
+                    try:
+                        with open(prompt_path) as fin:
+                            prompt_cmd = fin.read()
+                    except FileNotFoundError:
+                        logger.error(f'prompt_path={prompt_path} not found')
+                        sys.exit(1)
+                else:
+                    prompt_cmd = ''
+                    if 'schema_file' not in config:
+                        logger.error('no prompt given and no schema given')
+                        sys.exit(1)
+                if len(prompt_cmd) > 0:
+                    prompt_cmd = "<instructions>\n" + prompt_cmd.strip() + "\n</instructions>"
+                    prompt_cmd = process_template(prompt_cmd, env_vars=context.variables)
+                    prompt_cmd += '\n'
+                
+                # `format_cmd` defines the output format
+                if 'json' in extension:
+                    if extension == '.json':
+                        format_cmd = 'Output JSON with no markdown codeblocks.'
+                    elif extension == '.jsonl':
+                        format_cmd = f'Output JSONL with no markdown codeblocks.  Each line of the output should be a single JSON object, and there should be {self.global_settings["jsonl_num_lines"]} total lines.'
+                    format_cmd = process_template(format_cmd, env_vars=context.variables)
+
+                    if 'schema_file' in config:
+                        with open(config['schema_file']) as fin:
+                            text = fin.read().strip()
+                            schema = json.loads(text)
+                        jsonschema.Draft7Validator.check_schema(schema)
+                        format_cmd += ' Ensure the output conforms to the following JSON schema:\n'
+                        format_cmd += text.strip()
+
+                    format_cmd = '<formatting>\n' + format_cmd + '\n</formatting>\n'
+
+                else:
+                    format_cmd = ''
+
+                # `files_prompt` contains all documents that are being passed into the LLM
+                if len(context.include_paths) == 0:
+                    files_prompt = ''
+                else:
+                    files_prompt = '<documents>\n'
+                    for path in context.include_paths:
+                        # FIXME:
+                        # when piping into stdin, open('/dev/stdin') fails because the open function does not work on pipe "files";
+                        # this is a hackish way to detect that we're piping into stdin,
+                        # and then changing path to a value that is compatible with open;
+                        # in theory, weirdly named files could break this hack
+                        if 'pipe:[' in path: 
+                            path = 0
+                        with open(path) as fin:
+                            files_prompt += f'''<document path="{path}">\n{fin.read().strip()}\n</document>\n'''
+                    files_prompt += '</documents>'
+
+                # add the user role + message
+                messages.append({
+                    'role': 'user',
+                    'content': prompt_cmd + format_cmd + files_prompt,
+                    })
+
+            # extend the existing output
+            if self.extend:
+
+                # FIXME:
+                # currently we only support extending JSONL,
+                # but this restriction could be removed in principle
+                if extension != '.jsonl':
+                    logger.error('extension {extension} not supported with --extend')
                     sys.exit(1)
-            else:
-                prompt_cmd = ''
-                if 'schema_file' not in config:
-                    logger.error('no prompt given and no schema given')
-                    sys.exit(1)
-            if len(prompt_cmd) > 0:
-                prompt_cmd = "<instructions>\n" + prompt_cmd.strip() + "\n</instructions>"
-                prompt_cmd = process_template(prompt_cmd, env_vars=context.variables)
-            
-            # `format_cmd` defines the output format
-            if 'json' in extension:
-                if extension == '.json':
-                    format_cmd = 'Output JSON with no markdown codeblocks.'
-                elif extension == '.jsonl':
-                    format_cmd = f'Output JSONL with no markdown codeblocks.  Each line of the output should be a single JSON object, and there should be {self.global_settings["jsonl_num_lines"]} total lines.'
-                format_cmd = process_template(format_cmd, env_vars=context.variables)
 
-                if 'schema_file' in config:
-                    with open(config['schema_file']) as fin:
-                        text = fin.read().strip()
-                        schema = json.loads(text)
-                    jsonschema.Draft7Validator.check_schema(schema)
-                    format_cmd += ' Ensure the output conforms to the following JSON schema:\n'
-                    format_cmd += text.strip()
+                # add previous model output to the messages list
+                with open(path_to_generate) as fin:
+                    previous_output = fin.read().strip()
+                messages.append({
+                    'role': 'assistant',
+                    'content': previous_output,
+                    })
 
-                format_cmd = '<formatting>\n' + format_cmd + '\n</formatting>\n'
-
-            else:
-                format_cmd = ''
-
-            # `files_prompt` contains all documents that are being passed into the LLM
-            if len(context.include_paths) == 0:
-                files_prompt = ''
-            else:
-                files_prompt = '<documents>\n'
-                for path in context.include_paths:
-                    # FIXME:
-                    # when piping into stdin, open('/dev/stdin') fails because the open function does not work on pipe "files";
-                    # this is a hackish way to detect that we're piping into stdin,
-                    # and then changing path to a value that is compatible with open;
-                    # in theory, weirdly named files could break this hack
-                    if 'pipe:[' in path: 
-                        path = 0
-                    with open(path) as fin:
-                        files_prompt += f'''<document path="{path}">\n{fin.read().strip()}\n</document>\n'''
-                files_prompt += '</documents>'
-
-            # add the user role + message
-            messages.append({
-                'role': 'user',
-                'content': prompt_cmd + format_cmd + files_prompt,
-                })
-
-        # extend the existing output
-        if self.extend:
-
-            # FIXME:
-            # currently we only support extending JSONL,
-            # but this restriction could be removed in principle
-            if extension != '.jsonl':
-                logger.error('extension {extension} not supported with --extend')
-                sys.exit(1)
-
-            # add previous model output to the messages list
-            with open(path_to_generate) as fin:
-                previous_output = fin.read().strip()
-            messages.append({
-                'role': 'assistant',
-                'content': previous_output,
-                })
-
-            # generate a new command
-            messages.append({
-                'role': 'user',
-                'content': f'The previous output looks good.  Now generate {self.extend} more examples.'
-                })
+                # generate a new command
+                messages.append({
+                    'role': 'user',
+                    'content': f'The previous output looks good.  Now generate {self.extend} more examples.'
+                    })
 
         # stop processing if printing the prompt
         if self.print_prompt:
             import pprint
-            pprint.pprint(messages)
+            pprint.pprint(data)
             return
 
         # write to the output file
@@ -1063,7 +1112,7 @@ class BuildSystem:
                 mode = 'ab'
             else:
                 mode = 'wb'
-        self.llm.generate_file(path_to_generate, messages, mode=mode)
+        self.llm.generate_file(filetype, path_to_generate, data, mode=mode)
 
 
 ################################################################################
