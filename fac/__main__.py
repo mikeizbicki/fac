@@ -617,20 +617,34 @@ class LLM():
         # load the system prompt dynamically
         self.system_prompt = '''You are a creative writing assistant with expert knowledge in storytelling, linguistics, and education.  Whenever you write about copyrighted characters, you do so in a way that constitutes fair use.  You are not having a conversation, and only provide the requested output with no further discussion.'''
 
-    def image(self, fout, prompt, *, seed=None):
-        logger.debug(f'llm.image; prompt_length={len(prompt)}')
+    def image(self, fout, data, *, seed=None):
+        logger.debug(f'llm.image; data.keys()={list(data.keys())}')
         client = openai.Client()
-        model = 'gpt-image-1'
+        model = self.model_image.split('/')[-1]
+        quality = data.get('quality', 'low')
+
         size = '1536x1024'
-        quality = 'low'
+        if data.get('orientation') == 'square':
+            size = '1024x1024'
+        if data.get('orientation') == 'portrait':
+            size = '1024x1536'
 
         # generate a new image
-        result = client.images.generate(
-            model=model,
-            prompt=prompt,
-            size=size,
-            quality=quality,
-        )
+        if not data.get('reference_images'):
+            result = client.images.generate(
+                model=model,
+                prompt=data['prompt'],
+                size=size,
+                quality=quality,
+            )
+        else:
+            result = client.images.edit(
+                model=model,
+                prompt=data['prompt'],
+                size=size,
+                quality=quality,
+                image=data['reference_images'],
+            )
 
         # save the image
         image_base64 = result.data[0].b64_json
@@ -638,13 +652,14 @@ class LLM():
         fout.write(image_bytes)
 
         # update usage info
-        usage = Counter({
-            'text/in': result.usage.input_tokens_details.text_tokens,
-            'text/out': 0,
-            'image/in': result.usage.input_tokens_details.image_tokens,
-            'image/out': result.usage.output_tokens,
-            })
-        self.usage[self.model_image] += usage
+        usage = {
+            self.model_image: {
+                'text/in': result.usage.input_tokens_details.text_tokens,
+                'image/in': result.usage.input_tokens_details.image_tokens,
+                'image/out': result.usage.output_tokens,
+                }
+            }
+        self.usage[self.model_image] += usage[self.model_image]
 
         logger.info(f'self._tokens_to_prices()={self._tokens_to_prices(self.usage)}')
         logger.info(f'self._total_price()={self._total_price(self.usage)}')
@@ -700,8 +715,8 @@ class LLM():
             # generate the file
             _, extension = os.path.splitext(path)
             if extension == '.png':
-                FIXME
-                usage = self.image(fout, prompt)
+                with open(path, mode) as fout:
+                    usage = self.image(fout, data)
             elif extension == '.wav':
                 usage = self.audio(path, data)
             else:
@@ -752,6 +767,7 @@ class BuildSystem:
     project_dir: str = '.'
     prompt_dir: str = 'prompts'
     config_file: str = 'fac.yaml'
+    from_scratch: bool = False
     overwrite: bool = False
     extend: int = False
     print_prompt: bool = False
@@ -777,10 +793,10 @@ class BuildSystem:
         # build all targets
         for target in self.targets:
             logger.info(f'target="{target}"')
-            self.build_target(target, {})
+            self.build_target(target, {}, overwrite=self.overwrite or self.from_scratch)
 
     @with_subtree(logger)
-    def build_target(self, target_to_build, input_env):
+    def build_target(self, target_to_build, input_env, overwrite=False):
 
         # load target config
         config_targets = self.full_config.keys()
@@ -805,7 +821,6 @@ class BuildSystem:
             'include_paths',
             'unresolved_dependencies'
             ])
-        print(f"config={config}")
         contexts = [BuildContext(
             {**input_env, **target_env},
             [],
@@ -833,13 +848,57 @@ class BuildSystem:
                 unresolved_dependencies1 = []
                 for dep_target in context.unresolved_dependencies:
                     logger.info(f'resolving dependency: "{dep_target}"')
+
+                    # try to expand dep_paths into real file paths
+                    try:
+                        dep_paths = expand_path(dep_target, context.variables)
+                        logger.debug(f'dep_paths={dep_paths}')
+                    except TemplateProcessingError:
+                        logger.debug('dep_paths failed to expand with TemplateProcessingError; there are variables that still need resolving')
+                        dep_paths = None
+
+                    # decide if we should build dep_paths
+                    build_deps = False
+                    if dep_target in self.full_config:
+                        build_deps = True
+                        logger.debug(f'dep_target={dep_target} in full_config')
+                    elif self.from_scratch:
+                        build_dps = True
+                        logger.debug(f'self.from_scratch=True')
+
+                    if build_deps:
+                        logger.debug(f'recursively building dep_target={dep_target}')
+                        self.build_target(dep_target, context.variables, overwrite=self.from_scratch)
+
+                        # validate all of the dep_paths
+                        if dep_paths is not None:
+                            for dep_path in dep_paths:
+                                logger.debug(f'validating dep_path={dep_path}')
+                                if not validate_file(dep_path, fix=False):
+                                    logger.warning(f'failed to validate dep_path={dep_path}')
+                            include_paths1.extend(dep_paths)
+
+                    else:
+                        logger.debug(f'saving to resolve later')
+                        unresolved_dependencies1.append(dep_target)
+
+
+                    """
+                    # try to expand dep_paths into real file paths
                     try:
                         dep_paths = expand_path(dep_target, context.variables)
                         if not dep_paths:
-                            logger.debug(f'no paths found for dep_target={dep_target}, building')
-                            self.build_target(dep_target, context.variables)
+                            if dep_target in self.full_config:
+                                logger.debug(f'no paths found for dep_target={dep_target}, building')
+                                self.build_target(dep_target, context.variables)
+
+
+                            else:
+                                assert dep_paths is None
+                                unresolved_dependencies1.append(dep_target)
                         else:
                             logger.debug(f'matched: dep_target="{dep_target}"')
+
                         for dep_path in dep_paths:
                             logger.debug(f'validating dep_path={dep_path}')
                             if not validate_file(dep_path, fix=False):
@@ -853,6 +912,7 @@ class BuildSystem:
                             self.build_target(dep_target, context.variables)
                         else:
                             unresolved_dependencies1.append(dep_target)
+                    """
 
                 logger.debug(f"include_paths1={include_paths1}")
                 logger.debug(f"unresolved_dependencies1={unresolved_dependencies1}")
@@ -926,6 +986,12 @@ class BuildSystem:
             pprint.pprint(contexts)
             return
 
+        # if we are only allowed to run once,
+        # then we truncate the contexts to force us to run only once
+        if config.get('run_once'):
+            logger.info(f'run_once=True; contexts truncated from {len(contexts)} to 1')
+            contexts = [contexts[0]]
+
         # loop over each context and run the processing code for the context
         for i, context in enumerate(contexts):
 
@@ -946,8 +1012,8 @@ class BuildSystem:
             # the race condition is necessary in order to support shell commands;
             # we could probably push the native-python file generation code up to this point,
             # but it would result in more complicated code for fixing a very minor/theoretical problem
-            if os.path.exists(path_to_generate) and not self.overwrite:
-                logger.warning(f'path exists, skipping: {path_to_generate}')
+            if os.path.exists(path_to_generate) and not overwrite:
+                logger.info(f'path exists, skipping: {path_to_generate}')
                 continue
 
             # build with a custom shell command
@@ -958,28 +1024,43 @@ class BuildSystem:
                     capture_output=True,
                     text=True,
                     executable="/bin/bash",
-                    env=context.variables,
+                    env={**os.environ, **context.variables},
                     )
+                logger.debug(result)
                 if result.returncode != 0:
+                    print(f'result.stdout={result.stdout}')
+                    print(f'result.stderr={result.stderr}')
                     raise CommandExecutionError(result)
 
             # build the target with the LLM
             else:
                 filename = os.path.basename(path_to_generate)
-                self.context_to_file(path_to_generate, config, context)
+                self.context_to_file(path_to_generate, config, context, overwrite)
 
             # validate file
             if self.validate_output:
                 validate_file(path_to_generate, config.get('schema_file'))
 
-    def context_to_file(self, path_to_generate, config, context):
+    def context_to_file(self, path_to_generate, config, context, overwrite):
 
         filename = os.path.basename(path_to_generate)
         _, extension = os.path.splitext(filename)
         if extension == '.png':
             filetype = 'image'
-            logger.debug('filetype={filetype}')
-            FIXME
+            logger.debug(f'filetype={filetype}')
+            data = {}
+            # FIXME: prompt should share prompt_cmd code from the text section below
+            data['prompt'] = config['prompt']
+            data['prompt'] = process_template(data['prompt'], env_vars=context.variables)
+            #image = 'elements/AARON/raw_images/IMG_8098.jpg'
+
+            if 'image_references' in config:
+                image_paths = expand_path(config['image_references'], env_vars=context.variables)
+                data['reference_images'] = image=[open(image, 'rb') for image in image_paths]
+            else:
+                data['reference_images'] = None
+            data['quality'] = config['image_quality']
+            data['orientation'] = config['image_orientation']
 
         elif extension == '.wav':
             filetype = 'audio'
@@ -1040,9 +1121,14 @@ class BuildSystem:
                     format_cmd = process_template(format_cmd, env_vars=context.variables)
 
                     if 'schema_file' in config:
-                        with open(config['schema_file']) as fin:
-                            text = fin.read().strip()
-                            schema = json.loads(text)
+                        try:
+                            with open(config['schema_file']) as fin:
+                                text = fin.read().strip()
+                                schema = json.loads(text)
+                        except json.decoder.JSONDecodeError as e:
+                            logger.error(f"config['schema_file']={config['schema_file']}")
+                            logger.error(e)
+                            sys.exit(1)
                         jsonschema.Draft7Validator.check_schema(schema)
                         format_cmd += ' Ensure the output conforms to the following JSON schema:\n'
                         format_cmd += text.strip()
@@ -1107,7 +1193,7 @@ class BuildSystem:
 
         # write to the output file
         mode = 'xb'
-        if self.overwrite:
+        if self.from_scratch or overwrite:
             if self.extend:
                 mode = 'ab'
             else:
