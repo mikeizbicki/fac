@@ -24,6 +24,7 @@ class KapowBubble(arcade.Sprite):
             **kwargs
             ):
         super().__init__(**kwargs)
+        self.config = {}
 
         # Set up deterministic randomness
         random.seed(seed)
@@ -164,6 +165,7 @@ class SpeechBubble(arcade.Sprite):
             **kwargs
             ):
         super().__init__(**kwargs)
+        self.config = {}
 
         # Load font and determine text dimensions
         font = PIL.ImageFont.truetype("arial.ttf", font_size)

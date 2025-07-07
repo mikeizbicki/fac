@@ -28,12 +28,20 @@ from .Bubbles import *
 from .Media import *
 
 
+class FullScene():
+    def __init__(self, scene_manager):
+        self.camera = arcade.Camera2D()
+        self.scene_manager = scene_manager
+        self._camera_must_draw_sprites = set()
+
+    def update(self):
+        self.camera.use()
+
 class CameraManager():
     def __init__(self, scene_manager):
         self.camera = arcade.Camera2D()
         self.scene_manager = scene_manager
         self._camera_must_draw_sprites = set(['AARON', 'PANDA'])
-        pass
 
     def update(self):
         self.camera.use()
@@ -118,9 +126,10 @@ class CameraManager():
 
 class SceneManager():
 
-    def __init__(self, scene, screen_width, screen_height, output_file, **kwargs):
+    def __init__(self, scene, root_dir, screen_width, screen_height, output_file, **kwargs):
         super().__init__(**kwargs)
         self.camera_manager = CameraManager(self)
+        #self.camera_manager = FullScene(self)
 
         self.sprites = arcade.SpriteList()
         self._name_to_sprite = {}
@@ -144,9 +153,11 @@ class SceneManager():
         # load scene config
         assert scene['type'] == 'plain-background'
         scene.setdefault('walls', False)
+        scene.setdefault('farbackground_image_path', f'backgrounds/outdoors.png')
         scene.setdefault('background_image_path', f'backgrounds/wall-interior.png')
         scene.setdefault('floor_image_path', f'scene/floor/carpet.png')
         floor_height = 128
+        self.floor_height = 128
 
         # load the background image
         self.background = arcade.load_texture(scene['background_image_path'])
@@ -156,6 +167,14 @@ class SceneManager():
                 -lr_padding,
                 floor_height,
                 floor_height + self.screen_width + lr_padding * 2,
+                background_newheight,
+                )
+
+        self.farbackground = arcade.load_texture(scene['farbackground_image_path'])
+        self.farbackground_LBWH = arcade.LBWH(
+                -lr_padding,
+                floor_height + 4,
+                floor_height + 4 + self.screen_width + lr_padding * 2,
                 background_newheight,
                 )
 
@@ -169,7 +188,7 @@ class SceneManager():
 
         # load voices
         self.voices = {}
-        voices_path = 'vignettes/animals/voices/'
+        voices_path = f'{root_dir}/voices/'
         for element in os.listdir(voices_path):
             self.voices[element] = {}
             element_path = os.path.join(voices_path, element)
@@ -185,6 +204,7 @@ class SceneManager():
 
         # create a floor for the scene
         self.floor = arcade.SpriteList()
+        self.floor_offset = -32
         floor_path = 'tmp/Ground&Stone/Ground/ground2.png'
         floor_img = arcade.load_image(floor_path)
         floor_width = int(floor_img.width * (floor_height / floor_img.height))
@@ -195,7 +215,7 @@ class SceneManager():
             for depth in range(-2, 3):
                 sprite = arcade.Sprite(floor_texture)
                 sprite.center_x = floor_width * i
-                sprite.center_y = floor_height / 2 - 32 - depth * 32
+                sprite.center_y = floor_height / 2 + self.floor_offset - depth * 32
                 sprite.depth = depth
                 self.floor.append(sprite)
         self.physics_engine.add_sprite_list(
@@ -275,6 +295,10 @@ class SceneManager():
         arcade.draw_texture_rect(
             self.img_floor,
             self.img_floor_LBWH,
+        )
+        arcade.draw_texture_rect(
+            self.farbackground,
+            self.farbackground_LBWH,
         )
         arcade.draw_texture_rect(
             self.background,
@@ -367,9 +391,36 @@ class SceneManager():
         if position:
             x, y = self.position_to_coordinates(sprite, position)
             sprite.center_x = x
-            sprite.center_y = y
-        if not background and isinstance(sprite, Element):
+            sprite.center_y = y + sprite.config.get('y-offset', 0) - depth*32
+        if isinstance(sprite, Element) and not sprite.config.get('background', False):
             self._reset_element_physics(sprite)
+
+        # for background objects, we need to cut a hole in the background texture
+        if sprite.config.get('background'):
+            from PIL import Image
+            from PIL import ImageDraw
+            new_bg = self.background.image.copy().convert('RGBA')
+            draw = ImageDraw.Draw(new_bg)
+
+            # first, convert screen coords to self.background texture coords
+            def screen_to_texture_coords(screen_x, screen_y):
+                scaled_width = self.background_LBWH.width
+                scaled_height = self.background_LBWH.height
+                bg_left = self.background_LBWH.left
+                bg_bottom = self.background_LBWH.bottom
+                texture_x = (screen_x - bg_left) / scaled_width * self.background.width
+                texture_y = (1 - (screen_y - bg_bottom) / scaled_height) * self.background.height
+                return texture_x, texture_y
+            x0, y1 = screen_to_texture_coords(sprite.left, sprite.bottom)
+            x1, y0 = screen_to_texture_coords(sprite.right, sprite.top)
+
+            padding = 15
+            x0 += padding
+            x1 -= padding
+            y0 += padding
+            y1 -= padding
+            draw.rectangle((x0, y0, x1, y1), fill=(0, 0, 0, 0))
+            self.background = arcade.Texture(new_bg)
 
     def _reset_element_physics(self, sprite):
         try:
@@ -422,7 +473,7 @@ class SceneManager():
             sprite = self._name_to_sprite[name]
             x, y = self.position_to_coordinates(sprite, pos)
             sprite.center_x = x
-            sprite.center_y = y
+            sprite.center_y = y + sprite.config.get('y-offset', 0)
 
         # next apply forces to handle movement
         for name, pos in list(self._movements.items()):
@@ -458,7 +509,7 @@ class SceneManager():
             target = self._name_to_sprite[target_name]
 
             offset_x = 0
-            offset_y = -target.center_y + 128 + sprite.center_y - sprite.bottom
+            offset_y = -target.center_y + 128 + self.floor_offset + sprite.center_y - sprite.bottom
             if 'inside' in loc:
                 padding = -10
             else:
@@ -515,6 +566,7 @@ class Element(arcade.Sprite):
             self.config = json.load(fin)
             self.config.setdefault('default_state', 'idle')
             self.config.setdefault('min_state_time', 1.5)
+        logger.debug(f'created element "{name}"; config={self.config}')
 
         # load state textures
         self.textures = {}
@@ -613,12 +665,12 @@ class GameWindow(arcade.Window):
             window_height += 2
         super().__init__(window_width, window_height, 'test')
 
-        story_path = 'vignettes/animals'
+        self.story_path = 'vignettes/animals'
 
-        self.storyboard_dir = os.path.join(story_path, 'storyboard')
+        self.storyboard_dir = os.path.join(self.story_path, 'storyboard')
         os.makedirs(self.storyboard_dir, exist_ok=True)
 
-        script_path = os.path.join(story_path, 'script.json')
+        script_path = os.path.join(self.story_path, 'script.json')
         self.load_script(script_path)
 
     def load_script(self, script_path):
@@ -628,6 +680,7 @@ class GameWindow(arcade.Window):
             script = json.load(fin)
         self.scene = SceneManager(
                 script['scene'],
+                self.story_path,
                 screen_width = self.screen_width,
                 screen_height = self.screen_height,
                 output_file = self.output_file,
@@ -635,6 +688,7 @@ class GameWindow(arcade.Window):
 
         # create the initial elements
         for i, element in enumerate(script.get('elements', [])):
+            print(f"element={element}")
             self.scene.add(
                 element['name'],
                 position=element['position'],
