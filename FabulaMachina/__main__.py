@@ -36,6 +36,14 @@ class FullScene():
 
     def update(self):
         self.camera.use()
+        padding = 1000
+        lrbt = arcade.LRBT(
+                -padding,
+                self.scene_manager.screen_width + padding,
+                -padding,
+                self.scene_manager.screen_height + padding,
+                )
+        self.camera.update_values(lrbt, viewport=False, position=True)
 
 class CameraManager():
     def __init__(self, scene_manager):
@@ -153,11 +161,9 @@ class SceneManager():
         # load scene config
         assert scene['type'] == 'plain-background'
         scene.setdefault('walls', False)
-        scene.setdefault('farbackground_image_path', f'backgrounds/outdoors.png')
-        scene.setdefault('background_image_path', f'backgrounds/wall-interior.png')
-        scene.setdefault('floor_image_path', f'scene/floor/carpet.png')
-        floor_height = 128
-        self.floor_height = 128
+        scene.setdefault('floor_height', 0.2)
+        floor_height = int(screen_height * scene['floor_height'])
+        self.floor_height = floor_height
 
         # load the background image
         self.background = arcade.load_texture(scene['background_image_path'])
@@ -170,21 +176,30 @@ class SceneManager():
                 background_newheight,
                 )
 
-        self.farbackground = arcade.load_texture(scene['farbackground_image_path'])
-        self.farbackground_LBWH = arcade.LBWH(
-                -lr_padding,
-                floor_height + 4,
-                floor_height + 4 + self.screen_width + lr_padding * 2,
-                background_newheight,
-                )
+        self.background_sprite = arcade.Sprite()
+        self.background_sprite.texture = self.background
+        self.background_sprite.scale_x = self.background_LBWH.width / self.background.width
+        self.background_sprite.scale_y = self.background_LBWH.height / self.background.height
+        self.background_sprite.left = self.background_LBWH.left
+        self.background_sprite.bottom = self.background_LBWH.bottom
+        self.background_sprite.depth = -0.5
+        self.sprites.append(self.background_sprite)
 
-        self.img_floor = arcade.load_texture(scene['floor_image_path'])
-        self.img_floor_LBWH = arcade.LBWH(
-                self.background_LBWH.left,
-                self.background_LBWH.bottom - self.background_LBWH.height//2,
-                self.background_LBWH.width,
-                self.background_LBWH.height,
-                )
+        farbackground = arcade.Sprite(scene['farbackground_image_path'])
+        farbackground.depth = -9
+        farbackground.scale_x = self.background_sprite.scale_x
+        farbackground.scale_y = self.background_sprite.scale_y
+        farbackground.left = self.background_sprite.left
+        farbackground.bottom = self.background_sprite.bottom + 4
+        self.sprites.append(farbackground)
+
+        img_floor = arcade.Sprite(scene['floor_image_path'])
+        img_floor.depth = -10
+        img_floor.scale_x = self.background_sprite.scale_x
+        img_floor.scale_y = self.background_sprite.scale_y
+        img_floor.left = self.background_sprite.left
+        img_floor.bottom = self.background_sprite.bottom - self.background_LBWH.height // 2
+        self.sprites.append(img_floor)
 
         # load voices
         self.voices = {}
@@ -211,7 +226,6 @@ class SceneManager():
         floor_img = floor_img.resize((floor_width, floor_height))
         floor_texture = arcade.Texture(floor_img, hit_box_algorithm=arcade.hitbox.BoundingHitBoxAlgorithm())
         for i in range(-20, 30):
-            #for depth in range(2, -3, -1):
             for depth in range(-2, 3):
                 sprite = arcade.Sprite(floor_texture)
                 sprite.center_x = floor_width * i
@@ -228,7 +242,7 @@ class SceneManager():
         # elements should only collide with floors of the same depth
         def floor_handler(element, floor, arbiter, space, data):
             collide = floor.depth >= element.depth
-            logger.warning(f'element.name={element.name}, element.depth={element.depth}, floor.depth={floor.depth}, collide={collide}')
+            #logger.debug(f'element.name={element.name}, element.depth={element.depth}, floor.depth={floor.depth}, collide={collide}')
             return collide
         self.physics_engine.add_collision_handler(
                 'element',
@@ -291,20 +305,6 @@ class SceneManager():
     def draw(self):
         self.camera_manager.update()
 
-        # draw the background texture
-        arcade.draw_texture_rect(
-            self.img_floor,
-            self.img_floor_LBWH,
-        )
-        arcade.draw_texture_rect(
-            self.farbackground,
-            self.farbackground_LBWH,
-        )
-        arcade.draw_texture_rect(
-            self.background,
-            self.background_LBWH,
-        )
-
         # NOTE:
         # sprites will be drawn in the order they are in the sprite list;
         # sorting based on depth ensures that items will be drawn in the correct order;
@@ -312,13 +312,21 @@ class SceneManager():
         # so this could could be made more efficient to only sort when needed
         self.sprites.sort(key=lambda sprite: sprite.depth)
 
-        # draw the sprites
-        #self.floor.draw()
-        #self.wall.draw()
+        # draw the sprites;
+        # this includes all of the background imagery;
+        # it is sorted in order of depth so that the sprites are drawn correctly
         self.sprites.draw()
-        #for sprite in self.sprites:
-            #sprite.draw_hit_box()
 
+        # for debugging purposes, we can draw some more info;
+        # it would be better to have the floor/wall sprites included in the sprite list
+        # so that they can be rendered in the correct depth
+        if False:
+            #self.floor.draw()
+            #self.wall.draw()
+            for sprite in self.sprites:
+                sprite.draw_hit_box()
+
+        # save the frame intot he video
         self._save_video_frame()
 
     def _save_video_frame(self):
@@ -363,9 +371,38 @@ class SceneManager():
         # Now arr should be correctly shaped as (height, width, 3) for RGB data
         self.video_recorder.add_frame(arr)
 
-    def add_voice(self, name, text):
-        self.pyglet_sound_player = arcade.play_sound(self.voices[name][text])
-        self.video_recorder.add_audio(self.voices[name][text].path)
+    def add_voice(self, name, text, target=None):
+        # playing a sound effect
+        if name == 'audio':
+            path = 'audio/knock1.wav'
+            sound = arcade.load_sound(path)
+            self.pyglet_sound_player = arcade.play_sound(sound)
+            self.video_recorder.add_audio(path)
+
+        # someone is talking
+        else:
+            self.pyglet_sound_player = arcade.play_sound(self.voices[name][text])
+            self.video_recorder.add_audio(self.voices[name][text].path)
+
+            # make the speaker look at the target if provided
+            speaker = self._name_to_sprite[name]
+            if target:
+                sprite = self._name_to_sprite[target]
+                if sprite.center_x < speaker.center_x:
+                    speaker.character_face_direction = LEFT_FACING
+                elif sprite.center_x > speaker.center_x:
+                    speaker.character_face_direction = RIGHT_FACING
+
+            # make all the other sprites look at the speaker
+            # FIXME:
+            # this should be pushed into the Element.pymunk_moved method
+            # to get the sprite to look in the right direction after it has moved
+            for sprite in self.sprites:
+                if hasattr(sprite, 'config') and sprite.config.get('alive'):
+                    if sprite.center_x < speaker.center_x:
+                        sprite.character_face_direction = RIGHT_FACING
+                    elif sprite.center_x > speaker.center_x:
+                        sprite.character_face_direction = LEFT_FACING
 
     def has_audio(self):
         # NOTE:
@@ -379,7 +416,7 @@ class SceneManager():
             return False
         return not self.pyglet_sound_player.time > self.pyglet_sound_player.source.duration
 
-    def add(self, name, sprite=None, position=None, background=False, depth=0.0):
+    def add_element(self, name, sprite=None, position=None, background=False, depth=0.0):
         assert name not in self._name_to_sprite
         if sprite is None:
             sprite = Element(name)
@@ -399,7 +436,7 @@ class SceneManager():
         if sprite.config.get('background'):
             from PIL import Image
             from PIL import ImageDraw
-            new_bg = self.background.image.copy().convert('RGBA')
+            new_bg = self.background_sprite.texture.image.copy().convert('RGBA')
             draw = ImageDraw.Draw(new_bg)
 
             # first, convert screen coords to self.background texture coords
@@ -420,7 +457,7 @@ class SceneManager():
             y0 += padding
             y1 -= padding
             draw.rectangle((x0, y0, x1, y1), fill=(0, 0, 0, 0))
-            self.background = arcade.Texture(new_bg)
+            self.background_sprite.texture = arcade.Texture(new_bg)
 
     def _reset_element_physics(self, sprite):
         try:
@@ -509,7 +546,7 @@ class SceneManager():
             target = self._name_to_sprite[target_name]
 
             offset_x = 0
-            offset_y = -target.center_y + 128 + self.floor_offset + sprite.center_y - sprite.bottom
+            offset_y = -target.center_y + self.floor_height + self.floor_offset + sprite.center_y - sprite.bottom
             if 'inside' in loc:
                 padding = -10
             else:
@@ -619,17 +656,13 @@ class Element(arcade.Sprite):
 
             if abs(dx) >= DEAD_ZONE and self.state != 'interact':
                 self.set_state('walk')
+                period = 64
+                max_angle = 20
+                self.angle = math.cos(self.center_x / period) * max_angle
             else:
+                self.angle = 0
                 if time.time() - self.state_start_time >= self.config['min_state_time']:
                     self.set_state('idle')
-
-            # FIXME
-            #is_on_ground = physics_engine.is_on_ground(self)
-            #if not is_on_ground:
-                #if dy > DEAD_ZONE:
-                    #self.set_state('jump')
-                #elif dy < -DEAD_ZONE:
-                    #self.set_state('fall')
 
             if abs(self.x_odometer) > DISTANCE_TO_CHANGE_TEXTURE:
 
@@ -665,7 +698,8 @@ class GameWindow(arcade.Window):
             window_height += 2
         super().__init__(window_width, window_height, 'test')
 
-        self.story_path = 'vignettes/animals'
+        self.story_path = 'vignettes/doors'
+        #self.story_path = 'vignettes/animals'
 
         self.storyboard_dir = os.path.join(self.story_path, 'storyboard')
         os.makedirs(self.storyboard_dir, exist_ok=True)
@@ -689,7 +723,7 @@ class GameWindow(arcade.Window):
         # create the initial elements
         for i, element in enumerate(script.get('elements', [])):
             print(f"element={element}")
-            self.scene.add(
+            self.scene.add_element(
                 element['name'],
                 position=element['position'],
                 background=element.get('background', False),
@@ -734,22 +768,22 @@ class GameWindow(arcade.Window):
         if event['type'] == 'dialogue':
             bubble = SpeechBubble(event['text'])
             bubble_name = '__EVENT_BUBBLE__'
-            self.scene.add(bubble_name, bubble, 'above: ' + event['element'])
+            self.scene.add_element(bubble_name, bubble, 'above: ' + event['element'])
             self.event_info['event_sprite_names'].append(bubble_name)
-            self.scene.add_voice(event['element'], event['text'])
+            self.scene.add_voice(event['element'], event['text'], event.get('target'))
 
         elif event['type'] == 'sound_effect':
             bubble = KapowBubble(event['text'])
             bubble_name = '__EVENT_BUBBLE__'
-            self.scene.add(bubble_name, bubble, event['position'])
+            self.scene.add_element(bubble_name, bubble, event['position'])
             self.event_info['event_sprite_names'].append(bubble_name)
+            self.scene.add_voice('audio', event['text'])
 
         elif event['type'] == 'spawn_element':
-            self.scene.add(event['element'], position=event['position'], depth=-1.0)
+            self.scene.add_element(event['element'], position=event['position'], depth=-2.0)
 
         elif event['type'] == 'movement':
             self.subevents.append(event)
-            #self.scene.add_movement(event['element'], event['position'])
 
         elif event['type'] == 'interact':
             self.subevents.append({
@@ -758,7 +792,6 @@ class GameWindow(arcade.Window):
                 'position': 'inside-front: '+event['object'],
                 })
             self.subevents.append(event)
-            #self.scene.interact(event['subject'], event['object'])
 
         else:
             logger.error(f'event type "{event["type"]}" not supported')
