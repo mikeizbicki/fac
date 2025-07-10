@@ -134,10 +134,10 @@ class CameraManager():
 
 class SceneManager():
 
-    def __init__(self, scene, root_dir, screen_width, screen_height, output_file, **kwargs):
+    def __init__(self, scene, working_folder, screen_width, screen_height, **kwargs):
         super().__init__(**kwargs)
-        self.camera_manager = CameraManager(self)
-        #self.camera_manager = FullScene(self)
+        #self.camera_manager = CameraManager(self)
+        self.camera_manager = FullScene(self)
 
         self.sprites = arcade.SpriteList()
         self._name_to_sprite = {}
@@ -150,6 +150,7 @@ class SceneManager():
         # setup video recorder
         self.screen_width = screen_width
         self.screen_height = screen_height
+        output_file = os.path.join(working_folder, 'movie.mp4')
         self.video_recorder = VideoRecorder(
                 self.screen_width,
                 self.screen_height,
@@ -203,7 +204,7 @@ class SceneManager():
 
         # load voices
         self.voices = {}
-        voices_path = f'{root_dir}/voices/'
+        voices_path = f'{working_folder}/voices/'
         for element in os.listdir(voices_path):
             self.voices[element] = {}
             element_path = os.path.join(voices_path, element)
@@ -547,6 +548,8 @@ class SceneManager():
 
             offset_x = 0
             offset_y = -target.center_y + self.floor_height + self.floor_offset + sprite.center_y - sprite.bottom
+            if sprite.config.get('background'):
+                offset_y = -target.center_y + sprite.height / 2 + self.placements['stage-center']['y']
             if 'inside' in loc:
                 padding = -10
             else:
@@ -678,9 +681,9 @@ class Element(arcade.Sprite):
 
 class GameWindow(arcade.Window):
 
-    def __init__(self, output_file):
+    def __init__(self, working_folder):
 
-        self.output_file = output_file
+        self.working_folder = working_folder
 
         # the default width/height of the scene is HD video
         self.screen_width = 1280
@@ -698,13 +701,13 @@ class GameWindow(arcade.Window):
             window_height += 2
         super().__init__(window_width, window_height, 'test')
 
-        self.story_path = 'vignettes/doors'
+        #self.story_path = 'vignettes/doors'
         #self.story_path = 'vignettes/animals'
 
-        self.storyboard_dir = os.path.join(self.story_path, 'storyboard')
+        self.storyboard_dir = os.path.join(working_folder, 'storyboard')
         os.makedirs(self.storyboard_dir, exist_ok=True)
 
-        script_path = os.path.join(self.story_path, 'script.json')
+        script_path = os.path.join(working_folder, 'script.json')
         self.load_script(script_path)
 
     def load_script(self, script_path):
@@ -714,10 +717,9 @@ class GameWindow(arcade.Window):
             script = json.load(fin)
         self.scene = SceneManager(
                 script['scene'],
-                self.story_path,
+                self.working_folder,
                 screen_width = self.screen_width,
                 screen_height = self.screen_height,
-                output_file = self.output_file,
                 )
 
         # create the initial elements
@@ -775,8 +777,8 @@ class GameWindow(arcade.Window):
         elif event['type'] == 'sound_effect':
             bubble = KapowBubble(event['text'])
             bubble_name = '__EVENT_BUBBLE__'
-            self.scene.add_element(bubble_name, bubble, event['position'])
-            self.event_info['event_sprite_names'].append(bubble_name)
+            #self.scene.add_element(bubble_name, bubble, event['position'])
+            #self.event_info['event_sprite_names'].append(bubble_name)
             self.scene.add_voice('audio', event['text'])
 
         elif event['type'] == 'spawn_element':
@@ -842,8 +844,8 @@ class GameWindow(arcade.Window):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--output_file')
+    parser.add_argument('--working_folder')
     args = parser.parse_args()
 
-    window = GameWindow(output_file=args.output_file)
+    window = GameWindow(working_folder=args.working_folder)
     arcade.run()

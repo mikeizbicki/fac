@@ -595,27 +595,46 @@ class LLM():
         }
 
     def __init__(self):
-        #self.model = 'groq/llama-3.3-70b-versatile'
-        #self.model = 'openai/gpt-4.1'
-        #self.model = 'openai/gpt-4.1-mini'
-        #self.model = 'anthropic/claude-sonnet-4-0'
-        #self.model = 'anthropic/claude-3-5-haiku-latest'
-        self.model = 'anthropic/claude-3-haiku-20240307'
+        #self.default_text_model = 'groq/llama-3.3-70b-versatile'
+        #self.default_text_model = 'openai/gpt-4.1'
+        self.default_text_model = 'openai/gpt-4.1-mini'
+        #self.default_text_model = 'anthropic/claude-sonnet-4-0'
+        #self.default_text_model = 'anthropic/claude-3-5-haiku-latest'
+        #self.default_text_model = 'anthropic/claude-3-haiku-20240307'
         self.model_image = 'openai/gpt-image-1'
         self.usage = defaultdict(lambda: Counter())
         self.build_id = generate_uuid7()
 
-        # connect to the API
-        self.provider = self.model.split('/')[0]
-        self.model_name = self.model.split('/')[1]
-        self.client = openai.Client(
-            api_key = os.environ.get(self.providers[self.provider]['apikey']),
-            base_url = self.providers[self.provider]['base_url'],
+    def text(self, messages, *, model=None, seed=None):
+
+        # extract provider/model info from input model name
+        if model is None:
+            model = self.default_text_model
+        provider, model_name = model.split('/')
+
+        # call the API
+        client = openai.Client(
+            api_key = os.environ.get(self.providers[provider]['apikey']),
+            base_url = self.providers[provider]['base_url'],
+        )
+        result = client.chat.completions.create(
+            messages=messages,
+            model=model_name,
+            seed=seed,
         )
 
-        # FIXME:
-        # load the system prompt dynamically
-        self.system_prompt = '''You are a creative writing assistant with expert knowledge in storytelling, linguistics, and education.  Whenever you write about copyrighted characters, you do so in a way that constitutes fair use.  You are not having a conversation, and only provide the requested output with no further discussion.'''
+        # update usage info
+        usage = {
+            model: {
+                'text/out': result.usage.completion_tokens,
+                'text/in': result.usage.prompt_tokens,
+                },
+            }
+        self.usage[model] += usage[model]
+
+        logger.info(f'self._tokens_to_prices()={self._tokens_to_prices(self.usage)}')
+        logger.info(f'self._total_price()={self._total_price(self.usage)}')
+        return result.choices[0].message.content, usage
 
     def image(self, fout, data, *, seed=None):
         logger.debug(f'llm.image; data.keys()={list(data.keys())}')
@@ -666,10 +685,11 @@ class LLM():
         return usage
 
     def audio(self, path, data):
+        model = 'gpt-40-mini-tts'
         client = openai.Client()
         assert set(data.keys()) == set(['input', 'instructions', 'voice'])
         with client.audio.speech.with_streaming_response.create(
-            model="gpt-4o-mini-tts",
+            model=model,
             response_format="wav",
             **data,
         ) as response:
@@ -679,38 +699,18 @@ class LLM():
         # I don't know how to get usage info out of the TTS API,
         # so we have this janky very rough estimate here.
         usage = {
-            self.model: {
+            model: {
                 'text/out': 0,
                 'text/in': 0,
                 },
             }
-        self.usage[self.model] += usage[self.model]
+        self.usage[model] += usage[model]
 
         logger.info(f'self._tokens_to_prices()={self._tokens_to_prices(self.usage)}')
         logger.info(f'self._total_price()={self._total_price(self.usage)}')
         return usage
 
-    def text(self, messages, *, seed=None):
-        result = self.client.chat.completions.create(
-            messages=messages,
-            model=self.model_name,
-            seed=seed,
-        )
-
-        # update usage info
-        usage = {
-            self.model: {
-                'text/out': result.usage.completion_tokens,
-                'text/in': result.usage.prompt_tokens,
-                },
-            }
-        self.usage[self.model] += usage[self.model]
-
-        logger.info(f'self._tokens_to_prices()={self._tokens_to_prices(self.usage)}')
-        logger.info(f'self._total_price()={self._total_price(self.usage)}')
-        return result.choices[0].message.content, usage
-
-    def generate_file(self, filetype, path, data, *, mode='xb', seed=None):
+    def generate_file(self, filetype, path, data, *, mode='xb', seed=None, model=None):
         try:
             # generate the file
             _, extension = os.path.splitext(path)
@@ -721,7 +721,7 @@ class LLM():
                 usage = self.audio(path, data)
             else:
                 with open(path, mode) as fout:
-                    text, usage = self.text(data)
+                    text, usage = self.text(data, model=model)
                     blob = text.encode('utf-8')
                     fout.write(blob)
 
@@ -869,18 +869,18 @@ class BuildSystem:
                     if build_deps:
                         logger.debug(f'recursively building dep_target={dep_target}')
                         self.build_target(dep_target, context.variables, overwrite=self.from_scratch)
-
-                        # validate all of the dep_paths
-                        if dep_paths is not None:
-                            for dep_path in dep_paths:
-                                logger.debug(f'validating dep_path={dep_path}')
-                                if not validate_file(dep_path, fix=False):
-                                    logger.warning(f'failed to validate dep_path={dep_path}')
-                            include_paths1.extend(dep_paths)
-
                     else:
                         logger.debug(f'saving to resolve later')
                         unresolved_dependencies1.append(dep_target)
+
+                    # validate all of the dep_paths
+                    if dep_paths is not None:
+                        for dep_path in dep_paths:
+                            logger.debug(f'validating dep_path={dep_path}')
+                            if not validate_file(dep_path, fix=False):
+                                logger.warning(f'failed to validate dep_path={dep_path}')
+                        include_paths1.extend(dep_paths)
+
 
 
                     """
@@ -1059,8 +1059,8 @@ class BuildSystem:
                 data['reference_images'] = image=[open(image, 'rb') for image in image_paths]
             else:
                 data['reference_images'] = None
-            data['quality'] = config['image_quality']
-            data['orientation'] = config['image_orientation']
+            data['quality'] = config.get('image_quality', 'low')
+            data['orientation'] = config.get('image_orientation', 'landscape')
 
         elif extension == '.wav':
             filetype = 'audio'
@@ -1198,7 +1198,13 @@ class BuildSystem:
                 mode = 'ab'
             else:
                 mode = 'wb'
-        self.llm.generate_file(filetype, path_to_generate, data, mode=mode)
+        self.llm.generate_file(
+            filetype,
+            path_to_generate,
+            data,
+            mode=mode,
+            model=config.get('model'),
+            )
 
 
 ################################################################################
