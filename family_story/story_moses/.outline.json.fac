@@ -1,1 +1,0 @@
-{"__fac_version__": "0.0.0-dev", "time": "2025-06-19T17:32:10.965754+00:00", "path": "story_moses/outline.json", "build_id": 42026567391187178379993881368092079324, "cost": 0.030522, "usage": {"anthropic/claude-sonnet-4-0": {"text/out": 1164, "text/in": 4354}}}

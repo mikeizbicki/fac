@@ -1,1 +1,0 @@
-{"__fac_version__": "0.0.0-dev", "time": "2025-06-19T19:16:37.769395+00:00", "path": "hebrew/simple_verbs.md", "build_id": 302573186091830248510921651420979263534, "cost": 0.018874, "usage": {"openai/gpt-4.1": {"text/out": 2286, "text/in": 293}}}

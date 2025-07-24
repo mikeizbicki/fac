@@ -1,1 +1,0 @@
-{"__fac_version__": "0.0.0-dev", "time": "2025-06-23T20:43:09.795956+00:00", "path": "grammar/vignette.jsonl", "build_id": 73750243663268970767468266962356428809, "cost": 0.18535500000000002, "usage": {"anthropic/claude-sonnet-4-0": {"text/out": 11790, "text/in": 2835}}}

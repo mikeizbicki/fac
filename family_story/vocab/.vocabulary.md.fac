@@ -1,1 +1,0 @@
-{"__fac_version__": "0.0.0-dev", "time": "2025-06-18T06:56:22.371944+00:00", "path": "hebrew/vocabulary.md", "build_id": 310833357133738449202799234670036504678, "cost": 0.0033142500000000004, "usage": {"anthropic/claude-3-haiku-20240307": {"text/out": 2593, "text/in": 292}}}

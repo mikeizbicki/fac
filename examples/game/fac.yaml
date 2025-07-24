@@ -1,0 +1,17 @@
+"$GAME/cards.jsonl":
+  schema_file:
+    cards.json-schema
+  dependencies: |
+    $GAME/description.md
+  model: openai/gpt-4.1
+
+"$GAME/img/$CARD.png":
+  prompt: |
+    You are drawing art for a board game.  The style should be realistic and from an isometric view in the style of Age of Empires.  The background should be transparent, but it is okay to have a small grass/dirt/etc path at the base of buildings/people.  Do not include any text in the drawing.
+    $(jq -r 'select(.title == "'"$CARD"'").image_description' "$GAME/cards.jsonl")
+  image_quality: high
+  dependencies: |
+    $GAME/cards.jsonl
+  variables:
+    CARD:
+      jq -r '.title' "$GAME/cards.jsonl" | tr '\n' '\0'

@@ -1,0 +1,114 @@
+     1	# 0AD: The Board Game
+       
+     2	## Overview
+       
+     3	This is simple board game to help kids learn Koine Greek.
+       
+     4	The theme is inspired by the [0AD video game](https://play0ad.com).  The goal is to make your πόλις large and prosperous and defend it against Persian invaders.
+       
+     5	The mechanics are inspired by tableau-building games like Agricola.  It can be played solitaire or with any number of other players.
+       
+     6	## Details
+       
+     7	### Setup
+       
+     8	Every player is given 1 of each τύπος τέρας tile.
+     9	The types of τύπος τέρας are:
+       
+    10	| τύπος τέρας   | what it produces  |
+    11	| --------- | ----------------- |
+    12	| ἡ ἀγρός     | τρόφη              |
+    13	| ἡ ὕλη       | τὸ ξύλον              |
+    14	| τὸ ὄρος      | ὁ λίθος             |
+       
+    15	Every player starts with:
+    16	- 1 ἡ ἀγορά
+    17	- 1 ἡ γυνή
+    18	- 1 ὁ ὁπλίτης
+       
+    19	### Turn Structure
+       
+    20	Turns are divided into two parts:
+    21	- the player turn (all players complete simultaneously)
+    22	- the Persian Invasion
+       
+    23	#### Ἡ Πολιτικὴ φάσις (Civic Phase)
+       
+    24	The player turn is divided into the following steps:
+       
+    25	- ἡ Κίνησις (movement):
+    26	  Every unit must be placed either on one of the τύπος τέρας pieces or on the πόλις.
+       
+    27	- ἡ Συλλογὴ χρημάτων (gathering of resources):
+    28	  Every unit on a τύπος τέρας tile will gather 1 of the appropriate resource type for that τύπος τέρας.
+       
+    29	- ἡ Στρατολογία (recruitment):
+    30	  Every building can build at most 1 new unit.
+       
+    31	- ἡ Οἰκοδομή (construction):
+    32	  Every unit in the buildings section can build a new building from the current ὁ χρόνος or a previous ὁ chóng by spending the apprpriate number of resources.
+       
+    33	- ἡ Πρόοδος (Advance Age)
+    34	    - the player moves from ὁ χρόνος 1 to ὁ χρόνος 2 by paying 2 food and 2 wood
+    35	    - the player moves from ὁ χρόνος 2 to ὁ χρόνος 3 by paying 2 food 2 wood and 2 stone
+    36	    - the only effect of advancing ὁ χρόνος is that new buildings can be built
+       
+    37	#### Ἡ Πολεμικὴ φάσις (War phase)
+       
+    38	The ὁ φόβος πολέμου (fear/threat of war) starts at 1.
+       
+    39	In every Πολεμικὴ φάσις, we first roll a d6.
+       
+    40	- If the value is > ὁ φόβος πολέμου, then:
+    41	    - Οὐκ ἔστι πόλεμος!
+    42	    - ὁ φόβος πολέμου increases by 1
+       
+    43	- If the value is <= ὁ φόβος πολέμου, then:
+    44	    - Πόλεμός ἐστι!
+    45	    - all players resolve the invasion independently and simultaneously
+    46	        - the players can place 1 unit in every τὸ τεῖχος; these units cannot be killed
+    47	        - of the remaining units, if there are more γυναῖκες than ὁπλῖται, all of the extra γυναῖκες will be killed
+    48	        - half of the remaining ὁπλῖται will be killed
+    49	        - whatever ὁ φόβος πολέμου, the invaders destroy this many buildings (of the players' choice) minus the number of τείχη that the player has built
+       
+    50	### Building Descriptions
+       
+    51	The ὁ χρόνος 1 buildings are:
+       
+    52	- ἡ οἰκία
+    53	    - costs: 1 ξύλον
+    54	    - the total number of units you are allowed to have is equal to the number of οἰκίαι you have + 2
+       
+    55	The ὁ χρόνος 2 buildings are:
+       
+    56	- ἡ ἀγορά
+    57	    - costs: 2 ξύλον
+    58	    - can build:
+    59	        - γυνή (cost: 1 τρόφη)
+    60	        - ὁ ὁπλίτης (price: 1 τρόφη + 1 ξύλον)
+       
+    61	- τὸ τεῖχος (wall)
+    62	    - costs: 1 λίθος
+    63	    - protects buildings from the Persian Invasion
+       
+    64	- ὁ πύργος (tower)
+    65	    - costs: 1 λίθος
+    66	    - protects people from the Persian Invasion
+       
+    67	- τὸ ἐμπόριον (market)
+    68	    - costs: 3 ξύλον
+    69	    - collect any 1 resource
+       
+    70	- ἡ ἀποθήκη (storehouse)
+    71	    - costs: 1 ξύλον
+    72	    - needed in order to gather ὁ λίθος
+       
+    73	The ὁ χρόνος 3 buildings each cost 2 λίθος and 2 ξύλον.
+    74	They are:
+    75	- ὁ Παρθενών
+    76	- τὸ θέατρον
+    77	- τὸ γυμνάσιον
+    78	- ἡ βιβλιοθήκη
+    79	- τὸ ἱερόν
+    80	- ἡ σχολή
+    81	The game is won when all ὁ χρόνος 3 buildings have been constructed.

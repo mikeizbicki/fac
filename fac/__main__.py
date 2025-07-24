@@ -79,10 +79,18 @@ def with_subtree(logger_obj):
 
 
 handler = logging.StreamHandler()
-handler.setFormatter(logging.Formatter(
-    '%(asctime)s %(tree_prefix)s[%(levelname)s] %(message)s',
-    '%Y-%m-%d %H:%M:%S'
-))
+#handler.setFormatter(logging.Formatter(
+    #'%(asctime)s %(tree_prefix)s[%(levelname)s] %(message)s',
+    #'%Y-%m-%d %H:%M:%S'
+#))
+class CustomFormatter(logging.Formatter):
+    def format(self, record):
+        if record.levelno == logging.INFO:
+            self._style._fmt = '%(tree_prefix)s%(message)s'
+        else:
+            self._style._fmt = '%(tree_prefix)s[%(levelname)s] %(message)s'
+        return super().format(record)
+handler.setFormatter(CustomFormatter(datefmt='%Y-%m-%d %H:%M:%S'))
 logger = RecursiveLogger(__name__)
 logger.addHandler(handler)
 logger.propagate = False
@@ -507,7 +515,7 @@ def validate_file(path, schema_file=None, fix=True):
     
     # ensure the file is non-empty
     if not path.startswith('/dev/') and os.path.getsize(path) == 0:
-        raise RuntimeError(f'os.path.getsize("{path}")=0')
+        logger.warning(f'os.path.getsize("{path}")=0')
 
     # validate JSON files
     if extension == '.json':
@@ -591,7 +599,9 @@ class LLM():
         'groq/llama-3.3-70b-versatile':         {'text/in': 0.00, 'text/out':  0.00},
         'openai/gpt-4.1':                       {'text/in': 2.00, 'text/out':  8.00},
         'openai/gpt-4.1-mini':                  {'text/in': 0.40, 'text/out':  1.60},
+        'openai/gpt-4.1-nano':                  {'text/in': 0.10, 'text/out':  0.60},
         'openai/gpt-image-1':                   {'text/in': 5.00, 'image/in': 10.00, 'image/out': 40.00},
+        'openai/gpt-4o-mini-tts':               {'text/in': 0.60, 'audio/out': 12.00},
         }
 
     def __init__(self):
@@ -602,6 +612,7 @@ class LLM():
         #self.default_text_model = 'anthropic/claude-3-5-haiku-latest'
         #self.default_text_model = 'anthropic/claude-3-haiku-20240307'
         self.model_image = 'openai/gpt-image-1'
+        self.default_audio_model = 'openai/gpt-4o-mini-tts'
         self.usage = defaultdict(lambda: Counter())
         self.build_id = generate_uuid7()
 
@@ -617,6 +628,7 @@ class LLM():
             api_key = os.environ.get(self.providers[provider]['apikey']),
             base_url = self.providers[provider]['base_url'],
         )
+        logger.debug('calling API: client.chat.completions.create()')
         result = client.chat.completions.create(
             messages=messages,
             model=model_name,
@@ -684,23 +696,29 @@ class LLM():
         logger.info(f'self._total_price()={self._total_price(self.usage)}')
         return usage
 
-    def audio(self, path, data):
-        model = 'gpt-40-mini-tts'
+    def audio(self, path, data, *, model=None):
+
+        # extract provider/model info from input model name
+        if model is None:
+            model = self.default_audio_model
+        provider, model_name = model.split('/')
+
+        # call API
         client = openai.Client()
         assert set(data.keys()) == set(['input', 'instructions', 'voice'])
         with client.audio.speech.with_streaming_response.create(
-            model=model,
+            model=model_name,
             response_format="wav",
             **data,
         ) as response:
             response.stream_to_file(path)
 
         # FIXME:
-        # I don't know how to get usage info out of the TTS API,
-        # so we have this janky very rough estimate here.
+        # I don't know how to get usage info out of the TTS API :(
+        logger.warning(f'unable to count token usage for model="{model}"')
         usage = {
             model: {
-                'text/out': 0,
+                'audio/out': 0,
                 'text/in': 0,
                 },
             }
@@ -757,7 +775,13 @@ class LLM():
         for model in tokens:
             prices[model] = {}
             for event in tokens[model]:
-                prices[model][event] = self.models[model][event] * tokens[model][event] / 1000000.0
+                num_tokens = tokens[model][event]
+                token_price = self.models.get(model, {}).get(event, 0.0)
+                if model not in self.models:
+                    logger.warning(f'when calculating pricing, model="{model}" not found')
+                if model in self.models and event not in self.models[model]:
+                    logger.warning(f'when calculating pricing, event="{event}" not found for model="{model}"')
+                prices[model][event] = token_price / 1000000.0 * num_tokens
         return prices
 
 
@@ -821,10 +845,12 @@ class BuildSystem:
             'include_paths',
             'unresolved_dependencies'
             ])
+        unresolved_dependencies = [(True, dep) for dep in config.get('dependencies', '').split()]
+        unresolved_dependencies += [(False, dep) for dep in config.get('noinclude_dependencies', '').split()]
         contexts = [BuildContext(
             {**input_env, **target_env},
             [],
-            config.get('dependencies', '').split(),
+            unresolved_dependencies,
             )]
         
         DUMMY_VAR = '__NONE__'
@@ -846,7 +872,7 @@ class BuildSystem:
                 logger.debug(f'computing dependencies for "{target_to_build}"')
                 include_paths1 = []
                 unresolved_dependencies1 = []
-                for dep_target in context.unresolved_dependencies:
+                for include, dep_target in context.unresolved_dependencies:
                     logger.info(f'resolving dependency: "{dep_target}"')
 
                     # try to expand dep_paths into real file paths
@@ -871,7 +897,7 @@ class BuildSystem:
                         self.build_target(dep_target, context.variables, overwrite=self.from_scratch)
                     else:
                         logger.debug(f'saving to resolve later')
-                        unresolved_dependencies1.append(dep_target)
+                        unresolved_dependencies1.append((False, dep_target))
 
                     # validate all of the dep_paths
                     if dep_paths is not None:
@@ -879,7 +905,8 @@ class BuildSystem:
                             logger.debug(f'validating dep_path={dep_path}')
                             if not validate_file(dep_path, fix=False):
                                 logger.warning(f'failed to validate dep_path={dep_path}')
-                        include_paths1.extend(dep_paths)
+                        if include:
+                            include_paths1.extend(dep_paths)
 
 
 
@@ -938,12 +965,9 @@ class BuildSystem:
                         executable="/bin/bash",
                         env=context.variables,
                         )
-                    if result.returncode != 0 or result.stdout.strip() == '':
+                    if result.returncode != 0:
                         raise VariableEvaluationError(var, expr, context, result)
                     value = result.stdout
-
-                    if value.strip() == '':
-                        raise EmptyVariableError(var, expr, result)
 
                 # lists are separated by null characters;
                 # for each entry in the list,
@@ -997,8 +1021,7 @@ class BuildSystem:
 
             # output debug info about the context to process
             path_to_generate = process_template(target_to_build, context.variables)
-            infostr = f'building file {i+1}/{len(contexts)} "{path_to_generate}"'
-            logger.info(infostr)
+            logger.debug(f'path_to_gen={path_to_generate}')
             logger.debug(f'context={context}')
 
             # create output directory if needed
@@ -1016,21 +1039,27 @@ class BuildSystem:
                 logger.info(f'path exists, skipping: {path_to_generate}')
                 continue
 
+            logger.info(f'building file {i+1}/{len(contexts)} "{path_to_generate}"')
+
             # build with a custom shell command
             if config.get('cmd'):
-                result = subprocess.run(
+                process = subprocess.Popen(
                     config['cmd'],
                     shell=True,
-                    capture_output=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT, # merge stderr into stdout
                     text=True,
-                    executable="/bin/bash",
+                    executable='/bin/bash',
                     env={**os.environ, **context.variables},
+                    bufsize=1, # line buffered
+                    universal_newlines=True,
                     )
-                logger.debug(result)
-                if result.returncode != 0:
-                    print(f'result.stdout={result.stdout}')
-                    print(f'result.stderr={result.stderr}')
-                    raise CommandExecutionError(result)
+                for line in iter(process.stdout.readline, ''):
+                    print(line.rstrip())
+                process.wait()
+
+                if process.returncode != 0:
+                    raise CommandExecutionError(process)
 
             # build the target with the LLM
             else:
@@ -1043,17 +1072,67 @@ class BuildSystem:
 
     def context_to_file(self, path_to_generate, config, context, overwrite):
 
+        # first we generate the instructions for the llm,
+        # which will be stored in the `prompt_cmd` variable.
+        if 'prompt' in config:
+            prompt_cmd = config['prompt']
+        elif 'prompt_file' in config:
+            prompt_path_template = config['prompt_file']
+            prompt_path = process_template(prompt_path_template, env_vars=context.variables)
+            try:
+                with open(prompt_path) as fin:
+                    prompt_cmd = fin.read()
+            except FileNotFoundError:
+                logger.error(f'prompt_path={prompt_path} not found')
+                sys.exit(1)
+        elif config.get('description'):
+            prompt_cmd = f'Generate a file whose content matches the following description. <description>{config.get("description")}</description>'
+        else:
+            prompt_cmd = ''
+            if 'schema_file' not in config:
+                logger.error('no prompt given and no schema given')
+                sys.exit(1)
+        if len(prompt_cmd) > 0:
+            prompt_cmd = "<instructions>\n" + prompt_cmd.strip() + "\n</instructions>"
+            prompt_cmd = process_template(prompt_cmd, env_vars=context.variables)
+            prompt_cmd += '\n'
+
+        # next we compile all the documents that will be passed to the LLM,
+        # which will be stored in the `files_prompt` variable
+        if len(context.include_paths) == 0:
+            files_prompt = ''
+        else:
+            files_prompt = '<documents>\n'
+            for path in context.include_paths:
+                # FIXME:
+                # when piping into stdin, open('/dev/stdin') fails because the open function does not work on pipe "files";
+                # this is a hackish way to detect that we're piping into stdin,
+                # and then changing path to a value that is compatible with open;
+                # in theory, weirdly named files could break this hack
+                if 'pipe:[' in path: 
+                    path = 0
+                with open(path) as fin:
+                    files_prompt += f'''<document path="{path}">\n{fin.read().strip()}\n</document>\n'''
+            files_prompt += '</documents>'
+            logger.debug(f'files_prompt generated; len(context.include_paths)={len(context.include_paths)}')
+
+        # now we do filetype specific processing
         filename = os.path.basename(path_to_generate)
         _, extension = os.path.splitext(filename)
-        if extension == '.png':
+        if extension == '.wav':
+            filetype = 'audio'
+            logger.debug(f'filetype={filetype}')
+            assert 'raw_data' in config
+            path = process_template(config['raw_data'], env_vars=context.variables)
+            logger.debug(f"path={path}")
+            with open(path) as fin:
+                data = json.load(fin)
+
+        elif extension == '.png':
             filetype = 'image'
             logger.debug(f'filetype={filetype}')
             data = {}
-            # FIXME: prompt should share prompt_cmd code from the text section below
-            data['prompt'] = config['prompt']
-            data['prompt'] = process_template(data['prompt'], env_vars=context.variables)
-            #image = 'elements/AARON/raw_images/IMG_8098.jpg'
-
+            data['prompt'] = prompt_cmd + files_prompt
             if 'image_references' in config:
                 image_paths = expand_path(config['image_references'], env_vars=context.variables)
                 data['reference_images'] = image=[open(image, 'rb') for image in image_paths]
@@ -1062,19 +1141,10 @@ class BuildSystem:
             data['quality'] = config.get('image_quality', 'low')
             data['orientation'] = config.get('image_orientation', 'landscape')
 
-        elif extension == '.wav':
-            filetype = 'audio'
-            logger.debug('filetype={filetype}')
-            assert 'raw_data' in config
-            path = process_template(config['raw_data'], env_vars=context.variables)
-            logger.debug(f"path={path}")
-            with open(path) as fin:
-                data = json.load(fin)
-
         # process text output by default
         else:
             filetype = 'text'
-            logger.debug('filetype={filetype}')
+            logger.debug(f'filetype={filetype}')
 
             # the messages list will contain the full set of instructions passed to the llm;
             # it always starts with a system prompt
@@ -1085,81 +1155,37 @@ class BuildSystem:
                 'content': self.global_settings['system_prompt'],
                 })
 
-            # the largest and most complicated part of the prompt is the "user" role,
-            # which specifies the instructions that the LLM should follow for generating the content
-            # it is divided into several portions, all logically related, and so indented
-            if True:
+            # `format_cmd` defines the output format
+            format_cmd = ''
+            if 'md' or 'markdown' not in extension:
+                format_cmd += 'Do not output markdown, and do not put the output inside a codeblock.'
+            if extension == '.json':
+                format_cmd += 'Output JSON.'
+            elif extension == '.jsonl':
+                format_cmd += f'Output JSONL.  Each line of the output should be a single JSON object. There should be at most {self.global_settings["jsonl_num_lines"]} total lines.'
+                format_cmd = process_template(format_cmd, env_vars=context.variables)
 
-                # `prompt_cmd` contains the actual instructions
-                if 'prompt' in config:
-                    prompt_cmd = config['prompt']
-                elif 'prompt_file' in config:
-                    prompt_path_template = config['prompt_file']
-                    prompt_path = process_template(prompt_path_template, env_vars=context.variables)
-                    try:
-                        with open(prompt_path) as fin:
-                            prompt_cmd = fin.read()
-                    except FileNotFoundError:
-                        logger.error(f'prompt_path={prompt_path} not found')
-                        sys.exit(1)
-                else:
-                    prompt_cmd = ''
-                    if 'schema_file' not in config:
-                        logger.error('no prompt given and no schema given')
-                        sys.exit(1)
-                if len(prompt_cmd) > 0:
-                    prompt_cmd = "<instructions>\n" + prompt_cmd.strip() + "\n</instructions>"
-                    prompt_cmd = process_template(prompt_cmd, env_vars=context.variables)
-                    prompt_cmd += '\n'
-                
-                # `format_cmd` defines the output format
-                if 'json' in extension:
-                    if extension == '.json':
-                        format_cmd = 'Output JSON with no markdown codeblocks.'
-                    elif extension == '.jsonl':
-                        format_cmd = f'Output JSONL with no markdown codeblocks.  Each line of the output should be a single JSON object, and there should be {self.global_settings["jsonl_num_lines"]} total lines.'
-                    format_cmd = process_template(format_cmd, env_vars=context.variables)
+            if 'schema_file' in config:
+                try:
+                    with open(config['schema_file']) as fin:
+                        text = fin.read().strip()
+                        schema = json.loads(text)
+                except json.decoder.JSONDecodeError as e:
+                    logger.error(f"config['schema_file']={config['schema_file']}")
+                    logger.error(e)
+                    sys.exit(1)
+                jsonschema.Draft7Validator.check_schema(schema)
+                logger.debug('schema validated')
+                format_cmd += ' Ensure the output conforms to the following JSON schema:\n'
+                format_cmd += text.strip()
 
-                    if 'schema_file' in config:
-                        try:
-                            with open(config['schema_file']) as fin:
-                                text = fin.read().strip()
-                                schema = json.loads(text)
-                        except json.decoder.JSONDecodeError as e:
-                            logger.error(f"config['schema_file']={config['schema_file']}")
-                            logger.error(e)
-                            sys.exit(1)
-                        jsonschema.Draft7Validator.check_schema(schema)
-                        format_cmd += ' Ensure the output conforms to the following JSON schema:\n'
-                        format_cmd += text.strip()
+            format_cmd = '<formatting>\n' + format_cmd + '\n</formatting>\n'
 
-                    format_cmd = '<formatting>\n' + format_cmd + '\n</formatting>\n'
-
-                else:
-                    format_cmd = ''
-
-                # `files_prompt` contains all documents that are being passed into the LLM
-                if len(context.include_paths) == 0:
-                    files_prompt = ''
-                else:
-                    files_prompt = '<documents>\n'
-                    for path in context.include_paths:
-                        # FIXME:
-                        # when piping into stdin, open('/dev/stdin') fails because the open function does not work on pipe "files";
-                        # this is a hackish way to detect that we're piping into stdin,
-                        # and then changing path to a value that is compatible with open;
-                        # in theory, weirdly named files could break this hack
-                        if 'pipe:[' in path: 
-                            path = 0
-                        with open(path) as fin:
-                            files_prompt += f'''<document path="{path}">\n{fin.read().strip()}\n</document>\n'''
-                    files_prompt += '</documents>'
-
-                # add the user role + message
-                messages.append({
-                    'role': 'user',
-                    'content': prompt_cmd + format_cmd + files_prompt,
-                    })
+            # add the user role + message
+            messages.append({
+                'role': 'user',
+                'content': prompt_cmd + format_cmd + files_prompt,
+                })
 
             # extend the existing output
             if self.extend:

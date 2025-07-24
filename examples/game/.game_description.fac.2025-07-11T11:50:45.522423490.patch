@@ -1,0 +1,111 @@
+diff --git a/0AD_The_Board_Game.md b/0AD_The_Board_Game.md
+index 6a1e46a..a3b6f4f 100644
+--- a/0AD_The_Board_Game.md
++++ b/0AD_The_Board_Game.md
+@@ -10,7 +10,7 @@
+ The goal is to make your πόλις large and prosperous and defend it against Persian invaders.
+
+-The mechanics are inspired by tableau-building games like Agricola.  It can be played solitaire or with any number of other players.
++The mechanics are inspired by tableau-building games like Agricola.  It can be played solitaire or with any number of other players.
+
+ ## Details
+@@ -18,7 +18,7 @@
+ ### Setup
+
+-Every player is given 1 of each terain tile.
++Every player is given 1 of each terrain tile.
+ The types of terrain are:
+
+ | terrain   | what it produces  |
+ | --------- | ----------------- |
+@@ -27,15 +27,15 @@
+ | ὄρος      | λίθος             |
+
+-Every player starts with:
+- 1 ἀγορά
+- 1 γυνή
+- 1 ὁπλίτης
++Every player starts with:
++ - 1 ἄγορά
++ - 1 γυνή
++ - 1 ὁπλίτης
+
+ ### Turn Structure
+
+-Turns are divided into two parts:
+- the player turn (all players complete simultaneously)
+- the Persian Invasion
++Turns are divided into two parts:
++ - the player turn (all players complete simultaneously)
++ - the Persian Invasion
+
+ #### Πολιτικὴ φάσις (Civic Phase)
+@@ -52,7 +52,7 @@
+ 
+ - Οἰκοδομή (construction):
+   -Every unit in the buildings section can build a new building from the current χρόνος or a previous χρόνος by spending the apprpriate number of resources.
++  -Every unit in the buildings section can build a new building from the current χρόνος or a previous χρόνος by spending the appropriate number of resources.
+
+ - Πρόοδος (Advance Age)
+     - the player moves from χρόνια 1 to χρόνια 2 by paying 2 food and 2 wood
+@@ -64,7 +64,7 @@
+     - the player moves from χρόνια 2 to χρόνια 3 by paying 2 food 2 wood and 2 stone
+     - the only effect of advancing χρόνος is that new buildings can be built
+
+-#### Πολεμικὴ φάσις (War phase)
++#### Η Πολεμικὴ φάσις (War phase)
+
+ The φόβος πολέμου (fear/threat of war) starts at 1.
+
+@@ -87,7 +87,7 @@
+     - all players resolve the invasion independently and simultaneously
+         - the players can place 1 unit in every πύργος; these units cannot be killed
+-        - of the remaining units, if there are more women than hoplites, all of the extra women will be killed
++        - of the remaining units, if there are more γυναικες than hoplites, all of the extra γυναικες will be killed
+         - half of the remaining hoplites will be killed
+         - whatever the φόβος πολέμου, the invaders destroy this many buildings (of the players' choice) minus the number of τείχη that the player has built
+
+@@ -103,12 +103,12 @@
+ - οἰκία
+     - costs: 1 wood
+-    - the total number of units you are allowed to have is equal to the number of houses you have + 2
++    - the total number of units you are allowed to have is equal to the number of οἰκίαι you have + 2
+
+ The χρόνια 2 buildings are:
+
+-- ἀγορά
++ - ἡ ἀγορά
+     - costs: 2 wood
+-    - can build:
+-        - woman (cost: 1 food)
+-        - hoplite (price: 1 food + 1 wood)
++    - can build:
++        - γυνή (cost: 1 food)
++        - ὁπλίτης (price: 1 food + 1 wood)
+
+ - τεῖχος (wall)
+@@ -119,7 +119,7 @@
+ - πύργος (tower)
+     - costs: 1 stone
+-    - protects people from the Persion Invasion
++    - protects people from the Persian Invasion
+
+ - ἐμπόριον (market)
+@@ -133,7 +133,7 @@
+ - ἀποθήκη (storehouse)
+     - costs: 1 wood
+-    - needed in order to gether stone
++    - needed in order to gather λίθος
+
+ The χρόνια 3 buildings each cost 2 stone and 2 wood.
+ They are:
+@@ -145,7 +145,7 @@
+ - Παρθενών
+ - θέατρον
+ - γυμνάσιον
+-- βιβλιοθήκη
++ - ἡ βιβλιοθήκη
+ - ἱερόν
+ - σχολή
+-The game is won when all χρόνια 3 buildings have been constructed.
++The game is won when all χρόνια 3 buildings have been constructed.

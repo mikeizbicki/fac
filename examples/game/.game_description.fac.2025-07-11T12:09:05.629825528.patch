@@ -1,0 +1,14 @@
+--- game_description
++++ game_description
+@@ -10,7 +10,7 @@
+     9	The types of terain are:
+     
+-    10	| terrain   | what it produces  |
++    10	| terrain   | what it produces  
+     11	| --------- | ----------------- |
+-    12	| ἀγρός     | τρόφη              |
++    12	| ὁ ἀγρός     | ἡ τρόφη              |
+-    13	| ὕλη       | ξύλον              |
++    13	| ἡ ὕλη       | τὸ ξύλον              |
+-    14	| ὄρος      | λίθος             |
++    14	| τὸ ὄρος      | ὁ λίθος             |

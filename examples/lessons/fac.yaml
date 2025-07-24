@@ -1,0 +1,11 @@
+"$LESSON/lesson.md":
+  prompt: |
+    You are generating lessons for young children aged 2-8 to learn Koine Greek using a Total Physical Response (TPR) approach. Use 'prompt' file below for a description of what the lesson should accomplish. The children have already completed the lessons in the '*/lesson.md' files below (if any), and you should include background vocabulary from those lessons if possible.
+    The output should be a markdown formatted file with the following sections:
+      1. title
+      2. props (a list of any props needed for the lesson; it's okay if no props are needed)
+      3. vocabulary (a list of vocabulary words that the lesson will teach in both koine greek and with English glosses)
+    Keep all descriptions as short as possible and assume that the reader is familiar with the Greek and TPR pedagogy.
+  dependencies: |
+    $LESSON/prompt
+  model: openai/gpt-4.1

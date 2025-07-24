@@ -1,0 +1,12 @@
+"text/$BOOK/content.txt":
+  cmd: |
+    python3 scripts/pdf2text.py pdf/$BOOK text/$BOOK.txt
+  dependencies:
+    pdf/$BOOK
+  variables:
+    BOOK: |
+      ls pdf | tr '\n' '\0'
+
+"text/$BOOK/split_cmd":
+  prompt:
+    I need to divide the following book into reasonable sections/chapters. Write a bash script that will take the book as an input file and then divide the

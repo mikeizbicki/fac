@@ -1,0 +1,14 @@
+--- 
++++ 
+@@ -8,9 +8,9 @@
+ Every player is given 1 of each terain tile.
+ The types of terain are:
+ | terrain   | what it produces  |
+ | --------- | ----------------- |
+-| ἀγρός     | τρόφη              |
++| ὁ ἀγρός     | ἡ τρόφη              |
+-| ὕλη       | ξύλον              |
++| ἡ ὕλη       | τὸ ξύλον              |
+-| ὄρος      | λίθος             |
++| τὸ ὄρος      | ὁ λίθος             |
+

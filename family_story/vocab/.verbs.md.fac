@@ -1,1 +1,0 @@
-{"__fac_version__": "0.0.0-dev", "time": "2025-06-19T18:03:39.659625+00:00", "path": "hebrew/verbs.md", "build_id": 267020883643875827590887072729350535208, "cost": 0.020730000000000002, "usage": {"anthropic/claude-sonnet-4-0": {"text/out": 1320, "text/in": 310}}}

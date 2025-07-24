@@ -1,1 +1,0 @@
-{"__fac_version__": "0.0.0-dev", "time": "2025-06-19T19:11:38.220125+00:00", "path": "hebrew/complex_binyan.md", "build_id": 302573186091830248510921651420979263534, "cost": 0.03782, "usage": {"openai/gpt-4.1": {"text/out": 4641, "text/in": 346}}}

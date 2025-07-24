@@ -1,0 +1,129 @@
+--- 
++++ 
+@@ -3,7 +3,7 @@
+ This is simple board game to help kids learn Koine Greek.
+ 
+-The theme is inspired by the [0AD video game](https://play0ad.com).  The goal is to make your polis large and prosperous and defend it against Persian invaders.
++The theme is inspired by the [0AD video game](https://play0ad.com).  The goal is to make your polis large and prosperous and defend it against Persian invaders.
+ 
+-The mechanics are inspired by tableau-building games like Agricola.  It can be played solitaire or with any number of other players.
++The mechanics are inspired by tableau-building games like Agricola.  It can be played solitaire or with any number of other players.
+ 
+@@ -8,7 +8,7 @@
+ Every player is given 1 of each terain tile.
+-The types of terain are:
++The types of terrain are:
+ 
+ | terrain   | what it produces  |
+ | --------- | ----------------- |
+@@ -12,7 +12,7 @@
+ | ἀγρός     | τρόφη              |
+-| ὕλη       | ξύλον              |
++| ἡ ὕλη       | τὸ ξύλον              |
+ 
+-| ὄρος      | λίθος             |
++| τὸ ὄρος      | ὁ λίθος             |
+ 
+@@ -15,14 +15,14 @@
+ Every player starts with:
+ - 1 ἀγορά
+-- 1 γυνή
++- 1 γυνὴ
+-- 1 ὁπλίτης
++- 1 ὁπλίτης
+ 
+### Turn Structure
+ 
+@@ -24,7 +24,7 @@
+ The player turn is divided into the following steps:
+ 
+-- Κίνησις (movement):
++- ἡ Κίνησις (movement):
+ 
+- Every unit must be placed either on one of the terrain pieces or on the polis.
+ 
+-- Συλλογὴ χρημάτων (gathering of resources):
++- ἡ Συλλογὴ χρημάτων (gathering of resources):
+ 
+- Every unit on a terrain tile will gather 1 of the appropriate resource type for that terrain.
+ 
+@@ -29,7 +29,7 @@
+-- Στρατολογία (recruitment):
++- ἡ Στρατολογία (recruitment):
+ 
+- Every building can build at most 1 new unit.
+ 
+@@ -31,7 +31,7 @@
+-- Οἰκοδομή (construction):
++- ἡ Οἰκοδομή (construction):
+ 
+- Every unit in the buildings section can build a new building from the current χρόνος or a previous χρόνος by spending the apprpriate number of resources.
+ 
+@@ -33,14 +33,14 @@
+- the player moves from χρόνος 1 to χρόνος 2 by paying 2 food and 2 wood
+-- the player moves from χρόνος 2 to χρόνος 3 by paying 2 food 2 wood and 2 stone
++- the player moves from ὁ χρόνος 2 to ὁ χρόνος 3 by paying 2 food 2 wood and 2 stone
+ 
+- the only effect of advancing χρόνος is that new buildings can be built
++- the only effect of advancing τὸν χρόνον is that new buildings can be built
+ 
+@@ -37,7 +37,7 @@
+ #### Πολεμικὴ φάσις (War phase)
+ 
+-The φόβος πολέμου (fear/threat of war) starts at 1.
++- Ὁ φόβος πολέμου (fear/threat of war) starts at 1.
+ 
+ In every Πολεμικὴ φάσις, we first roll a d6.
+ 
+@@ -45,7 +45,7 @@
+ - all players resolve the invasion independently and simultaneously
+ - the players can place 1 unit in every tower; these units cannot be killed
+-- of the remaining units, if there are more women than hoplites, all of the extra women will be killed
++- of the remaining units, if there are more women than hoplites, all of the extra women will be killed
+ - half of the remaining hoplites will be killed
+ - whatever the φόβος πολέμου, the invaders destroy this many buildings (of the players' choice) minus the number of walls that the player has built
+@@ -51,7 +51,7 @@
+ ### Building Descriptions
+ 
+-The χρόνος 1 buildings are:
++- Οἱ χρόνος 1 buildings are:
+ 
+-- οἰκία
++- ἡ οἰκία
+ - costs: 1 wood
+ - the total number of units you are allowed to have is equal to the number of houses you have + 2
+@@ -56,7 +56,7 @@
+ The χρόνος 2 buildings are:
+ 
+-- ἀγορά
++- ἡ ἀγορά
+ - costs: 2 wood
+ - can build:
+ - woman (cost: 1 food)
+@@ -59,7 +59,7 @@
+ - hoplite (price: 1 food + 1 wood)
+ 
+-- τεῖχος (wall)
++- τὸ τεῖχος (wall)
+ - costs: 1 stone
+ - protects buildings from the Persion Invasion
+@@ -63,7 +63,7 @@
+-- πύργος (tower)
++- ὁ πύργος (tower)
+ - costs: 1 stone
+ - protects people from the Persion Invasion
+@@ -67,7 +67,7 @@
+-- ἐμπόριον (market)
++- τὸ ἐμπόριον (market)
+ - costs: 3 wood
+ - collect any 1 resource
+@@ -70,7 +70,7 @@
+-- ἀποθήκη (storehouse)
++- ἡ ἀποθήκη (storehouse)
+ - costs: 1 wood
+ - needed in order to gether stone
+@@ -73,7 +73,7 @@
+ The χρόνια 3 buildings each cost 2 stone and 2 wood.
+-The game is won when all χρόνος 3 buildings have been constructed.
++- The game is won when all ὁ χρόνος 3 buildings have been constructed.
+

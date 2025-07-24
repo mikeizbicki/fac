@@ -1,0 +1,8 @@
+This lesson should introduce basic movement verbs (sit, stand, walk, run, jump, stop).  The verbs should be given in:
+1. imperative
+2. present
+In all cases, both singular and plural should be taught.
+Output the verb conjugations in a table with the rows as the word and columns as different conjugations.
+
+For walk, list both badizo and peripateo.
+For sit, list both the middle and active voice and describe their difference.

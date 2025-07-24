@@ -1,0 +1,64 @@
+--- game_description
++++ game_description
+@@ -52,7 +52,7 @@
+ 
+ The χρόνος 1 buildings are:
+ 
+-- οἰκία
++- ἡ οἰκία
+     - costs: 1 wood
+     - the total number of units you are allowed to have is equal to the number of houses you have + 2
+ 
+@@ -56,7 +56,7 @@
+ 
+ The χρόνος 2 buildings are:
+ 
+-- ἀγορά
++- ἡ ἀγορά
+     - costs: 2 wood
+     - can build:
+     - woman (cost: 1 food)
+@@ -61,7 +61,7 @@
+ 
+-- τεῖχος (wall)
++- τὸ τεῖχος (wall)
+     - costs: 1 stone
+     - protects buildings from the Persion Invasion
+ 
+@@ -64,7 +64,7 @@
+ 
+-- πύργος (tower)
++- ὁ πύργος (tower)
+     - costs: 1 stone
+     - protects people from the Persion Invasion
+ 
+@@ -67,7 +67,7 @@
+ 
+-- ἐμπόριον (market)
++- τὸ ἐμπόριον (market)
+     - costs: 3 wood
+     - collect any 1 resource
+ 
+@@ -70,7 +70,7 @@
+ 
+-- ἀποθήκη (storehouse)
++- ἡ ἀποθήκη (storehouse)
+     - costs: 1 wood
+     - needed in order to gether stone
+ 
+@@ -73,11 +73,11 @@
+ The χρόνος 3 buildings each cost 2 stone and 2 wood.
+ They are:
+-- Παρθενών
++- ὁ Παρθενών
+-- θέατρον
++- τὸ θέατρον
+-- γυμνάσιον
++- τὸ γυμνάσιον
+-- βιβλιοθήκη
++- ἡ βιβλιοθήκη
+-- ἱερόν
++- τὸ ἱερόν
+-- σχολή
++- ἡ σχολή
+ The game is won when all χρόνος 3 buildings have been constructed.

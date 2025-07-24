@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Game Card",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "The name of the unit/building/card/etc.  Should be in Koine Greek with the article."
+    },
+    "image_description": {
+      "type": "string",
+      "description": "A 5 sentence description of the image that should be created for the card.  The description should be sufficient for a graphic artist to be able to draw the specified object.  It should include appropriate historical details, and tie into the overall gameplay.  There should be no other units/buildings/cards/etc in the picture except for the subject of this card.  There should be no description of terrain, as the card may be placed on any type of terrain.  The image should ideally contain references of the cards abilities and gameplay roles, but there should be no text in the image."
+    },
+    "cost": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "amount": {"type": "integer"},
+          "resource": {"type": "string", "description": "a single word that matches one of the resources"}
+        }
+      }
+    },
+    "abilities": {
+      "type": "array",
+      "items": {"type": "string", "description": "A 1 sentence description of one of the card's abilities"},
+      "description": "A list of the card's in-game abilities."
+    },
+    "quote": {
+      "type": "object",
+      "properties": {
+        "el": {"type": "string", "description": "The original quote in Koine Greek"},
+        "en": {"type": "string", "description": "The quote translated into English."}
+      },
+      "description": "A famous (but simple) Koine Greek quote about the specified object.  It's okay to slightly simplify the grammar/vocabulary."
+    },
+    "things_to_say": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "el": {"type": "string", "description": "What to say in Koine Greek."},
+          "en": {"type": "string", "description": "An English translation."}
+        }
+      },
+      "description": "A list of things that the player might want to say when using this card in different ways.  The examples should be clearly related to gameplay.  There must be at least 1 example.  But if more examples are possible (and still clearly related to gameplay), then include up to 5 examples."
+    }
+  }
+}

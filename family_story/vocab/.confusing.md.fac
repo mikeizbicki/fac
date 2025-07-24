@@ -1,1 +1,0 @@
-{"__fac_version__": "0.0.0-dev", "time": "2025-06-19T19:19:35.103532+00:00", "path": "hebrew/confusing.md", "build_id": 284647020133672554669653782991819985405, "cost": 0.059648, "usage": {"openai/gpt-4.1": {"text/out": 7391, "text/in": 260}}}

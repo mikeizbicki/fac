@@ -1,0 +1,114 @@
+# 0AD: The Board Game
+
+## Overview
+
+This is simple board game to help kids learn Koine Greek.
+
+The theme is inspired by the [0AD video game](https://play0ad.com).  The goal is to make your polis large and prosperous and defend it against Persian invaders.
+
+The mechanics are inspired by tableau-building games like Agricola.  It can be played solitaire or with any number of other players.
+
+## Details
+
+### Setup
+
+Every player is given 1 of each terain tile.
+The types of terain are:
+
+| terrain   | what it produces  |
+| --------- | ----------------- |
+| ἀγρός     | τρόφη              |
+| ὕλη       | ξύλον              |
+| ὄρος      | λίθος             |
+
+Every player starts with:
+- 1 ἀγορά
+- 1 γυνή
+- 1 ὁπλίτης
+
+### Turn Structure
+
+Turns are divided into two parts:
+- the player turn (all players complete simultaneously)
+- the Persian Invasion
+
+#### Πολιτικὴ φάσις (Civic Phase)
+
+The player turn is divided into the following steps:
+
+- Κίνησις (movement):
+  Every unit must be placed either on one of the terrain pieces or on the polis.
+
+- Συλλογὴ χρημάτων (gathering of resources):
+  Every unit on a terrain tile will gather 1 of the appropriate resource type for that terrain.
+
+- Στρατολογία (recruitment):
+  Every building can build at most 1 new unit.
+
+- Οἰκοδομή (construction):
+  Every unit in the buildings section can build a new building from the current χρόνος or a previous χρόνος by spending the apprpriate number of resources.
+
+- Πρόοδος (Advance Age)
+    - the player moves from χρόνος 1 to χρόνος 2 by paying 2 food and 2 wood
+    - the player moves from χρόνος 2 to χρόνος 3 by paying 2 food 2 wood and 2 stone
+    - the only effect of advancing χρόνος is that new buildings can be built
+
+#### Πολεμικὴ φάσις (War phase)
+
+The φόβος πολέμου (fear/threat of war) starts at 1.
+
+In every Πολεμικὴ φάσις, we first roll a d6.
+
+- If the value is > φόβος πολέμου, then:
+    - Οὐκ ἔστι πόλεμος!
+    - the φόβος πολέμου increases by 1
+
+- If the value is <= φόβος πολέμου, then:
+    - Πόλεμός ἐστι!
+    - all players resolve the invasion independently and simultaneously
+        - the players can place 1 unit in every tower; these units cannot be killed
+        - of the remaining units, if there are more women than hoplites, all of the extra women will be killed
+        - half of the remaining hoplites will be killed
+        - whatever the φόβος πολέμου, the invaders destroy this many buildings (of the players' choice) minus the number of walls that the player has built
+
+### Building Descriptions
+
+The χρόνος 1 buildings are:
+
+- οἰκία
+    - costs: 1 wood
+    - the total number of units you are allowed to have is equal to the number of houses you have + 2
+
+The χρόνος 2 buildings are:
+
+- ἀγορά
+    - costs: 2 wood
+    - can build:
+        - woman (cost: 1 food)
+        - hoplite (price: 1 food + 1 wood)
+
+- τεῖχος (wall)
+    - costs: 1 stone
+    - protects buildings from the Persion Invasion
+
+- πύργος (tower)
+    - costs: 1 stone
+    - protects people from the Persion Invasion
+
+- ἐμπόριον (market)
+    - costs: 3 wood
+    - collect any 1 resource
+
+- ἀποθήκη (storehouse)
+    - costs: 1 wood
+    - needed in order to gether stone
+
+The χρόνος 3 buildings each cost 2 stone and 2 wood.
+They are:
+- Παρθενών
+- θέατρον
+- γυμνάσιον
+- βιβλιοθήκη
+- ἱερόν
+- σχολή
+The game is won when all χρόνος 3 buildings have been constructed.
