@@ -96,6 +96,14 @@ logger.addHandler(handler)
 logger.propagate = False
 logger.setLevel(logging.INFO)
 
+# add custom TRACE log level that sits below DEBUG
+TRACE_LEVEL = 5
+logging.addLevelName(TRACE_LEVEL, 'TRACE')
+def trace(self, message, *args, **kwargs):
+    if self.isEnabledFor(TRACE_LEVEL):
+        self._log(TRACE_LEVEL, message, args, **kwargs)
+logging.Logger.trace = trace
+
 # imports
 from collections import namedtuple, Counter, defaultdict
 from dataclasses import dataclass, fields
@@ -264,6 +272,10 @@ class EmptyVariableError(Exception):
         super().__init__('\n'.join(errorstrs))
 
 
+class TargetNotFound(Exception):
+    pass
+
+
 def expand_path(path, env_vars=None):
     """
     Expand environment variables and wildcards in a path.
@@ -303,6 +315,7 @@ def expand_path(path, env_vars=None):
     paths = glob.glob(expanded_path)
     paths = [str(pathlib.Path(path).resolve()) for path in paths]
     paths = [os.path.relpath(path) for path in paths]
+
     return paths
 
 
@@ -527,7 +540,7 @@ def validate_file(path, schema_file=None, fix=True):
             json.loads(text)
         except json.JSONDecodeError as e:
             if fix:
-                logger.debug(f'fixing JSONDecodeError in path={path}')
+                logger.trace(f'fixing JSONDecodeError in path={path}')
                 import json_repair
                 with open(path, 'wt') as fout:
                     obj = json_repair.loads(text, skip_json_loads=True)
@@ -537,7 +550,7 @@ def validate_file(path, schema_file=None, fix=True):
 
         # verify that the JSON matches the schema
         if schema_file:
-            logger.debug(f'verifying that "{path}" satisfies schema "{schema_file}"')
+            logger.trace(f'verifying that "{path}" satisfies schema "{schema_file}"')
             with open(path) as fin:
                 data = json.load(fin)
             with open(schema_file) as fin:
@@ -553,7 +566,7 @@ def validate_file(path, schema_file=None, fix=True):
 
     # fix markdown files
     if fix and extension in ['.md' or '.markdown']:
-        logger.debug(f'fixing markdown formatting in path={path}')
+        logger.trace(f'fixing markdown formatting in path={path}')
         with open(path, "r+") as fout:
             markdown_text = fout.read()
             formatted_text = mdformat.text(markdown_text)
@@ -594,6 +607,7 @@ class LLM():
 
     models = {
         'anthropic/claude-3-haiku-20240307':    {'text/in': 0.25, 'text/out':  1.25},
+        'anthropic/claude-opus-4-20250514':     {'text/in':15.00, 'text.out': 75.00},
         'anthropic/claude-sonnet-4-0':          {'text/in': 3.00, 'text/out': 15.00},
         'anthropic/claude-3-5-haiku-latest':    {'text/in': 0.80, 'text/out':  4.00},
         'groq/llama-3.3-70b-versatile':         {'text/in': 0.00, 'text/out':  0.00},
@@ -616,7 +630,7 @@ class LLM():
         self.usage = defaultdict(lambda: Counter())
         self.build_id = generate_uuid7()
 
-    def text(self, messages, *, model=None, seed=None):
+    def text(self, messages, *, response_format=None, model=None, seed=None):
 
         # extract provider/model info from input model name
         if model is None:
@@ -624,16 +638,21 @@ class LLM():
         provider, model_name = model.split('/')
 
         # call the API
-        client = openai.Client(
-            api_key = os.environ.get(self.providers[provider]['apikey']),
-            base_url = self.providers[provider]['base_url'],
-        )
-        logger.debug('calling API: client.chat.completions.create()')
-        result = client.chat.completions.create(
-            messages=messages,
-            model=model_name,
-            seed=seed,
-        )
+        try:
+            client = openai.Client(
+                api_key = os.environ.get(self.providers[provider]['apikey']),
+                base_url = self.providers[provider]['base_url'],
+            )
+            logger.trace('calling API: client.chat.completions.create()')
+            result = client.chat.completions.create(
+                messages=messages,
+                model=model_name,
+                seed=seed,
+                #response_format=response_format,
+            )
+        except openai.BadRequestError as e:
+            print(f'response_format=\n{json.dumps(response_format, indent=2)}')
+            raise e
 
         # update usage info
         usage = {
@@ -644,12 +663,12 @@ class LLM():
             }
         self.usage[model] += usage[model]
 
-        logger.info(f'self._tokens_to_prices()={self._tokens_to_prices(self.usage)}')
-        logger.info(f'self._total_price()={self._total_price(self.usage)}')
+        logger.trace(f'self._tokens_to_prices()={self._tokens_to_prices(self.usage)}')
+        logger.info(f' >>> target cost: ${self._total_price(usage):0.4f}  total cost: ${self._total_price(self.usage):0.4f} <<<')
         return result.choices[0].message.content, usage
 
     def image(self, fout, data, *, seed=None):
-        logger.debug(f'llm.image; data.keys()={list(data.keys())}')
+        logger.trace(f'llm.image; data.keys()={list(data.keys())}')
         client = openai.Client()
         model = self.model_image.split('/')[-1]
         quality = data.get('quality', 'low')
@@ -728,7 +747,7 @@ class LLM():
         logger.info(f'self._total_price()={self._total_price(self.usage)}')
         return usage
 
-    def generate_file(self, filetype, path, data, *, mode='xb', seed=None, model=None):
+    def generate_file(self, filetype, path, data, *, mode='xb', response_format, seed=None, model=None):
         try:
             # generate the file
             _, extension = os.path.splitext(path)
@@ -739,7 +758,7 @@ class LLM():
                 usage = self.audio(path, data)
             else:
                 with open(path, mode) as fout:
-                    text, usage = self.text(data, model=model)
+                    text, usage = self.text(data, model=model, response_format=response_format)
                     blob = text.encode('utf-8')
                     fout.write(blob)
 
@@ -793,16 +812,22 @@ class BuildSystem:
     config_file: str = 'fac.yaml'
     from_scratch: bool = False
     overwrite: bool = False
+    build_postreqs: bool = False
     extend: int = False
     print_prompt: bool = False
     print_contexts: bool = False
+    no_validate: bool = False
     debug: bool = False
+    trace: bool = False
 
     def __post_init__(self):
         self.llm = LLM()
         if self.debug:
             logger.setLevel(logging.DEBUG)
-        self.validate_output = not (self.print_prompt or self.print_contexts)
+        if self.trace:
+            logger.setLevel(TRACE_LEVEL)
+        self.validate_output = not (self.print_prompt or self.print_contexts) and not self.no_validate
+        self.resolved_dependencies = set()
 
         # load global settings
         self.global_settings = {
@@ -817,21 +842,35 @@ class BuildSystem:
         # build all targets
         for target in self.targets:
             logger.info(f'target="{target}"')
-            self.build_target(target, {}, overwrite=self.overwrite or self.from_scratch)
+            self.build_target(target, {}, overwrite=self.overwrite or self.from_scratch, build_postreqs=self.build_postreqs)
 
     @with_subtree(logger)
-    def build_target(self, target_to_build, input_env, overwrite=False):
+    def build_target(self, target_to_build, input_env, overwrite=False, build_postreqs=False):
 
         # load target config
         config_targets = self.full_config.keys()
         transformed_target, target_env = match_pattern(config_targets, target_to_build)
-        logger.debug(f"transformed_target={transformed_target}; target_env={target_env}")
+        self.resolved_dependencies.add(transformed_target)
+        logger.trace(f"transformed_target={transformed_target}; target_env={target_env}")
         if not transformed_target:
-            logger.error(f'target_to_build="{target_to_build}" not found in config')
-            sys.exit(1)
+            raise TargetNotFound
         assert transformed_target
         assert transformed_target in self.full_config
         config = self.full_config[transformed_target]
+
+        # parse the dependencies entry in the yaml into unresolved_dependencies list;
+        # each entry in the list is a dictionary with a target and flags key
+        unresolved_dependencies = []
+        dependencies = config.get('dependencies', '')
+        if type(dependencies) is str:
+            dependencies = dependencies.split()
+        elif dependencies is None:
+            dependencies = []
+        for dep in dependencies:
+            if type(dep) == str:
+                dep = {'target': dep}
+            assert type(dep) == dict
+            unresolved_dependencies.append(dep)
 
         # a BuildContext contains all the information needed to build a file;
         # contexts contains a BuildContext for each file that will be generated;
@@ -843,23 +882,25 @@ class BuildSystem:
         BuildContext = namedtuple('Context', [
             'variables',
             'include_paths',
-            'unresolved_dependencies'
+            'unresolved_dependencies',
+            'postreqs',
             ])
-        unresolved_dependencies = [(True, dep) for dep in config.get('dependencies', '').split()]
-        unresolved_dependencies += [(False, dep) for dep in config.get('noinclude_dependencies', '').split()]
+        postreqs = config.get('postreqs', [])
+        assert type(postreqs) == list
         contexts = [BuildContext(
             {**input_env, **target_env},
             [],
             unresolved_dependencies,
+            postreqs,
             )]
-        
+
         DUMMY_VAR = '__NONE__'
         config_variables = config.get('variables', {DUMMY_VAR: 'DUMMY_VAL'})
         assert type(config_variables) is dict, "did you write `variables: |` instead of `variables:`?"
 
         for var, expr in config_variables.items():
             expr = expr.strip()
-            logger.debug(f'computing {var}=$({expr})')
+            logger.trace(f'computing {var}=$({expr})')
 
             # compute the new contexts list after resolving this variable;
             # since we will be modifying the contexts list,
@@ -867,82 +908,57 @@ class BuildSystem:
             contexts0 = contexts
             contexts = []
             for context in contexts0:
-
                 # compute the dependencies
-                logger.debug(f'computing dependencies for "{target_to_build}"')
+                logger.trace(f'computing dependencies for "{target_to_build}"')
                 include_paths1 = []
                 unresolved_dependencies1 = []
-                for include, dep_target in context.unresolved_dependencies:
-                    logger.info(f'resolving dependency: "{dep_target}"')
+                for dep in context.unresolved_dependencies:
+                    dep_target = dep['target']
 
                     # try to expand dep_paths into real file paths
                     try:
                         dep_paths = expand_path(dep_target, context.variables)
-                        logger.debug(f'dep_paths={dep_paths}')
+                        if dep.get('include', True):
+                            include_paths1.extend(dep_paths)
+                        logger.trace(f'dep_paths={dep_paths}')
                     except TemplateProcessingError:
-                        logger.debug('dep_paths failed to expand with TemplateProcessingError; there are variables that still need resolving')
-                        dep_paths = None
+                        logger.trace('dep_paths failed to expand with TemplateProcessingError; there are variables that still need resolving')
+                        dep_paths = []
 
-                    # decide if we should build dep_paths
-                    build_deps = False
-                    if dep_target in self.full_config:
-                        build_deps = True
-                        logger.debug(f'dep_target={dep_target} in full_config')
-                    elif self.from_scratch:
-                        build_dps = True
-                        logger.debug(f'self.from_scratch=True')
+                    # skip dependencies that we've already processed
+                    if dep_target in self.resolved_dependencies:
+                        logger.debug(f'previously resolved dependency "{dep_target}", skipping')
+                        continue
 
-                    if build_deps:
-                        logger.debug(f'recursively building dep_target={dep_target}')
+                    # NOTE:
+                    # we mark dep_target as resolved as soon as we begin processing it;
+                    # this should ensure that any cycles in the dependency graph
+                    # will not result in an infinite runtime loop
+                    logger.info(f'resolving dependency: "{dep_target}"')
+                    self.resolved_dependencies.add(dep_target)
+
+                    # ensure that all dependencies are built by recusively calling build_target
+                    try:
                         self.build_target(dep_target, context.variables, overwrite=self.from_scratch)
-                    else:
-                        logger.debug(f'saving to resolve later')
-                        unresolved_dependencies1.append((False, dep_target))
+                    except TargetNotFound:
+                        logger.trace(f'TargetNotFound: dep_target={dep_target}')
+                        valid_paths = len(dep_paths) > 0
+                        for path in dep_paths:
+                            if not os.path.exists(path):
+                                valid_paths = False
+                        if not valid_paths:
+                            logger.trace(f'dep_paths={dep_paths} not valid paths')
+                            unresolved_dependencies1.append(dep)
 
                     # validate all of the dep_paths
                     if dep_paths is not None:
                         for dep_path in dep_paths:
-                            logger.debug(f'validating dep_path={dep_path}')
+                            logger.trace(f'validating dep_path={dep_path}')
                             if not validate_file(dep_path, fix=False):
                                 logger.warning(f'failed to validate dep_path={dep_path}')
-                        if include:
-                            include_paths1.extend(dep_paths)
 
-
-
-                    """
-                    # try to expand dep_paths into real file paths
-                    try:
-                        dep_paths = expand_path(dep_target, context.variables)
-                        if not dep_paths:
-                            if dep_target in self.full_config:
-                                logger.debug(f'no paths found for dep_target={dep_target}, building')
-                                self.build_target(dep_target, context.variables)
-
-
-                            else:
-                                assert dep_paths is None
-                                unresolved_dependencies1.append(dep_target)
-                        else:
-                            logger.debug(f'matched: dep_target="{dep_target}"')
-
-                        for dep_path in dep_paths:
-                            logger.debug(f'validating dep_path={dep_path}')
-                            if not validate_file(dep_path, fix=False):
-                                logger.warning(f'failed to validate dep_path={dep_path}')
-                        include_paths1.extend(dep_paths)
-
-                    # if expand_path failed, there is an unresolved dependency in the path;
-                    # so we must keep it around and try to resolve it again after computing more variables
-                    except TemplateProcessingError:
-                        if dep_target in self.full_config:
-                            self.build_target(dep_target, context.variables)
-                        else:
-                            unresolved_dependencies1.append(dep_target)
-                    """
-
-                logger.debug(f"include_paths1={include_paths1}")
-                logger.debug(f"unresolved_dependencies1={unresolved_dependencies1}")
+                logger.trace(f"include_paths1={include_paths1}")
+                logger.trace(f"unresolved_dependencies1={unresolved_dependencies1}")
 
                 # do not evaluate the variable if it is DUMMY_VAR,
                 # since it was created only to force the unresolved_dependencies to run once
@@ -968,12 +984,14 @@ class BuildSystem:
                     if result.returncode != 0:
                         raise VariableEvaluationError(var, expr, context, result)
                     value = result.stdout
+                    logger.trace(f'value={value}')
 
-                # lists are separated by null characters;
+                # lists are separated by newlines or null characters;
                 # for each entry in the list,
                 # we will add a new context with the entry added
-                value_list = [val.strip() for val in value.split('\0')]
+                value_list = [val.strip() for val in value.split('\n')]
 
+                # FIXME:
                 # don't add val to the contexts list when it is empty;
                 # this is because when doing the split on \0,
                 # we will always have the last entry be '',
@@ -993,10 +1011,13 @@ class BuildSystem:
                         pass
 
                     # add the context
+                    variables1 = {**context.variables, var: val}
+                    postreqs1 = [process_template(postreq, variables1) for postreq in context.postreqs]
                     context1 = BuildContext(
-                        {**context.variables, var: val},
+                        variables1,
                         context.include_paths + include_paths1,
-                        unresolved_dependencies1
+                        unresolved_dependencies1,
+                        postreqs1,
                         )
                     contexts.append(context1)
 
@@ -1021,13 +1042,19 @@ class BuildSystem:
 
             # output debug info about the context to process
             path_to_generate = process_template(target_to_build, context.variables)
-            logger.debug(f'path_to_gen={path_to_generate}')
-            logger.debug(f'context={context}')
+            logger.trace(f'path_to_gen={path_to_generate}')
+            logger.trace(f'context={context}')
 
             # create output directory if needed
             dirname = os.path.dirname(path_to_generate)
             if len(dirname) > 0:
                 os.makedirs(dirname, exist_ok=True)
+
+            # ensure no unresolved dependencies
+            if context.unresolved_dependencies:
+                for dep in context.unresolved_dependencies:
+                    logger.error(f'unresolved dependency: "{dep["target"]}"')
+                sys.exit(1)
 
             # skip if the path already exists
             # NOTE:
@@ -1036,39 +1063,44 @@ class BuildSystem:
             # we could probably push the native-python file generation code up to this point,
             # but it would result in more complicated code for fixing a very minor/theoretical problem
             if os.path.exists(path_to_generate) and not overwrite:
-                logger.info(f'path exists, skipping: {path_to_generate}')
-                continue
+                logger.debug(f'path exists, skipping: {path_to_generate}')
 
-            logger.info(f'building file {i+1}/{len(contexts)} "{path_to_generate}"')
-
-            # build with a custom shell command
-            if config.get('cmd'):
-                process = subprocess.Popen(
-                    config['cmd'],
-                    shell=True,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT, # merge stderr into stdout
-                    text=True,
-                    executable='/bin/bash',
-                    env={**os.environ, **context.variables},
-                    bufsize=1, # line buffered
-                    universal_newlines=True,
-                    )
-                for line in iter(process.stdout.readline, ''):
-                    print(line.rstrip())
-                process.wait()
-
-                if process.returncode != 0:
-                    raise CommandExecutionError(process)
-
-            # build the target with the LLM
             else:
-                filename = os.path.basename(path_to_generate)
-                self.context_to_file(path_to_generate, config, context, overwrite)
+                logger.info(f'building file {i+1}/{len(contexts)} "{path_to_generate}"')
+
+                # build with a custom shell command
+                if config.get('cmd'):
+                    process = subprocess.Popen(
+                        config['cmd'],
+                        shell=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT, # merge stderr into stdout
+                        text=True,
+                        executable='/bin/bash',
+                        env={**os.environ, **context.variables},
+                        bufsize=1, # line buffered
+                        universal_newlines=True,
+                        )
+                    for line in iter(process.stdout.readline, ''):
+                        print(line.rstrip())
+                    process.wait()
+
+                    if process.returncode != 0:
+                        raise CommandExecutionError(process)
+
+                # build the target with the LLM
+                else:
+                    filename = os.path.basename(path_to_generate)
+                    self.context_to_file(path_to_generate, config, context, overwrite)
 
             # validate file
             if self.validate_output:
                 validate_file(path_to_generate, config.get('schema_file'))
+
+            # build postreqs
+            for postreq in context.postreqs:
+                logger.info(f'postreq: "{postreq}"')
+                self.build_target(postreq, context.variables, overwrite=self.overwrite or build_postreqs)
 
     def context_to_file(self, path_to_generate, config, context, overwrite):
 
@@ -1114,23 +1146,25 @@ class BuildSystem:
                 with open(path) as fin:
                     files_prompt += f'''<document path="{path}">\n{fin.read().strip()}\n</document>\n'''
             files_prompt += '</documents>'
-            logger.debug(f'files_prompt generated; len(context.include_paths)={len(context.include_paths)}')
+            logger.trace(f'files_prompt generated; len(context.include_paths)={len(context.include_paths)}')
 
         # now we do filetype specific processing
         filename = os.path.basename(path_to_generate)
         _, extension = os.path.splitext(filename)
+        response_format = None
+
         if extension == '.wav':
             filetype = 'audio'
-            logger.debug(f'filetype={filetype}')
+            logger.trace(f'filetype={filetype}')
             assert 'raw_data' in config
             path = process_template(config['raw_data'], env_vars=context.variables)
-            logger.debug(f"path={path}")
+            logger.trace(f"path={path}")
             with open(path) as fin:
                 data = json.load(fin)
 
         elif extension == '.png':
             filetype = 'image'
-            logger.debug(f'filetype={filetype}')
+            logger.trace(f'filetype={filetype}')
             data = {}
             data['prompt'] = prompt_cmd + files_prompt
             if 'image_references' in config:
@@ -1144,7 +1178,7 @@ class BuildSystem:
         # process text output by default
         else:
             filetype = 'text'
-            logger.debug(f'filetype={filetype}')
+            logger.trace(f'filetype={filetype}')
 
             # the messages list will contain the full set of instructions passed to the llm;
             # it always starts with a system prompt
@@ -1161,7 +1195,9 @@ class BuildSystem:
                 format_cmd += 'Do not output markdown, and do not put the output inside a codeblock.'
             if extension == '.json':
                 format_cmd += 'Output JSON.'
+                response_format = {'type': 'json_object'}
             elif extension == '.jsonl':
+                response_format = {'type': 'json_object'}
                 format_cmd += f'Output JSONL.  Each line of the output should be a single JSON object. There should be at most {self.global_settings["jsonl_num_lines"]} total lines.'
                 format_cmd = process_template(format_cmd, env_vars=context.variables)
 
@@ -1175,9 +1211,30 @@ class BuildSystem:
                     logger.error(e)
                     sys.exit(1)
                 jsonschema.Draft7Validator.check_schema(schema)
-                logger.debug('schema validated')
+                logger.trace('schema validated')
+                # FIXME
+                if config.get('TMP_augment'):
+                    schema = {
+                        'type': 'object',
+                        'name': 'schema_file_wrapper',
+                        'properties': {
+                            'path': {'type': 'string', 'description': 'The path that the data specified in the data section will be written to. The "data" section is a JSON schema that represents the actual content of the JSON object to be created.'},
+                            'data': schema,
+                        },
+                        'required': ['path', 'data']
+                    }
                 format_cmd += ' Ensure the output conforms to the following JSON schema:\n'
-                format_cmd += text.strip()
+                #format_cmd += text.strip()
+                format_cmd += json.dumps(schema, indent=2).strip()
+                schema['additionalProperties'] = False
+                response_format = {
+                    'type': 'json_schema',
+                    'json_schema': {
+                        'strict': True,
+                        'name': 'fac_json_schema',
+                        'schema': schema,
+                        },
+                    }
 
             format_cmd = '<formatting>\n' + format_cmd + '\n</formatting>\n'
 
@@ -1230,6 +1287,7 @@ class BuildSystem:
             data,
             mode=mode,
             model=config.get('model'),
+            response_format=response_format,
             )
 
 
