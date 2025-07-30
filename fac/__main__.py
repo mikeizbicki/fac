@@ -16,7 +16,7 @@ class RecursiveLogger(logging.Logger):
     >>> logger = RecursiveLogger('test')
     >>> logger.setLevel(logging.DEBUG)
     >>> handler = logging.StreamHandler(sys.stdout)
-    >>> handler.setFormatter(logging.Formatter('%(message)s'))
+    >>> handler.setFormatter(CustomFormatter())
     >>> logger.addHandler(handler)
 
     >>> logger.info('Root message')
@@ -79,10 +79,6 @@ def with_subtree(logger_obj):
 
 
 handler = logging.StreamHandler()
-#handler.setFormatter(logging.Formatter(
-    #'%(asctime)s %(tree_prefix)s[%(levelname)s] %(message)s',
-    #'%Y-%m-%d %H:%M:%S'
-#))
 class CustomFormatter(logging.Formatter):
     def format(self, record):
         if record.levelno == logging.INFO:
@@ -111,9 +107,11 @@ import base64
 import copy
 import datetime
 import glob
+import itertools
 import json
 import os
 import pathlib
+import re
 import string
 import subprocess
 import sys
@@ -130,6 +128,53 @@ import openai
 ################################################################################
 # helper functions
 ################################################################################
+
+def process_template_list(template_content, env_vars=None):
+    '''
+    Like process_template, but allows the values of `env_vars` to be lists instead of strings.
+    Computes the cross product of all these lists and returns the result of process_template on each combination.
+
+    Examples:
+        >>> # Simple case with single list
+        >>> process_template_list("Hello $NAME!", {'NAME': ['Alice', 'Bob']})
+        ['Hello Alice!', 'Hello Bob!']
+
+        >>> # Cross product of multiple lists
+        >>> process_template_list("$GREETING $NAME!", {'GREETING': ['Hi', 'Hello'], 'NAME': ['Alice', 'Bob']})
+        ['Hi Alice!', 'Hi Bob!', 'Hello Alice!', 'Hello Bob!']
+
+        >>> # Mixed string and list values (note that NUM is a string)
+        >>> process_template_list("$PREFIX-$NUM", {'PREFIX': 'item', 'NUM': ['1', '2', '3']})
+        ['item-1', 'item-2', 'item-3']
+
+        >>> # Empty env_vars
+        >>> process_template_list("Static text")
+        ['Static text']
+
+        >>> # Single string values (converted to single-item lists)
+        >>> process_template_list("Hello $NAME!", {'NAME': 'World'})
+        ['Hello World!']
+    '''
+    if env_vars is None:
+        env_vars = {}
+
+    # Convert all values to lists for uniform processing
+    normalized_vars = {}
+    for k, v in env_vars.items():
+        normalized_vars[k] = v if isinstance(v, list) else [v]
+
+    # Generate cross product of all combinations
+    keys = list(normalized_vars.keys())
+    values = list(normalized_vars.values())
+    all_paths = []
+
+    results = []
+    for combo in itertools.product(*values):
+        current_env = dict(zip(keys, combo))
+        results.append(process_template(template_content, current_env))
+
+    return results
+
 
 def process_template(template_content, env_vars=None):
     """
@@ -317,6 +362,33 @@ def expand_path(path, env_vars=None):
     paths = [os.path.relpath(path) for path in paths]
 
     return paths
+
+
+def extract_variables(pattern):
+    """
+    Extract variables from a single pattern string.
+
+    Args:
+        pattern (str): Pattern string with variables like "$SERIES/$STORY/outline.json"
+
+    Returns:
+        list: List of variable names used in the pattern
+
+    Examples:
+        >>> extract_variables("$SERIES/$STORY/outline.json")
+        ['SERIES', 'STORY']
+
+        >>> extract_variables("$SERIES/$STORY/chapter$CHAPTER/chapter.json")
+        ['SERIES', 'STORY', 'CHAPTER']
+
+        >>> extract_variables("$SERIES/characters/$CHARACTER/about.json")
+        ['SERIES', 'CHARACTER']
+
+        >>> extract_variables("test_project/outline.json")
+        []
+    """
+    variables = re.findall(r'\$(\w+)', pattern)
+    return variables
 
 
 def match_pattern(patterns, input_string):
@@ -524,14 +596,15 @@ def validate_file(path, schema_file=None, fix=True):
 
     # ensure the input path exists
     if not os.path.exists(path):
-        raise RuntimeError(f'path="{path}" does not exist')
-    
+        logger.warning(f'path="{path}" does not exist, cannot validate')
+        return False
+
     # ensure the file is non-empty
-    if not path.startswith('/dev/') and os.path.getsize(path) == 0:
+    elif not path.startswith('/dev/') and os.path.getsize(path) == 0:
         logger.warning(f'os.path.getsize("{path}")=0')
 
     # validate JSON files
-    if extension == '.json':
+    elif extension == '.json':
 
         # ensure that the JSON can be parsed
         with open(path) as fin:
@@ -565,7 +638,7 @@ def validate_file(path, schema_file=None, fix=True):
                 json.dump(data, fout, indent=4, ensure_ascii=False)
 
     # fix markdown files
-    if fix and extension in ['.md' or '.markdown']:
+    elif fix and extension in ['.md' or '.markdown']:
         logger.trace(f'fixing markdown formatting in path={path}')
         with open(path, "r+") as fout:
             markdown_text = fout.read()
@@ -815,6 +888,7 @@ class BuildSystem:
     build_postreqs: bool = False
     extend: int = False
     print_prompt: bool = False
+    dry_run: bool = False
     print_contexts: bool = False
     no_validate: bool = False
     debug: bool = False
@@ -853,6 +927,7 @@ class BuildSystem:
         self.resolved_dependencies.add(transformed_target)
         logger.trace(f"transformed_target={transformed_target}; target_env={target_env}")
         if not transformed_target:
+            logger.trace(f"target does not exist, not building")
             raise TargetNotFound
         assert transformed_target
         assert transformed_target in self.full_config
@@ -895,12 +970,13 @@ class BuildSystem:
             )]
 
         DUMMY_VAR = '__NONE__'
-        config_variables = config.get('variables', {DUMMY_VAR: 'DUMMY_VAL'})
+        config_variables = config.get('variables', {})
+        config_variables[DUMMY_VAR] = 'DUMMY_VAL'
         assert type(config_variables) is dict, "did you write `variables: |` instead of `variables:`?"
 
         for var, expr in config_variables.items():
             expr = expr.strip()
-            logger.trace(f'computing {var}=$({expr})')
+            logger.trace(f'loop: var={var}, expr={expr}')
 
             # compute the new contexts list after resolving this variable;
             # since we will be modifying the contexts list,
@@ -909,11 +985,11 @@ class BuildSystem:
             contexts = []
             for context in contexts0:
                 # compute the dependencies
-                logger.trace(f'computing dependencies for "{target_to_build}"')
                 include_paths1 = []
                 unresolved_dependencies1 = []
                 for dep in context.unresolved_dependencies:
                     dep_target = dep['target']
+                    logger.trace(f'dep_target="{dep_target}"')
 
                     # try to expand dep_paths into real file paths
                     try:
@@ -922,26 +998,21 @@ class BuildSystem:
                             include_paths1.extend(dep_paths)
                         logger.trace(f'dep_paths={dep_paths}')
                     except TemplateProcessingError:
-                        logger.trace('dep_paths failed to expand with TemplateProcessingError; there are variables that still need resolving')
+                        logger.trace('dep_target failed to expand with TemplateProcessingError; there are variables that still need resolving')
                         dep_paths = []
+                        unresolved_dependencies1.append(dep)
+                        continue
 
                     # skip dependencies that we've already processed
                     if dep_target in self.resolved_dependencies:
                         logger.debug(f'previously resolved dependency "{dep_target}", skipping')
                         continue
 
-                    # NOTE:
-                    # we mark dep_target as resolved as soon as we begin processing it;
-                    # this should ensure that any cycles in the dependency graph
-                    # will not result in an infinite runtime loop
+                    # ensure that all dependencies are built by recursively calling build_target
                     logger.info(f'resolving dependency: "{dep_target}"')
-                    self.resolved_dependencies.add(dep_target)
-
-                    # ensure that all dependencies are built by recusively calling build_target
                     try:
                         self.build_target(dep_target, context.variables, overwrite=self.from_scratch)
                     except TargetNotFound:
-                        logger.trace(f'TargetNotFound: dep_target={dep_target}')
                         valid_paths = len(dep_paths) > 0
                         for path in dep_paths:
                             if not os.path.exists(path):
@@ -949,6 +1020,9 @@ class BuildSystem:
                         if not valid_paths:
                             logger.trace(f'dep_paths={dep_paths} not valid paths')
                             unresolved_dependencies1.append(dep)
+                            continue
+                    logger.trace(f'resolved dependency: "{dep_target}"')
+                    self.resolved_dependencies.add(dep_target)
 
                     # validate all of the dep_paths
                     if dep_paths is not None:
@@ -960,6 +1034,7 @@ class BuildSystem:
                 logger.trace(f"include_paths1={include_paths1}")
                 logger.trace(f"unresolved_dependencies1={unresolved_dependencies1}")
 
+                logger.trace(f'evaluating var="{var}"')
                 # do not evaluate the variable if it is DUMMY_VAR,
                 # since it was created only to force the unresolved_dependencies to run once
                 if var == DUMMY_VAR:
@@ -973,7 +1048,7 @@ class BuildSystem:
                 # run the expr in the bash shell
                 else:
                     full_command = "set -eu; " + expr
-                    result = subprocess.run(
+                    cmd = subprocess.run(
                         full_command,
                         shell=True,
                         capture_output=True,
@@ -981,10 +1056,10 @@ class BuildSystem:
                         executable="/bin/bash",
                         env=context.variables,
                         )
-                    if result.returncode != 0:
-                        raise VariableEvaluationError(var, expr, context, result)
-                    value = result.stdout
-                    logger.trace(f'value={value}')
+                    if cmd.returncode != 0:
+                        raise VariableEvaluationError(var, expr, context, cmd)
+                    value = cmd.stdout.strip()
+                    logger.trace(f'cmd.stdout={value.replace("\n", "\\n")}')
 
                 # lists are separated by newlines or null characters;
                 # for each entry in the list,
@@ -1053,7 +1128,7 @@ class BuildSystem:
             # ensure no unresolved dependencies
             if context.unresolved_dependencies:
                 for dep in context.unresolved_dependencies:
-                    logger.error(f'unresolved dependency: "{dep["target"]}"')
+                    logger.error(f'unresolved dependency: dep["target"]="{dep["target"]}"')
                 sys.exit(1)
 
             # skip if the path already exists
@@ -1063,7 +1138,7 @@ class BuildSystem:
             # we could probably push the native-python file generation code up to this point,
             # but it would result in more complicated code for fixing a very minor/theoretical problem
             if os.path.exists(path_to_generate) and not overwrite:
-                logger.debug(f'path exists, skipping: {path_to_generate}')
+                logger.info(f'path exists, skipping: {path_to_generate}')
 
             else:
                 logger.info(f'building file {i+1}/{len(contexts)} "{path_to_generate}"')
@@ -1281,14 +1356,15 @@ class BuildSystem:
                 mode = 'ab'
             else:
                 mode = 'wb'
-        self.llm.generate_file(
-            filetype,
-            path_to_generate,
-            data,
-            mode=mode,
-            model=config.get('model'),
-            response_format=response_format,
-            )
+        if not self.dry_run:
+            self.llm.generate_file(
+                filetype,
+                path_to_generate,
+                data,
+                mode=mode,
+                model=config.get('model'),
+                response_format=response_format,
+                )
 
 
 ################################################################################
@@ -1296,9 +1372,10 @@ class BuildSystem:
 ################################################################################
 
 def main():
+
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('targets', nargs='+')
+    parser.add_argument('targets', nargs='*')
 
     # add all other fields from the dataclass as optional arguments
     for field in fields(BuildSystem):
@@ -1308,7 +1385,7 @@ def main():
                 parser.add_argument(name, action='store_true', help=f'{field.name}')
             else:
                 parser.add_argument(name, default=field.default, help=f'{field.name}')
-    
+
     args = parser.parse_args()
     build_system = BuildSystem(**vars(args))
 

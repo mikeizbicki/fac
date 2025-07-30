@@ -1,0 +1,18 @@
+"outline.md":
+  prompt: |
+    Create an outline based on the story of Odysseus.
+    The story should be divided up into 5-20 chapters, with each chapter focusing on a major life event of Odysseus.
+    Each chapter should be a subsection (##) in the markdown file, and each subsection should have the following sub-subsections (###):
+    1. description: 1-5 sentence description (in English and Greek) of what happens
+    2. vocabulary: Lists of new greek words with English glosses. There should be one list per part of speech. Nouns should include the article to demonstrate gender. All words should be in dictionary form and not conjugated to match the text. At most 10-20 words should be introduced per chapter. The vocabulary listed should be sufficient to describe everything that happens in the chapter; if not, the chapter should be subdivided so that the vocabulary is sufficient.
+    3. grammar: A list of new grammar points to introduce. Grammar should be extremely simple. The book should not attempt to cover all of Koine grammar, and only the absolutely most basic grammar points. Everything should remain in the present tense to simplify grammar. Vocabulary should be selected to be as regular as possible, introducing 1st/2nd declension words before 3rd.
+  dependencies:
+    - description.md
+
+"story/$STORY/story.json":
+  schema_file:
+  dependencies:
+    - chapter/$STORY/description.md
+  variables:
+    STORY: ls story
+

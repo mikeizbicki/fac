@@ -1,0 +1,1 @@
+{"__fac_version__": "0.0.0-dev", "time": "2025-07-29T22:08:15.763980+00:00", "path": "outline.md", "build_id": 131311151178809053686540074736340945796, "cost": 0.0018232, "usage": {"openai/gpt-4.1-mini": {"text/out": 1007, "text/in": 530}}}
