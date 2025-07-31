@@ -901,7 +901,7 @@ class BuildSystem:
         if self.trace:
             logger.setLevel(TRACE_LEVEL)
         self.validate_output = not (self.print_prompt or self.print_contexts) and not self.no_validate
-        self.resolved_dependencies = set()
+        self.resolved_paths = {}
 
         # load global settings
         self.global_settings = {
@@ -924,11 +924,11 @@ class BuildSystem:
         # load target config
         config_targets = self.full_config.keys()
         transformed_target, target_env = match_pattern(config_targets, target_to_build)
-        self.resolved_dependencies.add(transformed_target)
-        logger.trace(f"transformed_target={transformed_target}; target_env={target_env}")
         if not transformed_target:
             logger.trace(f"target does not exist, not building")
             raise TargetNotFound
+        target_variables = extract_variables(transformed_target)
+        logger.trace(f"transformed_target={transformed_target}; target_variables={target_variables}, target_env={target_env}")
         assert transformed_target
         assert transformed_target in self.full_config
         config = self.full_config[transformed_target]
@@ -946,9 +946,10 @@ class BuildSystem:
                 dep = {'target': dep}
             assert type(dep) == dict
             unresolved_dependencies.append(dep)
+        logger.debug(f"unresolved_dependencies={unresolved_dependencies}")
 
         # a BuildContext contains all the information needed to build a file;
-        # contexts contains a BuildContext for each file that will be generated;
+        # the contexts list contains a BuildContext for each file that will be generated;
         # we start with a list that contains a single BuildContext but many unresolved_dependencies;
         # as we process the dependencies/variables in the config,
         # the unresolved_dependencies list should shrink to [],
@@ -969,83 +970,52 @@ class BuildSystem:
             postreqs,
             )]
 
+        config_variables = config.get('variables')
+        if not config_variables:
+            config_variables = {}
+        assert type(config_variables) is dict
         DUMMY_VAR = '__NONE__'
-        config_variables = config.get('variables', {})
         config_variables[DUMMY_VAR] = 'DUMMY_VAL'
-        assert type(config_variables) is dict, "did you write `variables: |` instead of `variables:`?"
 
-        for var, expr in config_variables.items():
-            expr = expr.strip()
-            logger.trace(f'loop: var={var}, expr={expr}')
+        ordered_variables = [DUMMY_VAR] + target_variables
+        #for var in config_variables:
+            #if var not in ordered_variables:
+                #ordered_variables.append(var)
 
-            # compute the new contexts list after resolving this variable;
-            # since we will be modifying the contexts list,
-            # we need to loop over a copy
+        for var in ordered_variables:
+            logger.trace(f'resolving var={var}')
+
+            # raise error if var is not defined
+            if var not in config_variables:
+                logger.error(f'var="{var}" required for {target_to_build} but not defined')
+                logger.error(f'HINT: you can define {var} as (1) an environment variable; (2) by providing it in the path; or (3) by defining it in the fac.yaml file')
+                sys.exit(1)
+            expr = config_variables[var].strip()
+
+            # each iteration has two steps:
+            # first we evaluate the var,
+            # then we resolve any dependencies that relied on the var
+
+            # STEP 1:
+            # we must do both steps for each BuildContext,
+            # so we loop over the contexts list;
+            # if var resolves into a list, we will need to expand the contexts list;
+            # therefore, we loop over a copy and reconstruct a new list from scratch
             contexts0 = contexts
             contexts = []
             for context in contexts0:
-                # compute the dependencies
-                include_paths1 = []
-                unresolved_dependencies1 = []
-                for dep in context.unresolved_dependencies:
-                    dep_target = dep['target']
-                    logger.trace(f'dep_target="{dep_target}"')
+                logger.trace(f'STEP1: evaluating var="{var}"; context={context}')
 
-                    # try to expand dep_paths into real file paths
-                    try:
-                        dep_paths = expand_path(dep_target, context.variables)
-                        if dep.get('include', True):
-                            include_paths1.extend(dep_paths)
-                        logger.trace(f'dep_paths={dep_paths}')
-                    except TemplateProcessingError:
-                        logger.trace('dep_target failed to expand with TemplateProcessingError; there are variables that still need resolving')
-                        dep_paths = []
-                        unresolved_dependencies1.append(dep)
-                        continue
-
-                    # skip dependencies that we've already processed
-                    if dep_target in self.resolved_dependencies:
-                        logger.debug(f'previously resolved dependency "{dep_target}", skipping')
-                        continue
-
-                    # ensure that all dependencies are built by recursively calling build_target
-                    logger.info(f'resolving dependency: "{dep_target}"')
-                    try:
-                        self.build_target(dep_target, context.variables, overwrite=self.from_scratch)
-                    except TargetNotFound:
-                        valid_paths = len(dep_paths) > 0
-                        for path in dep_paths:
-                            if not os.path.exists(path):
-                                valid_paths = False
-                        if not valid_paths:
-                            logger.trace(f'dep_paths={dep_paths} not valid paths')
-                            unresolved_dependencies1.append(dep)
-                            continue
-                    logger.trace(f'resolved dependency: "{dep_target}"')
-                    self.resolved_dependencies.add(dep_target)
-
-                    # validate all of the dep_paths
-                    if dep_paths is not None:
-                        for dep_path in dep_paths:
-                            logger.trace(f'validating dep_path={dep_path}')
-                            if not validate_file(dep_path, fix=False):
-                                logger.warning(f'failed to validate dep_path={dep_path}')
-
-                logger.trace(f"include_paths1={include_paths1}")
-                logger.trace(f"unresolved_dependencies1={unresolved_dependencies1}")
-
-                logger.trace(f'evaluating var="{var}"')
-                # do not evaluate the variable if it is DUMMY_VAR,
+                # do not evaluate var if it is DUMMY_VAR,
                 # since it was created only to force the unresolved_dependencies to run once
                 if var == DUMMY_VAR:
                     value = ''
 
-                # the var was specified in the environment,
-                # so we do not execute the expr
+                # do not evaluate var if it is specified in the environment
                 elif var in context.variables:
                     value = context.variables[var]
 
-                # run the expr in the bash shell
+                # evaluate var by running expr in a bash shell
                 else:
                     full_command = "set -eu; " + expr
                     cmd = subprocess.run(
@@ -1061,7 +1031,7 @@ class BuildSystem:
                     value = cmd.stdout.strip()
                     logger.trace(f'cmd.stdout={value.replace("\n", "\\n")}')
 
-                # lists are separated by newlines or null characters;
+                # lists are separated by newlines;
                 # for each entry in the list,
                 # we will add a new context with the entry added
                 value_list = [val.strip() for val in value.split('\n')]
@@ -1076,6 +1046,8 @@ class BuildSystem:
                 if len(value_list) == 0:
                     value_list = ['']
 
+                # XXX:
+                # modify this to account for if the variable is in the target or not
                 for val in value_list:
 
                     # if val is an integer, pad it with zeros
@@ -1086,18 +1058,113 @@ class BuildSystem:
                         pass
 
                     # add the context
-                    variables1 = {**context.variables, var: val}
+                    if var != DUMMY_VAR:
+                        variables1 = {**context.variables, var: val}
+                    else:
+                        variables1 = context.variables
                     postreqs1 = [process_template(postreq, variables1) for postreq in context.postreqs]
                     context1 = BuildContext(
                         variables1,
-                        context.include_paths + include_paths1,
-                        unresolved_dependencies1,
+                        context.include_paths,
+                        context.unresolved_dependencies,
                         postreqs1,
                         )
                     contexts.append(context1)
 
+            # STEP 2: resolve any new dependencies
             if var != DUMMY_VAR:
-                logger.info(f'resolved variable {var}; len(contexts)={len(contexts)}')
+                logger.info(f'resolving variable {var}; len(contexts)={len(contexts)}')
+
+            contexts0 = contexts
+            contexts = []
+            for context in contexts0:
+                logger.trace(f'STEP2: context={context}')
+
+                # compute the dependencies
+                include_paths1 = []
+                unresolved_dependencies1 = []
+                for dep in context.unresolved_dependencies:
+                    dep_target = dep['target']
+                    logger.trace(f'dep_target="{dep_target}"')
+
+                    # only resolve a dependency if all needed variables have been resolved
+                    dep_vars = extract_variables(dep_target)
+                    unmatched_vars = []
+                    for dep_var in dep_vars:
+                        if dep_var not in context.variables and dep_var in target_variables:
+                            unmatched_vars.append(dep_var)
+                    if len(unmatched_vars) > 0:
+                        logger.trace(f'unmatched_vars={unmatched_vars}')
+                        unresolved_dependencies1.append(dep)
+                        continue
+
+                    # expand dep_paths into real file paths
+                    try:
+                        dep_paths = expand_path(dep_target, context.variables)
+                        logger.trace(f'dep_paths={dep_paths}')
+                        #if dep.get('include', True):
+                            #include_paths1.extend(dep_paths)
+                    except TemplateProcessingError as e:
+                        # NOTE:
+                        # This code path should never happen.
+                        # TemplateProcessingError is thrown when there is a variable used in the template that still needs resolving.
+                        # We check for unresolved variables above,
+                        # so this code path shouldn't trigger if everything is working correctly.
+                        #logger.error(f'expand_path("{dep_target}", ...) failed to expand with TemplateProcessingError; this should never happen')
+                        dep_paths = []
+                        #sys.exit(1)
+
+                    # skip dependencies that we've already processed
+                    all_resolved = True
+                    for dep_path in dep_paths:
+                        if dep_path not in self.resolved_paths:
+                            all_resolved = False
+                    if all_resolved and len(dep_paths) > 0:
+                        logger.debug(f'already resolved {dep_paths}')
+                        continue
+                    #logger.info(f'resolving dependency: "{dep_target}", vars={context.variables}')
+                    expanded_target = process_template(dep_target, context.variables)
+                    logger.info(f'resolving dependency: "{expanded_target}"')
+
+                    # build dependencies recursively
+                    try:
+                        built_paths = self.build_target(dep_target, context.variables, overwrite=self.from_scratch)
+                        if dep.get('include', True):
+                            include_paths1.extend(built_paths)
+
+                    except TargetNotFound:
+                        valid_paths = len(dep_paths) > 0
+                        for path in dep_paths:
+                            if not os.path.exists(path):
+                                valid_paths = False
+                        if not valid_paths:
+                            logger.trace(f'dep_paths={dep_paths} not valid paths')
+                            unresolved_dependencies1.append(dep)
+                            continue
+                    logger.trace(f'resolved dependency: "{dep_target}"')
+
+                    # update resolved_paths with timestamp information
+                    for dep_path in dep_paths:
+                        self.resolved_paths[dep_path] = {
+                            'mtime': os.path.getmtime(dep_path)
+                            }
+
+                    # validate all of the dep_paths
+                    if dep_paths is not None:
+                        for dep_path in dep_paths:
+                            logger.trace(f'validating dep_path={dep_path}')
+                            if not validate_file(dep_path, fix=False):
+                                logger.warning(f'failed to validate dep_path={dep_path}')
+
+                logger.trace(f"include_paths1={include_paths1}")
+                logger.trace(f"unresolved_dependencies1={unresolved_dependencies1}")
+                context1 = BuildContext(
+                    context.variables,
+                    context.include_paths + include_paths1,
+                    unresolved_dependencies1,
+                    context.postreqs,
+                    )
+                contexts.append(context1)
 
         # print contexts debug information
         if self.print_contexts:
@@ -1113,23 +1180,12 @@ class BuildSystem:
             contexts = [contexts[0]]
 
         # loop over each context and run the processing code for the context
+        generated_paths = []
         for i, context in enumerate(contexts):
-
-            # output debug info about the context to process
             path_to_generate = process_template(target_to_build, context.variables)
-            logger.trace(f'path_to_gen={path_to_generate}')
-            logger.trace(f'context={context}')
-
-            # create output directory if needed
-            dirname = os.path.dirname(path_to_generate)
-            if len(dirname) > 0:
-                os.makedirs(dirname, exist_ok=True)
-
-            # ensure no unresolved dependencies
-            if context.unresolved_dependencies:
-                for dep in context.unresolved_dependencies:
-                    logger.error(f'unresolved dependency: dep["target"]="{dep["target"]}"')
-                sys.exit(1)
+            generated_paths.append(path_to_generate)
+            logger.info(f'file {i+1}/{len(contexts)} "{path_to_generate}"')
+            logger.debug(f'context={context}')
 
             # skip if the path already exists
             # NOTE:
@@ -1138,10 +1194,21 @@ class BuildSystem:
             # we could probably push the native-python file generation code up to this point,
             # but it would result in more complicated code for fixing a very minor/theoretical problem
             if os.path.exists(path_to_generate) and not overwrite:
-                logger.info(f'path exists, skipping: {path_to_generate}')
+                logger.debug(f'path exists, skipping: {path_to_generate}')
 
             else:
-                logger.info(f'building file {i+1}/{len(contexts)} "{path_to_generate}"')
+                logger.debug(f'building: {path_to_generate}')
+
+                # create output directory if needed
+                dirname = os.path.dirname(path_to_generate)
+                if len(dirname) > 0:
+                    os.makedirs(dirname, exist_ok=True)
+
+                # ensure no unresolved dependencies
+                if context.unresolved_dependencies:
+                    for dep in context.unresolved_dependencies:
+                        logger.error(f'unresolved dependency: dep["target"]="{dep["target"]}", vars={context.variables}')
+                    sys.exit(1)
 
                 # build with a custom shell command
                 if config.get('cmd'):
@@ -1176,6 +1243,8 @@ class BuildSystem:
             for postreq in context.postreqs:
                 logger.info(f'postreq: "{postreq}"')
                 self.build_target(postreq, context.variables, overwrite=self.overwrite or build_postreqs)
+
+        return generated_paths
 
     def context_to_file(self, path_to_generate, config, context, overwrite):
 
