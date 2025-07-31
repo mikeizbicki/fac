@@ -129,51 +129,36 @@ import openai
 # helper functions
 ################################################################################
 
-def process_template_list(template_content, env_vars=None):
-    '''
-    Like process_template, but allows the values of `env_vars` to be lists instead of strings.
-    Computes the cross product of all these lists and returns the result of process_template on each combination.
 
-    Examples:
-        >>> # Simple case with single list
-        >>> process_template_list("Hello $NAME!", {'NAME': ['Alice', 'Bob']})
-        ['Hello Alice!', 'Hello Bob!']
+def substitute_vars(template_str, vars_dict=None):
+    r"""
+    Substitute variables in a string with values from a dictionary.
 
-        >>> # Cross product of multiple lists
-        >>> process_template_list("$GREETING $NAME!", {'GREETING': ['Hi', 'Hello'], 'NAME': ['Alice', 'Bob']})
-        ['Hi Alice!', 'Hi Bob!', 'Hello Alice!', 'Hello Bob!']
+    If a variable is not found in the dictionary, it remains unchanged.
 
-        >>> # Mixed string and list values (note that NUM is a string)
-        >>> process_template_list("$PREFIX-$NUM", {'PREFIX': 'item', 'NUM': ['1', '2', '3']})
-        ['item-1', 'item-2', 'item-3']
+    >>> substitute_vars('Path is $VAR1 and $VAR2', {'VAR1': 'value1'})
+    'Path is value1 and $VAR2'
+    >>> substitute_vars('Path is $VAR1 and $VAR2', {'VAR2': 'value2'})
+    'Path is $VAR1 and value2'
+    >>> substitute_vars('Path is $VAR1 and $VAR2', {'VAR1': 'value1', 'VAR2': 'value2'})
+    'Path is value1 and value2'
+    >>> substitute_vars('Path is ${VAR1} and ${VAR2}', {'VAR1': 'value1', 'VAR2': 'value2'})
+    'Path is value1 and value2'
+    >>> substitute_vars('Path is $VAR1 and ${VAR2}', {'VAR1': 'value1', 'VAR2': 'value2'})
+    'Path is value1 and value2'
+    >>> substitute_vars('Path is ${VAR1} and $VAR2', {'VAR1': 'value1', 'VAR2': 'value2'})
+    'Path is value1 and value2'
+    >>> substitute_vars('Path is $VAR1 and $VAR2', {})
+    'Path is $VAR1 and $VAR2'
 
-        >>> # Empty env_vars
-        >>> process_template_list("Static text")
-        ['Static text']
-
-        >>> # Single string values (converted to single-item lists)
-        >>> process_template_list("Hello $NAME!", {'NAME': 'World'})
-        ['Hello World!']
-    '''
-    if env_vars is None:
-        env_vars = {}
-
-    # Convert all values to lists for uniform processing
-    normalized_vars = {}
-    for k, v in env_vars.items():
-        normalized_vars[k] = v if isinstance(v, list) else [v]
-
-    # Generate cross product of all combinations
-    keys = list(normalized_vars.keys())
-    values = list(normalized_vars.values())
-    all_paths = []
-
-    results = []
-    for combo in itertools.product(*values):
-        current_env = dict(zip(keys, combo))
-        results.append(process_template(template_content, current_env))
-
-    return results
+    :param template_str: The input string with variables.
+    :param vars_dict: A dictionary with variable names as keys and their values.
+    :return: The string with variables substituted.
+    """
+    for var, value in vars_dict.items():
+        template_str = template_str.replace(f'${var}', value)
+        template_str = template_str.replace(f'${{{var}}}', value)
+    return template_str
 
 
 def process_template(template_content, env_vars=None):
@@ -591,7 +576,7 @@ def match_pattern(patterns, input_string):
         return (None, {})
 
 
-def validate_file(path, schema_file=None, fix=True):
+def validate_file(path, schema_file=None, fix=False):
     _, extension = os.path.splitext(path)
 
     # ensure the input path exists
@@ -613,7 +598,7 @@ def validate_file(path, schema_file=None, fix=True):
             json.loads(text)
         except json.JSONDecodeError as e:
             if fix:
-                logger.trace(f'fixing JSONDecodeError in path={path}')
+                logger.info(f'fixing JSONDecodeError in path={path}')
                 import json_repair
                 with open(path, 'wt') as fout:
                     obj = json_repair.loads(text, skip_json_loads=True)
@@ -632,6 +617,7 @@ def validate_file(path, schema_file=None, fix=True):
 
         # reformat with pretty indentation
         if fix:
+            logger.info('fixing JSON indentation')
             with open(path, 'r') as fin:
                 data = json.load(fin)
             with open(path, 'w', encoding='utf-8') as fout:
@@ -639,7 +625,7 @@ def validate_file(path, schema_file=None, fix=True):
 
     # fix markdown files
     elif fix and extension in ['.md' or '.markdown']:
-        logger.trace(f'fixing markdown formatting in path={path}')
+        logger.info(f'fixing markdown formatting in path={path}')
         with open(path, "r+") as fout:
             markdown_text = fout.read()
             formatted_text = mdformat.text(markdown_text)
@@ -1072,7 +1058,7 @@ class BuildSystem:
                     contexts.append(context1)
 
             # STEP 2: resolve any new dependencies
-            if var != DUMMY_VAR:
+            if var != DUMMY_VAR and len(contexts) > 1:
                 logger.info(f'resolving variable {var}; len(contexts)={len(contexts)}')
 
             contexts0 = contexts
@@ -1101,7 +1087,7 @@ class BuildSystem:
                     # expand dep_paths into real file paths
                     try:
                         dep_paths = expand_path(dep_target, context.variables)
-                        logger.trace(f'dep_paths={dep_paths}')
+                        #logger.debug(f'dep_paths={dep_paths}')
                         #if dep.get('include', True):
                             #include_paths1.extend(dep_paths)
                     except TemplateProcessingError as e:
@@ -1121,14 +1107,17 @@ class BuildSystem:
                             all_resolved = False
                     if all_resolved and len(dep_paths) > 0:
                         logger.debug(f'already resolved {dep_paths}')
+                        include_paths1.extend(dep_paths)
                         continue
                     #logger.info(f'resolving dependency: "{dep_target}", vars={context.variables}')
-                    expanded_target = process_template(dep_target, context.variables)
+                    expanded_target = substitute_vars(dep_target, context.variables)
                     logger.info(f'resolving dependency: "{expanded_target}"')
 
                     # build dependencies recursively
                     try:
                         built_paths = self.build_target(dep_target, context.variables, overwrite=self.from_scratch)
+                        if built_paths == 0:
+                            print('ALERT')
                         if dep.get('include', True):
                             include_paths1.extend(built_paths)
 
@@ -1137,6 +1126,8 @@ class BuildSystem:
                         for path in dep_paths:
                             if not os.path.exists(path):
                                 valid_paths = False
+                            else:
+                                include_paths1.append(path)
                         if not valid_paths:
                             logger.trace(f'dep_paths={dep_paths} not valid paths')
                             unresolved_dependencies1.append(dep)
@@ -1184,31 +1175,36 @@ class BuildSystem:
         for i, context in enumerate(contexts):
             path_to_generate = process_template(target_to_build, context.variables)
             generated_paths.append(path_to_generate)
-            logger.info(f'file {i+1}/{len(contexts)} "{path_to_generate}"')
             logger.debug(f'context={context}')
 
-            # skip if the path already exists
-            # NOTE:
-            # there is a mild race condition since we do not actually open the file here;
-            # the race condition is necessary in order to support shell commands;
-            # we could probably push the native-python file generation code up to this point,
-            # but it would result in more complicated code for fixing a very minor/theoretical problem
-            if os.path.exists(path_to_generate) and not overwrite:
-                logger.debug(f'path exists, skipping: {path_to_generate}')
+            # ensure no unresolved dependencies
+            if context.unresolved_dependencies:
+                for dep in context.unresolved_dependencies:
+                    logger.error(f'unresolved dependency: dep["target"]="{dep["target"]}", vars={context.variables}')
+                sys.exit(1)
 
-            else:
-                logger.debug(f'building: {path_to_generate}')
+            # skip if the path already exists
+            build_context = True
+            if os.path.exists(path_to_generate):
+                path_to_generate_mtime = os.path.getmtime(path_to_generate)
+                updated_includes = []
+                for path in context.include_paths:
+                    time_diff = path_to_generate_mtime - self.resolved_paths[path]['mtime']
+                    if time_diff < 0:
+                        updated_includes.append(path)
+                    #print(f"path, time_diff={path, time_diff}")
+                if updated_includes == []:
+                    build_context = False
+                    logger.info(f'skipping file {i+1}/{len(contexts)} "{path_to_generate}"')
+
+            # perform the actual build
+            if build_context or overwrite:
+                logger.info(f'building file {i+1}/{len(contexts)} "{path_to_generate}"')
 
                 # create output directory if needed
                 dirname = os.path.dirname(path_to_generate)
                 if len(dirname) > 0:
                     os.makedirs(dirname, exist_ok=True)
-
-                # ensure no unresolved dependencies
-                if context.unresolved_dependencies:
-                    for dep in context.unresolved_dependencies:
-                        logger.error(f'unresolved dependency: dep["target"]="{dep["target"]}", vars={context.variables}')
-                    sys.exit(1)
 
                 # build with a custom shell command
                 if config.get('cmd'):
@@ -1244,6 +1240,10 @@ class BuildSystem:
                 logger.info(f'postreq: "{postreq}"')
                 self.build_target(postreq, context.variables, overwrite=self.overwrite or build_postreqs)
 
+        for path in generated_paths:
+            self.resolved_paths[path] = {
+                'mtime': os.path.getmtime(path)
+                }
         return generated_paths
 
     def context_to_file(self, path_to_generate, config, context, overwrite):
