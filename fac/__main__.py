@@ -23,6 +23,7 @@ class RecursiveLogger(logging.Logger):
     Root message
     >>> with logger.make_subtree():
     ...     logger.info('First level message')
+    ...     logger.info('submessage', submessage=True)
     ...     logger.info('First level message')
     ...     with logger.make_subtree():
     ...         logger.info('Second level message')
@@ -33,6 +34,7 @@ class RecursiveLogger(logging.Logger):
     ...     with logger.make_subtree():
     ...         logger.info('Second level message')
     ├── First level message
+    │   submessage
     ├── First level message
     │   ├── Second level message
     │   ├── Second level message
@@ -54,10 +56,13 @@ class RecursiveLogger(logging.Logger):
         finally:
             self.indent_level -= 1
 
-    def _log(self, level, msg, args, **kwargs):
+    def _log(self, level, msg, args, submessage=False, **kwargs):
         extra = kwargs.get('extra', {})
         if self.indent_level > 0:
-            extra['tree_prefix'] = '│   ' * (self.indent_level - 1) + '├── '
+            if submessage:
+                extra['tree_prefix'] = '│   ' * self.indent_level
+            else:
+                extra['tree_prefix'] = '│   ' * (self.indent_level - 1) + '├── '
         else:
             extra['tree_prefix'] = ''
         kwargs['extra'] = extra
@@ -99,6 +104,14 @@ def trace(self, message, *args, **kwargs):
     if self.isEnabledFor(TRACE_LEVEL):
         self._log(TRACE_LEVEL, message, args, **kwargs)
 logging.Logger.trace = trace
+
+logger2 = logging.getLogger()
+logger2.setLevel(logging.INFO)
+formatter2 = logging.Formatter('%(message)s')
+handler2 = logging.StreamHandler()
+handler2.setLevel(logging.INFO)
+handler2.setFormatter(formatter2)
+logger2.addHandler(handler2)
 
 # imports
 from collections import namedtuple, Counter, defaultdict
@@ -964,9 +977,9 @@ class BuildSystem:
         config_variables[DUMMY_VAR] = 'DUMMY_VAL'
 
         ordered_variables = [DUMMY_VAR] + target_variables
-        #for var in config_variables:
-            #if var not in ordered_variables:
-                #ordered_variables.append(var)
+        for var in config_variables:
+            if var not in ordered_variables:
+                logger.warning(f'variable {var} defined in config but not used in target; this currently has no effect on the build')
 
         for var in ordered_variables:
             logger.trace(f'resolving var={var}')
@@ -1195,11 +1208,16 @@ class BuildSystem:
                     #print(f"path, time_diff={path, time_diff}")
                 if updated_includes == []:
                     build_context = False
-                    logger.info(f'skipping file {i+1}/{len(contexts)} "{path_to_generate}"')
+                    logger.info(f'file up-to-date {i+1}/{len(contexts)} "{path_to_generate}"')
 
             # perform the actual build
             if build_context or overwrite:
                 logger.info(f'building file {i+1}/{len(contexts)} "{path_to_generate}"')
+                logger2.info(f'building file "{path_to_generate}"')
+                logger.info('include_files:', submessage=True)
+                for path in context.include_paths:
+                    logger.info(f' - {path}', submessage=True)
+                logger2.info('')
 
                 # create output directory if needed
                 dirname = os.path.dirname(path_to_generate)
@@ -1445,6 +1463,8 @@ def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('targets', nargs='*')
+
+    logger2.setLevel(logging.ERROR)
 
     # add all other fields from the dataclass as optional arguments
     for field in fields(BuildSystem):
