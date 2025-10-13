@@ -123,6 +123,7 @@ import glob
 import itertools
 import json
 import os
+import math
 import pathlib
 import re
 import string
@@ -130,6 +131,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import typing
 import uuid
 import yaml
 
@@ -683,6 +685,9 @@ class LLM():
         'anthropic/claude-sonnet-4-0':          {'text/in': 3.00, 'text/out': 15.00},
         'anthropic/claude-3-5-haiku-latest':    {'text/in': 0.80, 'text/out':  4.00},
         'groq/llama-3.3-70b-versatile':         {'text/in': 0.00, 'text/out':  0.00},
+        'openai/gpt-5':                         {'text/in': 1.25, 'text/out': 10.00},
+        'openai/gpt-5-mini':                    {'text/in': 0.25, 'text/out':  2.00},
+        'openai/gpt-5-nano':                    {'text/in': 0.05, 'text/out':  0.40},
         'openai/gpt-4.1':                       {'text/in': 2.00, 'text/out':  8.00},
         'openai/gpt-4.1-mini':                  {'text/in': 0.40, 'text/out':  1.60},
         'openai/gpt-4.1-nano':                  {'text/in': 0.10, 'text/out':  0.60},
@@ -736,7 +741,7 @@ class LLM():
         self.usage[model] += usage[model]
 
         logger.trace(f'self._tokens_to_prices()={self._tokens_to_prices(self.usage)}')
-        logger.info(f' >>> target cost: ${self._total_price(usage):0.4f}  total cost: ${self._total_price(self.usage):0.4f} <<<')
+        logger.info(f'file_cost: ${self._total_price(usage):0.4f}  total_cost: ${self._total_price(self.usage):0.4f}', submessage=True)
         return result.choices[0].message.content, usage
 
     def image(self, fout, data, *, seed=None):
@@ -882,13 +887,15 @@ class BuildSystem:
     project_dir: str = '.'
     prompt_dir: str = 'prompts'
     config_file: str = 'fac.yaml'
+    forward_dependencies: typing.Literal['rebuild', 'touch', 'none'] = 'rebuild'
     from_scratch: bool = False
     overwrite: bool = False
     build_postreqs: bool = False
     extend: int = False
-    print_prompt: bool = False
     dry_run: bool = False
+    print_prompt: bool = False
     print_contexts: bool = False
+    print_config: bool = False
     no_validate: bool = False
     debug: bool = False
     trace: bool = False
@@ -901,6 +908,7 @@ class BuildSystem:
             logger.setLevel(TRACE_LEVEL)
         self.validate_output = not (self.print_prompt or self.print_contexts) and not self.no_validate
         self.resolved_paths = {}
+        self.targets_plus_vars = set()
 
         # load global settings
         self.global_settings = {
@@ -911,6 +919,62 @@ class BuildSystem:
         # load config file
         with open(self.config_file) as fin:
             self.full_config = yaml.safe_load(fin)
+
+        # several of the keys in the config file allow an abbreviated syntax;
+        # first, we need to convert any abbreviated syntax into the full syntax
+        for target in self.full_config:
+            dependencies1 = []
+            dependencies = self.full_config[target].get('dependencies', '')
+            if type(dependencies) is str:
+                dependencies = dependencies.split()
+            elif dependencies is None:
+                dependencies = []
+            for dep in dependencies:
+                if type(dep) == str:
+                    dep = {'target': dep}
+                assert type(dep) == dict
+                dependencies1.append(dep)
+                for k in dep:
+                    if k not in ['target', 'include', 'allow_create']:
+                        logger.warning(f'in target "{target}", in dependency "{dep["target"]}", unknown option "{k}"')
+            self.full_config[target]['dependencies'] = dependencies1
+
+        # certain config options result in modifications to the full_config
+        keys0 = list(self.full_config.keys())
+        for target in keys0:
+            for dep in self.full_config[target]['dependencies']:
+
+                # add postreqs for creating new dependencies
+                if dep.get('allow_create'):
+                    target1_name = target + '--allow_create--' + dep['target'].replace('/', '_').replace('$', '')
+                    logger.debug(f'adding postreq: "{target1_name}"')
+                    dep_target_with_stars = 'resources/*/about.json'
+
+                    # any automatically created dependencies should not have allow_create set
+                    dependencies1 = []
+                    for dep in self.full_config[target]['dependencies']:
+                        dep1 = copy.copy(dep)
+                        if type(dep1) == dict:
+                            dep1['allow_create'] = False
+                        dependencies1.append(dep1)
+
+                    # create the actual config entry
+                    self.full_config[target1_name] = {
+                        'model': 'openai/gpt-4.1-mini',
+                        'prompt': f'''The main file '{target}' internally references the secondary files '{dep_target_with_stars}'. Unfortunately, the main file may reference secondary files that do not exist. For each secondary file that does not exist, create the appropriate JSON object.''',
+                        'schema_file': self.full_config[dep['target']].get('schema_file'),
+                        'dependencies': dependencies1,
+                        'variables': copy.copy(self.full_config[target]['variables']),
+                        'TMP_augment': True,
+                        }
+                    if 'postreqs' not in self.full_config[target]:
+                        self.full_config[target]['postreqs'] = []
+                    self.full_config[target]['postreqs'].append(target1_name)
+
+        # print the config
+        if self.print_config:
+            print(yaml.dump(self.full_config, default_flow_style=False))
+            sys.exit(0)
 
         # build all targets
         for target in self.targets:
@@ -932,19 +996,16 @@ class BuildSystem:
         assert transformed_target in self.full_config
         config = self.full_config[transformed_target]
 
+        # prevent infinite loops # FIXME
+        target_plus_vars = transformed_target + '__vars=' + json.dumps(input_env)
+        if target_plus_vars in self.targets_plus_vars:
+            logger.debug(f'prevented infinite recursion for target_to_build={target_to_build} + input_env={input_env}')
+            return [] # FIXME
+        self.targets_plus_vars.add(target_plus_vars)
+
         # parse the dependencies entry in the yaml into unresolved_dependencies list;
         # each entry in the list is a dictionary with a target and flags key
-        unresolved_dependencies = []
-        dependencies = config.get('dependencies', '')
-        if type(dependencies) is str:
-            dependencies = dependencies.split()
-        elif dependencies is None:
-            dependencies = []
-        for dep in dependencies:
-            if type(dep) == str:
-                dep = {'target': dep}
-            assert type(dep) == dict
-            unresolved_dependencies.append(dep)
+        unresolved_dependencies = config.get('dependencies', '')
         logger.debug(f"unresolved_dependencies={unresolved_dependencies}")
 
         # a BuildContext contains all the information needed to build a file;
@@ -984,13 +1045,6 @@ class BuildSystem:
         for var in ordered_variables:
             logger.trace(f'resolving var={var}')
 
-            # raise error if var is not defined
-            if var not in config_variables:
-                logger.error(f'var="{var}" required for {target_to_build} but not defined')
-                logger.error(f'HINT: you can define {var} as (1) an environment variable; (2) by providing it in the path; or (3) by defining it in the fac.yaml file')
-                sys.exit(1)
-            expr = config_variables[var].strip()
-
             # each iteration has two steps:
             # first we evaluate the var,
             # then we resolve any dependencies that relied on the var
@@ -1005,6 +1059,14 @@ class BuildSystem:
             for context in contexts0:
                 logger.trace(f'STEP1: evaluating var="{var}"; context={context}')
 
+                # raise error if var is not defined
+                if var not in config_variables and var not in context.variables:
+                    logger.error(f'var="{var}" required for {target_to_build} but not defined')
+                    logger.error(f'HINT: you can define {var} as (1) an environment variable; (2) by providing it in the path; or (3) by defining it in the fac.yaml file')
+                    logger.error(f'config_variables.keys()={config_variables.keys()}')
+                    logger.error(f'context.variables.keys()={context.variables.keys()}')
+                    sys.exit(1)
+
                 # do not evaluate var if it is DUMMY_VAR,
                 # since it was created only to force the unresolved_dependencies to run once
                 if var == DUMMY_VAR:
@@ -1016,6 +1078,7 @@ class BuildSystem:
 
                 # evaluate var by running expr in a bash shell
                 else:
+                    expr = config_variables[var].strip()
                     full_command = "set -eu; " + expr
                     cmd = subprocess.run(
                         full_command,
@@ -1061,7 +1124,7 @@ class BuildSystem:
                         variables1 = {**context.variables, var: val}
                     else:
                         variables1 = context.variables
-                    postreqs1 = [process_template(postreq, variables1) for postreq in context.postreqs]
+                    postreqs1 = [substitute_vars(postreq, variables1) for postreq in context.postreqs]
                     context1 = BuildContext(
                         variables1,
                         context.include_paths,
@@ -1164,7 +1227,7 @@ class BuildSystem:
                 logger.trace(f"unresolved_dependencies1={unresolved_dependencies1}")
                 context1 = BuildContext(
                     context.variables,
-                    context.include_paths + include_paths1,
+                    sorted(context.include_paths + include_paths1),
                     unresolved_dependencies1,
                     context.postreqs,
                     )
@@ -1194,7 +1257,8 @@ class BuildSystem:
             if context.unresolved_dependencies:
                 for dep in context.unresolved_dependencies:
                     logger.error(f'unresolved dependency: dep["target"]="{dep["target"]}", vars={context.variables}')
-                sys.exit(1)
+                # FIXME:
+                #sys.exit(1)
 
             # skip if the path already exists
             build_context = True
@@ -1205,7 +1269,6 @@ class BuildSystem:
                     time_diff = path_to_generate_mtime - self.resolved_paths[path]['mtime']
                     if time_diff < 0:
                         updated_includes.append(path)
-                    #print(f"path, time_diff={path, time_diff}")
                 if updated_includes == []:
                     build_context = False
                     logger.info(f'file up-to-date {i+1}/{len(contexts)} "{path_to_generate}"')
@@ -1214,7 +1277,7 @@ class BuildSystem:
             if build_context or overwrite:
                 logger.info(f'building file {i+1}/{len(contexts)} "{path_to_generate}"')
                 logger2.info(f'building file "{path_to_generate}"')
-                logger.info('include_files:', submessage=True)
+                logger.info('include_paths:', submessage=True)
                 for path in context.include_paths:
                     logger.info(f' - {path}', submessage=True)
                 logger2.info('')
@@ -1259,8 +1322,12 @@ class BuildSystem:
                 self.build_target(postreq, context.variables, overwrite=self.overwrite or build_postreqs)
 
         for path in generated_paths:
+            try:
+                mtime = os.path.getmtime(path)
+            except FileNotFoundError:
+                mtime = math.inf
             self.resolved_paths[path] = {
-                'mtime': os.path.getmtime(path)
+                'mtime': mtime
                 }
         return generated_paths
 
@@ -1269,7 +1336,7 @@ class BuildSystem:
         # first we generate the instructions for the llm,
         # which will be stored in the `prompt_cmd` variable.
         if 'prompt' in config:
-            prompt_cmd = config['prompt']
+            prompt_cmd = config['prompt'] or ''
         elif 'prompt_file' in config:
             prompt_path_template = config['prompt_file']
             prompt_path = process_template(prompt_path_template, env_vars=context.variables)
@@ -1298,7 +1365,7 @@ class BuildSystem:
         else:
             files_prompt = '<documents>\n'
             for path in context.include_paths:
-                # FIXME:
+                # XXX:
                 # when piping into stdin, open('/dev/stdin') fails because the open function does not work on pipe "files";
                 # this is a hackish way to detect that we're piping into stdin,
                 # and then changing path to a value that is compatible with open;
@@ -1365,7 +1432,9 @@ class BuildSystem:
 
             if 'schema_file' in config:
                 try:
-                    with open(config['schema_file']) as fin:
+                    schema_file = config['schema_file']
+                    schema_file = substitute_vars(schema_file, context.variables)
+                    with open(schema_file) as fin:
                         text = fin.read().strip()
                         schema = json.loads(text)
                 except json.decoder.JSONDecodeError as e:
@@ -1437,7 +1506,7 @@ class BuildSystem:
             return
 
         # write to the output file
-        mode = 'xb'
+        mode = 'wb'
         if self.from_scratch or overwrite:
             if self.extend:
                 mode = 'ab'
@@ -1470,10 +1539,13 @@ def main():
     for field in fields(BuildSystem):
         if field.name != 'targets':
             name = f'--{field.name}'
-            if field.type == bool and field.default == False:
-                parser.add_argument(name, action='store_true', help=f'{field.name}')
+            if typing.get_origin(field.type) is typing.Literal:
+                choices = typing.get_args(field.type)
+                parser.add_argument(name, choices=choices, default=field.default)
+            elif field.type == bool and field.default == False:
+                parser.add_argument(name, action='store_true')
             else:
-                parser.add_argument(name, default=field.default, help=f'{field.name}')
+                parser.add_argument(name, default=field.default)
 
     args = parser.parse_args()
     build_system = BuildSystem(**vars(args))
