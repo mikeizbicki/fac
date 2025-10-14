@@ -19,6 +19,8 @@ from .Media import *
 from .utils import *
 
 
+BACKGROUND_DEPTH = -50
+
 class SceneManager():
 
     def __init__(self, working_folder, screen_width, screen_height, debug=False, **kwargs):
@@ -333,12 +335,13 @@ class SceneManager():
                     )
 
             self.background_sprite = arcade.Sprite()
+            self.background_sprite.name = 'self.background_sprite'
             self.background_sprite.texture = self.background
             self.background_sprite.scale_x = self.background_LBWH.width / self.background.width
             self.background_sprite.scale_y = self.background_LBWH.height / self.background.height
             self.background_sprite.left = self.background_LBWH.left
             self.background_sprite.bottom = self.background_LBWH.bottom
-            self.background_sprite.depth = -0.5
+            self.background_sprite.depth = BACKGROUND_DEPTH - 0.5
             self.sprites.append(self.background_sprite)
 
             farbackground_path = scene.get('outside', scene.get('farbackground_image_path'))
@@ -348,7 +351,8 @@ class SceneManager():
                 if not os.path.isfile(farbackground_path):
                     farbackground_path = 'img/error.png'
                 farbackground = arcade.Sprite(farbackground_path)
-                farbackground.depth = -9
+                farbackground.name = 'self.farbackground'
+                farbackground.depth = BACKGROUND_DEPTH - 9
                 farbackground.scale_x = self.background_sprite.scale_x
                 farbackground.scale_y = self.background_sprite.scale_y
                 farbackground.left = self.background_sprite.left
@@ -360,7 +364,8 @@ class SceneManager():
                 if not os.path.isfile(floor_path):
                     floor_path = os.path.join('scene/floor', floor_path)
                 img_floor = arcade.Sprite(floor_path)
-                img_floor.depth = -10
+                img_floor.name = 'self.img_floor'
+                img_floor.depth = BACKGROUND_DEPTH - 10
                 img_floor.scale_x = self.background_sprite.scale_x
                 img_floor.scale_y = self.background_sprite.scale_y
                 img_floor.left = self.background_sprite.left
@@ -523,7 +528,7 @@ class SceneManager():
         assert name not in self._name_to_sprite
         if sprite is None:
             sprite = Element(name)
-        sprite.depth = depth
+        #sprite.depth = depth
         self.sprites.append(sprite)
         self._name_to_sprite[name] = sprite
         self._name_positions[name] = position
@@ -543,7 +548,7 @@ class SceneManager():
             new_bg = self.background_sprite.texture.image.copy().convert('RGBA')
             draw = ImageDraw.Draw(new_bg)
 
-            sprite.depth = -0.5
+            sprite.depth = BACKGROUND_DEPTH - 7
 
             # first, convert screen coords to self.background texture coords
             def screen_to_texture_coords(screen_x, screen_y):

@@ -1015,7 +1015,7 @@ class BuildSystem:
         # the unresolved_dependencies list should shrink to [],
         # but the total number of contexts (i.e. files needed to build) may grow;
         # the algorithm for generating the final contexts list is a bit subtle
-        BuildContext = namedtuple('Context', [
+        BuildContext = namedtuple('BuildContext', [
             'variables',
             'include_paths',
             'unresolved_dependencies',
@@ -1105,7 +1105,7 @@ class BuildSystem:
                 # because of the tr '\n' '\0' command
                 # and all outputs ending in a '\n'
                 value_list = [val for val in value_list if len(val) > 0]
-                if len(value_list) == 0:
+                if var == DUMMY_VAR and len(value_list) == 0:
                     value_list = ['']
 
                 # XXX:
@@ -1134,13 +1134,26 @@ class BuildSystem:
                     contexts.append(context1)
 
             # STEP 2: resolve any new dependencies
-            if var != DUMMY_VAR and len(contexts) > 1:
-                logger.info(f'resolving variable {var}; len(contexts)={len(contexts)}')
+            if var != DUMMY_VAR: # and len(contexts) > 1:
+                logger.info(f'resolved variable {var}; len(contexts)={len(contexts)}')
 
             contexts0 = contexts
             contexts = []
             for context in contexts0:
                 logger.trace(f'STEP2: context={context}')
+
+                # skip variables that have nothing assigned to them
+                # FIXME:
+                # we use a janky system that uses the '' to represent empty variables;
+                # this is "needed" in order to keep the loop above running?
+                # we should make this much less janky;
+                # also, I haven't tested that this code below doesn't break something
+                build_context = True
+                for var, val in context.variables.items():
+                    if not val:
+                        build_context = False
+                if not build_context:
+                    continue
 
                 # compute the dependencies
                 include_paths1 = []
@@ -1240,6 +1253,11 @@ class BuildSystem:
             pprint.pprint(contexts)
             return
 
+        # if there are no contexts to build,
+        # let the user know
+        if len(contexts) == 0:
+            logger.info('this target resolves to nothing')
+
         # if we are only allowed to run once,
         # then we truncate the contexts to force us to run only once
         if config.get('run_once'):
@@ -1260,9 +1278,14 @@ class BuildSystem:
                 # FIXME:
                 #sys.exit(1)
 
-            # skip if the path already exists
+            # NOTE:
+            # by default, we will build the given context;
+            # but we may not rebuild if the path already exists
             build_context = True
             if os.path.exists(path_to_generate):
+
+                # if the file is up-to-date (i.e. all dependencies are older),
+                # then we will not rebuild it
                 path_to_generate_mtime = os.path.getmtime(path_to_generate)
                 updated_includes = []
                 for path in context.include_paths:
@@ -1272,6 +1295,11 @@ class BuildSystem:
                 if updated_includes == []:
                     build_context = False
                     logger.info(f'file up-to-date {i+1}/{len(contexts)} "{path_to_generate}"')
+
+                # do not rebuild the file if auto_rebuild is disabled
+                if not config.get('auto_rebuild', True) and build_context:
+                    build_context = False
+                    logger.info(f'auto_rebuild disabled {i+1}/{len(contexts)} "{path_to_generate}"')
 
             # perform the actual build
             if build_context or overwrite:

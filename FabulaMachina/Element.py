@@ -19,7 +19,6 @@ class Element(arcade.Sprite):
         super().__init__(name=name, scale=1)
         self.__old_center_x = self.center_x
 
-        name = name
         self.name = name
         root_dir = f'elements/{name}'
 
@@ -32,10 +31,13 @@ class Element(arcade.Sprite):
             logger.error(f'json_path="{json_path}" not found')
             self.config = {}
         self.config.setdefault('default_state', 'idle')
+        self.config.setdefault('default_depth', 0)
         self.config.setdefault('min_state_time', 1.5)
         self.config.setdefault('height', 1.0)
         self.config.setdefault('movement_type', 'dynamic')
         #logger.debug(f'created element "{name}"; config={self.config}')
+
+        self.depth = self.config['default_depth']
 
         # load state textures
         self.textures = {}
@@ -71,16 +73,8 @@ class Element(arcade.Sprite):
         # now we actually set the state,
         # but emit appropriate errors if the state cannot be found
         if state not in self.textures:
-            #self.texture = self.error_texture
             logger.error(f'Element(name="{self.name}").set_state(): "{state}" not in self.textures')
             state = 'error'
-        #elif self.character_face_direction not in self.textures[state]:
-            #self.texture = self.error_texture
-            #logger.error(f'Element.set_state(): "{self.character_face_direction}" not in self.textures["{state}"]')
-        #elif self.state_seq_id not in self.textures[state][self.character_face_direction]:
-            #self.texture = self.error_texture
-            #logger.error(f'Element.set_state(): "{self.state_seq_id}" not in self.textures["{state}"][{self.character_face_direction}]')
-        #else:
         self.texture = self.textures[state][self.character_face_direction][self.state_seq_id]
 
     def pymunk_moved(self, physics_engine, dx, dy, d_angle):
@@ -102,7 +96,11 @@ class Element(arcade.Sprite):
             self.x_odometer += dx
 
             if abs(dx) >= DEAD_ZONE and self.state != 'interact':
-                self.set_state('walk')
+                if 'walk' in self.textures:
+                    self.set_state('walk')
+                else:
+                    self.set_state(self.config['default_state'])
+                    logger.warning("pymunk has caused the object to move; but the walk state is not available; using default_state={self.config['default_state']}")
                 period = 64
                 max_angle = 20
                 self.angle = math.cos(self.center_x / period) * max_angle
