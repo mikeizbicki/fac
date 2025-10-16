@@ -979,7 +979,12 @@ class BuildSystem:
         # build all targets
         for target in self.targets:
             logger.info(f'target="{target}"')
-            self.build_target(target, {}, overwrite=self.overwrite or self.from_scratch, build_postreqs=self.build_postreqs)
+            self.build_target(
+                    target,
+                    {},
+                    overwrite=self.overwrite or self.from_scratch,
+                    build_postreqs=self.build_postreqs,
+                    )
 
     @with_subtree(logger)
     def build_target(self, target_to_build, input_env, overwrite=False, build_postreqs=False):
@@ -997,11 +1002,12 @@ class BuildSystem:
         config = self.full_config[transformed_target]
 
         # prevent infinite loops # FIXME
-        target_plus_vars = transformed_target + '__vars=' + json.dumps(input_env)
+        target_plus_vars = transformed_target + '__vars=' + json.dumps({**input_env, **target_env})
         if target_plus_vars in self.targets_plus_vars:
             logger.debug(f'prevented infinite recursion for target_to_build={target_to_build} + input_env={input_env}')
             return [] # FIXME
         self.targets_plus_vars.add(target_plus_vars)
+
 
         # parse the dependencies entry in the yaml into unresolved_dependencies list;
         # each entry in the list is a dictionary with a target and flags key
@@ -1063,8 +1069,6 @@ class BuildSystem:
                 if var not in config_variables and var not in context.variables:
                     logger.error(f'var="{var}" required for {target_to_build} but not defined')
                     logger.error(f'HINT: you can define {var} as (1) an environment variable; (2) by providing it in the path; or (3) by defining it in the fac.yaml file')
-                    logger.error(f'config_variables.keys()={config_variables.keys()}')
-                    logger.error(f'context.variables.keys()={context.variables.keys()}')
                     sys.exit(1)
 
                 # do not evaluate var if it is DUMMY_VAR,
@@ -1093,24 +1097,32 @@ class BuildSystem:
                     value = cmd.stdout.strip()
                     logger.trace(f'cmd.stdout={value.replace("\n", "\\n")}')
 
-                # lists are separated by newlines;
-                # for each entry in the list,
-                # we will add a new context with the entry added
-                value_list = [val.strip() for val in value.split('\n')]
+                def raw_variable_to_list(raw):
+                    '''
+                    A raw variable is the literal string assigned to the variable
+                    (in the config file, as an environment variable, etc).
+                    This function converts the raw variable into an appropriate list,
+                    where each value in the list will be substituted for the variable on use.
+                    '''
+                    # lists are separated by newlines;
+                    # for each entry in the list,
+                    # we will add a new context with the entry added
+                    value_list = [val.strip() for val in raw.split('\n')]
 
-                # FIXME:
-                # don't add val to the contexts list when it is empty;
-                # this is because when doing the split on \0,
-                # we will always have the last entry be '',
-                # because of the tr '\n' '\0' command
-                # and all outputs ending in a '\n'
-                value_list = [val for val in value_list if len(val) > 0]
-                if var == DUMMY_VAR and len(value_list) == 0:
-                    value_list = ['']
+                    # FIXME:
+                    # don't add val to the contexts list when it is empty;
+                    # this is because when doing the split on \0,
+                    # we will always have the last entry be '',
+                    # because of the tr '\n' '\0' command
+                    # and all outputs ending in a '\n'
+                    value_list = [val for val in value_list if len(val) > 0]
+                    if var == DUMMY_VAR and len(value_list) == 0:
+                        value_list = ['']
 
-                # XXX:
-                # modify this to account for if the variable is in the target or not
-                for val in value_list:
+                    return value_list
+
+
+                for val in raw_variable_to_list(value):
 
                     # if val is an integer, pad it with zeros
                     try:
@@ -1346,8 +1358,12 @@ class BuildSystem:
 
             # build postreqs
             for postreq in context.postreqs:
-                logger.info(f'postreq: "{postreq}"')
-                self.build_target(postreq, context.variables, overwrite=self.overwrite or build_postreqs)
+                logger.info(f'postreq: "{postreq}"', submessage=True)
+                self.build_target(
+                        postreq,
+                        context.variables,
+                        overwrite=self.overwrite or build_postreqs,
+                        )
 
         for path in generated_paths:
             try:
@@ -1458,7 +1474,7 @@ class BuildSystem:
                 format_cmd += f'Output JSONL.  Each line of the output should be a single JSON object. There should be at most {self.global_settings["jsonl_num_lines"]} total lines.'
                 format_cmd = process_template(format_cmd, env_vars=context.variables)
 
-            if 'schema_file' in config:
+            if config.get('schema_file'):
                 try:
                     schema_file = config['schema_file']
                     schema_file = substitute_vars(schema_file, context.variables)

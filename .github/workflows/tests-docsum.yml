@@ -1,0 +1,27 @@
+name: tests-doctest
+
+on:
+  push:
+    branches: ['*']
+  pull_request:
+    branches: ['*']
+
+jobs:
+  tests:
+    strategy:
+      matrix:
+        python: [3.12]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python ${{matrix.python}}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{matrix.python}}
+      - name: install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - name: run doctests
+        run: |
+          ./tests/doctest.sh
