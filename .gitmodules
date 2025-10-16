@@ -1,3 +1,12 @@
-[submodule "family_story"]
-	path = family_story
-	url = https://github.com/mikeizbicki/example_story
+[submodule "stories"]
+    path = stories
+    url = https://github.com/mikeizbicki/fabula-machina
+[submodule "tests/fac_test_project1"]
+    path = tests/fac_test_project1
+    url = https://github.com/mikeizbicki/fac_test_project1
+[submodule "tests/fac_test_project2"]
+	path = tests/fac_test_project2
+	url = https://github.com/mikeizbicki/fac_test_project2
+[submodule "tests/fac_test_project3"]
+	path = tests/fac_test_project3
+	url = https://github.com/mikeizbicki/fac_test_project3
