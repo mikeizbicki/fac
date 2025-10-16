@@ -1,3 +1,4 @@
 jsonschema >= 4.24.0
 mdformat >= 0.7.22
 openai >= 1.84.0
+PyYAML >= 6.0.2

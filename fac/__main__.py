@@ -113,7 +113,7 @@ handler2.setLevel(logging.INFO)
 handler2.setFormatter(formatter2)
 logger2.addHandler(handler2)
 
-# imports
+# standard lib imports
 from collections import namedtuple, Counter, defaultdict
 from dataclasses import dataclass, fields
 import base64
@@ -133,12 +133,13 @@ import tempfile
 import time
 import typing
 import uuid
-import yaml
 
-import groq
+# external lib imports
 import jsonschema
 import mdformat
 import openai
+import yaml
+
 
 ################################################################################
 # helper functions
