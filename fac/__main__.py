@@ -4,117 +4,8 @@
 The Latin verb `facio` means to do/make, and fac is the imperative form.
 '''
 
-# setup logging
-import logging
-import contextlib
-
-class RecursiveLogger(logging.Logger):
-    """
-    A logger class with a recursive subtree feature.
-
-    >>> import sys
-    >>> logger = RecursiveLogger('test')
-    >>> logger.setLevel(logging.DEBUG)
-    >>> handler = logging.StreamHandler(sys.stdout)
-    >>> handler.setFormatter(CustomFormatter())
-    >>> logger.addHandler(handler)
-
-    >>> logger.info('Root message')
-    Root message
-    >>> with logger.make_subtree():
-    ...     logger.info('First level message')
-    ...     logger.info('submessage', submessage=True)
-    ...     logger.info('First level message')
-    ...     with logger.make_subtree():
-    ...         logger.info('Second level message')
-    ...         logger.info('Second level message')
-    ...         with logger.make_subtree():
-    ...             logger.info('Third level message')
-    ...     logger.info('First level message again')
-    ...     with logger.make_subtree():
-    ...         logger.info('Second level message')
-    ├── First level message
-    │   submessage
-    ├── First level message
-    │   ├── Second level message
-    │   ├── Second level message
-    │   │   ├── Third level message
-    ├── First level message again
-    │   ├── Second level message
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.indent_level = 0
-        self.log_stack = []
-
-    @contextlib.contextmanager
-    def make_subtree(self):
-        self.indent_level += 1
-        try:
-            yield
-        finally:
-            self.indent_level -= 1
-
-    def _log(self, level, msg, args, submessage=False, **kwargs):
-        extra = kwargs.get('extra', {})
-        if self.indent_level > 0:
-            if submessage:
-                extra['tree_prefix'] = '│   ' * self.indent_level
-            else:
-                extra['tree_prefix'] = '│   ' * (self.indent_level - 1) + '├── '
-        else:
-            extra['tree_prefix'] = ''
-        kwargs['extra'] = extra
-        super()._log(level, msg, args, **kwargs)
-
-
-def with_subtree(logger_obj):
-    """
-    This decorator creates a logging subtree context around the decorated function.
-    Whenever the function is called (usually recursively),
-    a new indentation level will appear in the logger.
-    """
-    def decorator(func):
-        def wrapper(*args, **kwargs):
-            with logger_obj.make_subtree():
-                return func(*args, **kwargs)
-        return wrapper
-    return decorator
-
-
-handler = logging.StreamHandler()
-class CustomFormatter(logging.Formatter):
-    def format(self, record):
-        if record.levelno == logging.INFO:
-            self._style._fmt = '%(tree_prefix)s%(message)s'
-        else:
-            self._style._fmt = '%(tree_prefix)s[%(levelname)s] %(message)s'
-        return super().format(record)
-handler.setFormatter(CustomFormatter(datefmt='%Y-%m-%d %H:%M:%S'))
-logger = RecursiveLogger(__name__)
-logger.addHandler(handler)
-logger.propagate = False
-logger.setLevel(logging.INFO)
-
-# add custom TRACE log level that sits below DEBUG
-TRACE_LEVEL = 5
-logging.addLevelName(TRACE_LEVEL, 'TRACE')
-def trace(self, message, *args, **kwargs):
-    if self.isEnabledFor(TRACE_LEVEL):
-        self._log(TRACE_LEVEL, message, args, **kwargs)
-logging.Logger.trace = trace
-
-logger2 = logging.getLogger()
-logger2.setLevel(logging.INFO)
-formatter2 = logging.Formatter('%(message)s')
-handler2 = logging.StreamHandler()
-handler2.setLevel(logging.INFO)
-handler2.setFormatter(formatter2)
-logger2.addHandler(handler2)
-
 # standard lib imports
-from collections import namedtuple, Counter, defaultdict
+from collections import namedtuple, Counter
 from dataclasses import dataclass, fields
 import base64
 import copy
@@ -130,16 +21,16 @@ import string
 import subprocess
 import sys
 import tempfile
-import time
 import typing
-import uuid
 
 # external lib imports
 import jsonschema
 import mdformat
-import openai
 import yaml
 
+# project imports
+from .Logging import logger, with_subtree
+from .LLM import LLM
 
 ################################################################################
 # helper functions
@@ -656,232 +547,6 @@ def validate_file(path, schema_file=None, fix=False):
 # main functions
 ################################################################################
 
-def generate_uuid7():
-    timestamp = int(time.time() * 1000)
-    random_number = uuid.uuid4().int
-    uuid7 = (timestamp << 64) | random_number
-    return uuid7
-
-
-class LLM():
-
-    providers = {
-        'anthropic': {
-            'base_url': 'https://api.anthropic.com/v1/',
-            'apikey': 'ANTHROPIC_API_KEY'
-            },
-        'groq': {
-            'base_url': 'https://api.groq.com/openai/v1',
-            'apikey': 'GROQ_API_KEY'
-            },
-        'openai': {
-            'base_url': 'https://api.openai.com/v1',
-            'apikey': 'OPENAI_API_KEY'
-            },
-        }
-
-    models = {
-        'anthropic/claude-3-haiku-20240307':    {'text/in': 0.25, 'text/out':  1.25},
-        'anthropic/claude-opus-4-20250514':     {'text/in':15.00, 'text.out': 75.00},
-        'anthropic/claude-sonnet-4-0':          {'text/in': 3.00, 'text/out': 15.00},
-        'anthropic/claude-3-5-haiku-latest':    {'text/in': 0.80, 'text/out':  4.00},
-        'groq/llama-3.3-70b-versatile':         {'text/in': 0.00, 'text/out':  0.00},
-        'openai/gpt-5':                         {'text/in': 1.25, 'text/out': 10.00},
-        'openai/gpt-5-mini':                    {'text/in': 0.25, 'text/out':  2.00},
-        'openai/gpt-5-nano':                    {'text/in': 0.05, 'text/out':  0.40},
-        'openai/gpt-4.1':                       {'text/in': 2.00, 'text/out':  8.00},
-        'openai/gpt-4.1-mini':                  {'text/in': 0.40, 'text/out':  1.60},
-        'openai/gpt-4.1-nano':                  {'text/in': 0.10, 'text/out':  0.60},
-        'openai/gpt-image-1':                   {'text/in': 5.00, 'image/in': 10.00, 'image/out': 40.00},
-        'openai/gpt-4o-mini-tts':               {'text/in': 0.60, 'audio/out': 12.00},
-        }
-
-    def __init__(self):
-        #self.default_text_model = 'groq/llama-3.3-70b-versatile'
-        #self.default_text_model = 'openai/gpt-4.1'
-        self.default_text_model = 'openai/gpt-4.1-mini'
-        #self.default_text_model = 'anthropic/claude-sonnet-4-0'
-        #self.default_text_model = 'anthropic/claude-3-5-haiku-latest'
-        #self.default_text_model = 'anthropic/claude-3-haiku-20240307'
-        self.model_image = 'openai/gpt-image-1'
-        self.default_audio_model = 'openai/gpt-4o-mini-tts'
-        self.usage = defaultdict(lambda: Counter())
-        self.build_id = generate_uuid7()
-
-    def text(self, messages, *, response_format=None, model=None, seed=None):
-
-        # extract provider/model info from input model name
-        if model is None:
-            model = self.default_text_model
-        provider, model_name = model.split('/')
-
-        # call the API
-        try:
-            client = openai.Client(
-                api_key = os.environ.get(self.providers[provider]['apikey']),
-                base_url = self.providers[provider]['base_url'],
-            )
-            logger.trace('calling API: client.chat.completions.create()')
-            result = client.chat.completions.create(
-                messages=messages,
-                model=model_name,
-                seed=seed,
-                #response_format=response_format,
-            )
-        except openai.BadRequestError as e:
-            print(f'response_format=\n{json.dumps(response_format, indent=2)}')
-            raise e
-
-        # update usage info
-        usage = {
-            model: {
-                'text/out': result.usage.completion_tokens,
-                'text/in': result.usage.prompt_tokens,
-                },
-            }
-        self.usage[model] += usage[model]
-
-        logger.trace(f'self._tokens_to_prices()={self._tokens_to_prices(self.usage)}')
-        logger.info(f'file_cost: ${self._total_price(usage):0.4f}  total_cost: ${self._total_price(self.usage):0.4f}', submessage=True)
-        return result.choices[0].message.content, usage
-
-    def image(self, fout, data, *, seed=None):
-        logger.trace(f'llm.image; data.keys()={list(data.keys())}')
-        client = openai.Client()
-        model = self.model_image.split('/')[-1]
-        quality = data.get('quality', 'low')
-
-        size = '1536x1024'
-        if data.get('orientation') == 'square':
-            size = '1024x1024'
-        if data.get('orientation') == 'portrait':
-            size = '1024x1536'
-
-        # generate a new image
-        if not data.get('reference_images'):
-            result = client.images.generate(
-                model=model,
-                prompt=data['prompt'],
-                size=size,
-                quality=quality,
-            )
-        else:
-            result = client.images.edit(
-                model=model,
-                prompt=data['prompt'],
-                size=size,
-                quality=quality,
-                image=data['reference_images'],
-            )
-
-        # save the image
-        image_base64 = result.data[0].b64_json
-        image_bytes = base64.b64decode(image_base64)
-        fout.write(image_bytes)
-
-        # update usage info
-        usage = {
-            self.model_image: {
-                'text/in': result.usage.input_tokens_details.text_tokens,
-                'image/in': result.usage.input_tokens_details.image_tokens,
-                'image/out': result.usage.output_tokens,
-                }
-            }
-        self.usage[self.model_image] += usage[self.model_image]
-
-        logger.info(f'self._tokens_to_prices()={self._tokens_to_prices(self.usage)}')
-        logger.info(f'self._total_price()={self._total_price(self.usage)}')
-        return usage
-
-    def audio(self, path, data, *, model=None):
-
-        # extract provider/model info from input model name
-        if model is None:
-            model = self.default_audio_model
-        provider, model_name = model.split('/')
-
-        # call API
-        client = openai.Client()
-        assert set(data.keys()) == set(['input', 'instructions', 'voice'])
-        with client.audio.speech.with_streaming_response.create(
-            model=model_name,
-            response_format="wav",
-            **data,
-        ) as response:
-            response.stream_to_file(path)
-
-        # FIXME:
-        # I don't know how to get usage info out of the TTS API :(
-        logger.warning(f'unable to count token usage for model="{model}"')
-        usage = {
-            model: {
-                'audio/out': 0,
-                'text/in': 0,
-                },
-            }
-        self.usage[model] += usage[model]
-
-        logger.info(f'self._tokens_to_prices()={self._tokens_to_prices(self.usage)}')
-        logger.info(f'self._total_price()={self._total_price(self.usage)}')
-        return usage
-
-    def generate_file(self, filetype, path, data, *, mode='xb', response_format, seed=None, model=None):
-        try:
-            # generate the file
-            _, extension = os.path.splitext(path)
-            if extension == '.png':
-                with open(path, mode) as fout:
-                    usage = self.image(fout, data)
-            elif extension == '.wav':
-                usage = self.audio(path, data)
-            else:
-                with open(path, mode) as fout:
-                    text, usage = self.text(data, model=model, response_format=response_format)
-                    blob = text.encode('utf-8')
-                    fout.write(blob)
-
-            # generate build info JSON
-            buildinfo = {
-                "__fac_version__": '0.0.0-dev',
-                "time": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                "path": path,
-                "build_id": self.build_id,
-                "cost": self._total_price(usage),
-                "usage": usage,
-                }
-            buildinfo_str = json.dumps(buildinfo) + '\n'
-
-            buildinfo_path = os.path.join(os.path.dirname(path), '.' + os.path.basename(path) + '.fac')
-            with open(buildinfo_path, 'wt') as fout:
-                fout.write(buildinfo_str)
-
-            # register action globally
-            with open('.fac.jsonl', 'ta') as fout:
-                fout.write(buildinfo_str)
-
-        except FileExistsError:
-            logger.warning(f'file "{path}" exists; skipping')
-
-    def _total_price(self, tokens):
-        prices = self._tokens_to_prices(tokens)
-        total = sum([sum(prices[model].values()) for model in prices])
-        return total
-
-    def _tokens_to_prices(self, tokens):
-        prices = {}
-        for model in tokens:
-            prices[model] = {}
-            for event in tokens[model]:
-                num_tokens = tokens[model][event]
-                token_price = self.models.get(model, {}).get(event, 0.0)
-                if model not in self.models:
-                    logger.warning(f'when calculating pricing, model="{model}" not found')
-                if model in self.models and event not in self.models[model]:
-                    logger.warning(f'when calculating pricing, event="{event}" not found for model="{model}"')
-                prices[model][event] = token_price / 1000000.0 * num_tokens
-        return prices
-
-
 @dataclass
 class BuildSystem:
     targets: [str]
@@ -1317,11 +982,9 @@ class BuildSystem:
             # perform the actual build
             if build_context or overwrite:
                 logger.info(f'building file {i+1}/{len(contexts)} "{path_to_generate}"')
-                logger2.info(f'building file "{path_to_generate}"')
                 logger.info('include_paths:', submessage=True)
                 for path in context.include_paths:
                     logger.info(f' - {path}', submessage=True)
-                logger2.info('')
 
                 # create output directory if needed
                 dirname = os.path.dirname(path_to_generate)
@@ -1577,8 +1240,6 @@ def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('targets', nargs='*')
-
-    logger2.setLevel(logging.ERROR)
 
     # add all other fields from the dataclass as optional arguments
     for field in fields(BuildSystem):
