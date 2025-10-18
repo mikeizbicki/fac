@@ -7,9 +7,7 @@ The Latin verb `facio` means to do/make, and fac is the imperative form.
 # standard lib imports
 from collections import namedtuple, Counter
 from dataclasses import dataclass, fields
-import base64
 import copy
-import datetime
 import glob
 import itertools
 import json
@@ -25,12 +23,13 @@ import typing
 
 # external lib imports
 import jsonschema
+import llm
 import mdformat
 import yaml
 
 # project imports
-from .Logging import logger, with_subtree
-from .LLM import LLM
+from fac.Logging import logger, with_subtree
+from fac.LLM import LLM
 
 ################################################################################
 # helper functions
@@ -565,6 +564,7 @@ class BuildSystem:
     no_validate: bool = False
     debug: bool = False
     trace: bool = False
+    include_chat: str = None
 
     def __post_init__(self):
         self.llm = LLM()
@@ -1085,6 +1085,23 @@ class BuildSystem:
             files_prompt += '</documents>'
             logger.trace(f'files_prompt generated; len(context.include_paths)={len(context.include_paths)}')
 
+        # include a chat history if provided
+        chat_prompt = ''
+        if self.include_chat is not None:
+            chat_prompt = f'''
+<chat>
+The dialogue below records a history of comments that the user has.
+Some of these comments may be related to the task you have been assigned,
+and some of them may not be.
+You will have to use your judgment to consider only the relevant comments.
+The 'user' is MUCH more important than the 'assistant',
+and the 'assistant' comments should only be considered based on how the 'user' comments about them.
+
+{self.include_chat}
+</chat>
+'''
+
+
         # now we do filetype specific processing
         filename = os.path.basename(path_to_generate)
         _, extension = os.path.splitext(filename)
@@ -1103,7 +1120,7 @@ class BuildSystem:
             filetype = 'image'
             logger.trace(f'filetype={filetype}')
             data = {}
-            data['prompt'] = prompt_cmd + files_prompt
+            data['prompt'] = prompt_cmd + files_prompt + chat_prompt
             if 'image_references' in config:
                 image_paths = expand_path(config['image_references'], env_vars=context.variables)
                 data['reference_images'] = image=[open(image, 'rb') for image in image_paths]
@@ -1128,8 +1145,11 @@ class BuildSystem:
 
             # `format_cmd` defines the output format
             format_cmd = ''
-            if 'md' or 'markdown' not in extension:
+            if 'md' not in extension and 'markdown' not in extension:
                 format_cmd += 'Do not output markdown, and do not put the output inside a codeblock.'
+            else:
+                format_cmd += 'Use markdown formatting to structure the output.'
+
             if extension == '.json':
                 format_cmd += 'Output JSON.'
                 response_format = {'type': 'json_object'}
@@ -1138,7 +1158,18 @@ class BuildSystem:
                 format_cmd += f'Output JSONL.  Each line of the output should be a single JSON object. There should be at most {self.global_settings["jsonl_num_lines"]} total lines.'
                 format_cmd = process_template(format_cmd, env_vars=context.variables)
 
-            if config.get('schema_file'):
+            if config.get('schema'):
+                schema = llm.schema_dsl(config.get('schema'))
+                response_format = {
+                    'type': 'json_schema',
+                    'json_schema': {
+                        'strict': True,
+                        'name': 'fac_json_schema',
+                        'schema': schema,
+                        },
+                    }
+                format_cmd += json.dumps(schema, indent=2).strip()
+            elif config.get('schema_file'):
                 try:
                     schema_file = config['schema_file']
                     schema_file = substitute_vars(schema_file, context.variables)
@@ -1180,7 +1211,7 @@ class BuildSystem:
             # add the user role + message
             messages.append({
                 'role': 'user',
-                'content': prompt_cmd + format_cmd + files_prompt,
+                'content': f'Generate the file {path_to_generate} based on the information below.\n' + prompt_cmd + format_cmd + files_prompt + chat_prompt,
                 })
 
             # extend the existing output

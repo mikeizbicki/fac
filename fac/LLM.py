@@ -1,5 +1,7 @@
 
 from collections import defaultdict, Counter
+import base64
+import datetime
 import json
 import os
 import time
@@ -7,7 +9,7 @@ import uuid
 
 import openai
 
-from .Logging import logger
+from fac.Logging import logger
 
 def generate_uuid7():
     timestamp = int(time.time() * 1000)
@@ -52,7 +54,10 @@ class LLM():
     def __init__(self):
         #self.default_text_model = 'groq/llama-3.3-70b-versatile'
         #self.default_text_model = 'openai/gpt-4.1'
-        self.default_text_model = 'openai/gpt-4.1-mini'
+        #self.default_text_model = 'openai/gpt-4.1-mini'
+        self.default_text_model = 'openai/gpt-5'
+        #self.default_text_model = 'openai/gpt-5-nano'
+        #self.default_text_model = 'groq/llama-3.3-70b-versatile'
         #self.default_text_model = 'anthropic/claude-sonnet-4-0'
         #self.default_text_model = 'anthropic/claude-3-5-haiku-latest'
         #self.default_text_model = 'anthropic/claude-3-haiku-20240307'
@@ -124,6 +129,7 @@ class LLM():
                     if content is None:
                         content = "Success."
                 except Exception as e:
+                    logger.warning(f'exception in {tool_call.function.name}: {repr(e)}')
                     content = str(e)
                 messages.append({
                     "role": "tool",

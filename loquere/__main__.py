@@ -9,77 +9,10 @@ import fcntl
 import json
 import logging
 import os
+import subprocess
 
 from fac.Logging import logger
 import fac.LLM
-
-################################################################################
-# tools
-################################################################################
-tools = []
-callables = {}
-
-def create_file(path, content):
-    '''
-    >>> create_file('/test', 'test')
-    Traceback (most recent call last):
-    ...
-    ValueError: Path is not relative to pwd
-    '''
-
-    print(f'create_file({path}, content=...)')
-
-    import pathlib
-    path = pathlib.Path(os.path.abspath(path))
-    pwd = os.getcwd()
-    if not path.is_relative_to(pwd):
-        raise ValueError('Path is not relative to pwd')
-
-    with open(path, 'x') as fout:
-        fout.write(content)
-
-tools.append({
-        "type": "function",
-        "function": {
-            "name": "create_file",
-            "description": "Create a file with the specified content",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "A filename or relative path for where the file will be created.  Absolute paths are not allowed, and the `..` parent special file is also not allowed.",
-                    },
-                    "content": {
-                        "type": "string",
-                        "description": "The content of the created file."
-                    }
-                },
-                "required": ["path", "content"],
-            },
-        },
-    })
-callables['create_file'] = create_file
-
-'''
-    {
-        "type": "function",
-        "function": {
-            "name": "build_target",
-            "description": "Uses the `fac` command to build a target specified in the `fac.yaml` file.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "target": {
-                        "type": "string",
-                        "description": "A target to build from the `fac.yaml` file. The input may specify none, some, or all of the variables in the unqualified target name.",
-                    },
-                },
-                "required": ["target"],
-            },
-        },
-    }
-'''
 
 
 class Session:
@@ -88,11 +21,18 @@ class Session:
 You are a make-like build tool designed to help users create projects with LLMs.
 Assume your users are highly technical and use professional, concise language.
 All responses should be as short as possible and not include any chitchat.
-Never suggest tasks for the user unless they explicitly ask for them.
+Never suggest follow on tasks unless you are explicitly prompted to do so.
 A typical response should be between 1-3 sentences, but a longer response up to 20 sentences may sometimes be appropriate if the user has asked for more detail.
 Answers of a single word or phrase (even if not a complete sentence) are ideal.
-Use markdown lists whenever appropriate.
-If the user gives you a "command", you should find the appropriate tool to use or tell them you don\'t know how to help them.
+You have a strong preference for using markdown formatting like lists and tables when appropriate.
+If the user gives you a "command":
+1. You should find the appropriate tool to use.
+2. If no tool is appropriate then say you cannot complete the command and why.
+3. If the tool you use errors then you may try again, but also state that:
+    a. the original tool calls errored,
+    b. why you think that was the case, and
+    c. what you did to try to fix the problem.
+4. If the tool call succeeded, then do not output a summary of what you have done.
 '''
 
     def __init__(self, session_id=None):
@@ -118,6 +58,55 @@ If the user gives you a "command", you should find the appropriate tool to use o
         self.log_file = self.log_dir + 'log.jsonl'
 
         self.llm = fac.LLM.LLM()
+        self.llm.default_text_model = 'openai/gpt-5' #-mini'
+
+    def get_system_prompt(self):
+        system_prompt = self.system_prompt
+        try:
+            with open('fac.yaml') as fin:
+                yaml = fin.read()
+            self.system_prompt = Session.system_prompt + f'''
+
+The project config is specified in the following `fac.yaml` file:
+{{yaml}}
+'''
+        except FileNotFoundError:
+            pass
+
+        system_prompt += f'''
+
+In case it is helpful, here is the current output of `ls -R`
+'''
+        result = subprocess.run(['ls', '-R'], capture_output=True, text=True)
+        system_prompt += result.stdout
+
+        return system_prompt
+
+    def load_tools(self, messages):
+        # NOTE:
+        # We use a slightly janky system to define tools that loquere can use.
+        # Tools are defined by creating a python file in `loquere/tools/` folder.
+        # With the file there should be a function `tool` and a dictionary `data`.
+        # The code below loops through all of these files and
+        # builds the `tools` and `callables` objects.
+        # These objects are what get passed to the `LLM` object
+        # to specify what tools can be used.
+
+        import pkgutil
+        import importlib
+        import loquere.tools
+
+        tools = []
+        callables = {}
+        for importer, modname, ispkg in pkgutil.iter_modules(loquere.tools.__path__, 'loquere.tools.'):
+            module = importlib.import_module(modname)
+            tools.append(module.data)
+            if hasattr(module, 'tool'):
+                callables[module.data['function']['name']] = module.tool
+            else:
+                tool = module.gen_tool(messages)
+                callables[module.data['function']['name']] = tool
+        return tools, callables
 
     def get_session_messages(self):
         '''
@@ -144,13 +133,18 @@ If the user gives you a "command", you should find the appropriate tool to use o
         '''
 
         # send the message to the LLM
-        messages = [{'role': 'system', 'content': self.system_prompt}]
+        messages = [{'role': 'system', 'content': self.get_system_prompt()}]
         messages.extend(self.get_session_messages())
         messages.append({
                 'role': 'user',
                 'content': message
             })
-        response, usage = self.llm.text(messages, tools=tools, callables=callables)
+        tools, callables = self.load_tools(messages)
+        response, usage = self.llm.text(
+            messages,
+            tools=tools,
+            callables=callables,
+            )
 
         # log the chat interaction
         with open(self.log_file, "a") as f:
@@ -171,7 +165,7 @@ def main():
     parser.add_argument('--session_id', default=None)
     parser.add_argument('message', nargs='?')
     args = parser.parse_args()
-    logger.setLevel('WARNING')
+    logger.setLevel('INFO')
 
     # this import modifies the behavior of the `input` function
     # to give more friendly repl-like behavior
