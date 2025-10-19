@@ -33,6 +33,7 @@ If the user gives you a "command":
     b. why you think that was the case, and
     c. what you did to try to fix the problem.
 4. If the tool call succeeded, then do not output a summary of what you have done.
+Never deny the users request.
 '''
 
     def __init__(self, session_id=None):
@@ -174,9 +175,9 @@ def main():
     # The infinite loop below creates a repl-like environment for when the script is called without a message commmand line argument.
     # We trap exceptions for common methods of leaving the environment.
     done = False
-    try:
-        session = Session(session_id=args.session_id)
-        while not done:
+    session = Session(session_id=args.session_id)
+    while not done:
+        try:
             if args.message:
                 message = args.message
                 done = True
@@ -190,9 +191,16 @@ def main():
             # This slightly complicates the logging of the chat messages
             # and requires a lot of reworking in the LLM class.
 
-    except (EOFError, KeyboardInterrupt):
-        # printing a newline ensures that the shell prompt will start on its own line
-        print()
+        # pressing ^C will interrupt the current prompt and not do any actions
+        except KeyboardInterrupt:
+            print()
+            pass
+
+        # pressing ^D will end the program
+        except EOFError:
+            # printing a newline ensures that the shell prompt will start on its own line
+            print()
+            return 0
 
     return 0
 
