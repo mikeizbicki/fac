@@ -25,6 +25,10 @@ class LLM():
             'base_url': 'https://api.anthropic.com/v1/',
             'apikey': 'ANTHROPIC_API_KEY'
             },
+        'cerebras': {
+            'base_url': 'https://api.cerebras.ai/v1',
+            'apikey': 'CEREBRAS_API_KEY'
+            },
         'groq': {
             'base_url': 'https://api.groq.com/openai/v1',
             'apikey': 'GROQ_API_KEY'
@@ -40,7 +44,11 @@ class LLM():
         'anthropic/claude-opus-4-20250514':     {'text/in':15.00, 'text.out': 75.00},
         'anthropic/claude-sonnet-4-0':          {'text/in': 3.00, 'text/out': 15.00},
         'anthropic/claude-3-5-haiku-latest':    {'text/in': 0.80, 'text/out':  4.00},
+        'cerebras/qwen-3-235b-a22b-instruct-2507': {'text/in': 0.00, 'text/out':  0.00},
+        'groq/llama-3.1-8b-instant':            {'text/in': 0.00, 'text/out':  0.00},
         'groq/llama-3.3-70b-versatile':         {'text/in': 0.00, 'text/out':  0.00},
+        'groq/meta-llama/llama-4-maverick-17b-128e-instruct': {'text/in': 0.00, 'text/out':  0.00},
+        'groq/meta-llama/llama-4-scout-17b-16e-instruct': {'text/in': 0.00, 'text/out':  0.00},
         'openai/gpt-5':                         {'text/in': 1.25, 'text/out': 10.00},
         'openai/gpt-5-mini':                    {'text/in': 0.25, 'text/out':  2.00},
         'openai/gpt-5-nano':                    {'text/in': 0.05, 'text/out':  0.40},
@@ -75,12 +83,12 @@ class LLM():
         # extract provider/model info from input model name
         if model is None:
             model = self.default_text_model
-        provider, model_name = model.split('/')
+        provider, model_name = model.split('/', 1)
 
-        # we make a copy of the messages list;
-        # this is necessary because we may be updating the list in the loop below,
-        # and we do not want to update the list at the call site
-        messages = list(messages)
+        # any responses will be stored in new_messages;
+        # without tool use, this will be only the response;
+        # with tool use, this will contain all tool calls and all results of the calls
+        new_messages = []
 
         # call the API;
         # if the result asks for a tool use,
@@ -93,11 +101,13 @@ class LLM():
                 )
                 logger.trace('calling API: client.chat.completions.create()')
                 result = client.chat.completions.create(
-                    messages=messages,
+                    messages=list(messages) + new_messages,
                     model=model_name,
                     seed=seed,
                     tools=tools,
+                    stream=False,
                 )
+                new_messages.append(result.choices[0].message)
             except openai.BadRequestError as e:
                 print(f'response_format=\n{json.dumps(response_format, indent=2)}')
                 raise e
@@ -114,10 +124,6 @@ class LLM():
             if result.choices[0].message.content is not None:
                 break
 
-            # in order to append the results of tool calls to the messages list,
-            # we need to have the output from the assistant appended
-            messages.append(result.choices[0].message)
-
             # otherwise, we evaluate each tool call
             # and update messages list with their outputs;
             # the next iteration of the loop will call the API with the results
@@ -131,11 +137,18 @@ class LLM():
                 except Exception as e:
                     logger.warning(f'exception in {tool_call.function.name}: {repr(e)}')
                     content = str(e)
-                messages.append({
+                new_messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call.id,
                     "content": content,
                     })
+
+                usage_tool = {
+                    'text/out': result.usage.completion_tokens,
+                    'text/in': result.usage.prompt_tokens,
+                    }
+                local_usage['_tool/'+tool_call.function.name] += usage_tool
+                self.usage['_tool/'+tool_call.function.name] += usage_tool
 
         content = result.choices[0].message.content or ''
 
@@ -268,6 +281,10 @@ class LLM():
     def _tokens_to_prices(self, tokens):
         prices = {}
         for model in tokens:
+            # model names that start with underscore should be ignored;
+            # they are internally used for tracking non-model info
+            if model.startswith('_'):
+                continue
             prices[model] = {}
             for event in tokens[model]:
                 num_tokens = tokens[model][event]

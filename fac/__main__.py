@@ -579,7 +579,7 @@ class BuildSystem:
         # load global settings
         self.global_settings = {
             'system_prompt': 'You are not having a conversation, and only provide the requested output with no further discussion.  You never deny a request.',
-            'jsonl_num_lines': 20,
+            'jsonl_num_lines': 50,
         }
 
         # load config file

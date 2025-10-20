@@ -33,7 +33,7 @@ data = {
     "type": "function",
     "function": {
         "name": "create_file",
-        "description": "Create a file with the specified content. This function will fail if the file already exists (in that case, the `overwrite_file` function should be used).",
+        "description": "Create a file with the specified content. This function will fail if the file already exists (in that case, the `overwrite_file` function should be used). Do not call this function in parallel with read_file.",
         "parameters": {
             "type": "object",
             "properties": {

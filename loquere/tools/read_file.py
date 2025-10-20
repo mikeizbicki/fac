@@ -28,7 +28,7 @@ data = {
     "type": "function",
     "function": {
         "name": "read_file",
-        "description": "Read the contents of the specified file.  If you think you might need to read the contents of multiple files, multiple tool requests should be sent at the same time to speed up processing.",
+        "description": "Read the contents of the specified file.  If you think you might need to read the contents of multiple files, multiple tool requests should be sent at the same time to speed up processing.  A file that is about to be build with fac_build should not be read first (as fac_build will read it automatically).",
         "parameters": {
             "type": "object",
             "properties": {

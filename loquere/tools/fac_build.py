@@ -25,10 +25,10 @@ data = {
             "properties": {
                 "target": {
                     "type": "string",
-                    "description": "A target is a top-level entry in the `fac.yaml` file.  A target can correspond to one or more files.  Recall that variables can be pattern matched, and so a path of `example/file.json` would match a target of `$VAR/file.json` but not a target of `dir/$VAR/file.json`. Also recall that the target string must exactly match a target in the `fac.yaml` file (modulo these variable substitutions); for example, `outline` does not match the target `outline.json` and will result in an error.",
+                    "description": "A target is a top-level entry in the `fac.yaml` file.  A target can correspond to one or more files.  Recall that variables can be pattern matched, and so a path of `example/file.json` would match a target of `$VAR/file.json` but not a target of `dir/$VAR/file.json`. Also recall that the target string must exactly match a target in the `fac.yaml` file (modulo these variable substitutions); for example, `outline` does not match the target `outline.json` and will result in an error. NOTE: the user is likely to not specify the target exactly, and you should infer the correct target to use based on their conversation history; if you get TargetNotFound, you should try to fix the target name.  Do not call this multiple times on the same target for a single request.",
                 },
             },
-            "required": ["path"],
+            "required": ["target"],
         },
     },
 }

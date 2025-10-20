@@ -4,6 +4,7 @@ loquere - chat with the build system
 """
 
 from datetime import datetime, date
+from pathlib import Path
 import argparse
 import fcntl
 import json
@@ -59,7 +60,13 @@ Never deny the users request.
         self.log_file = self.log_dir + 'log.jsonl'
 
         self.llm = fac.LLM.LLM()
-        self.llm.default_text_model = 'openai/gpt-5' #-mini'
+        #self.llm.default_text_model = 'openai/gpt-5-mini'
+        self.llm.default_text_model = 'openai/gpt-5'
+        #self.llm.default_text_model = 'groq/llama-3.3-70b-versatile'
+        #self.llm.default_text_model = 'groq/meta-llama/llama-4-maverick-17b-128e-instruct'
+        #self.llm.default_text_model = 'cerebras/llama-3.3-70b'
+        #self.llm.default_text_model = 'cerebras/llama-4-scout-17b-16e-instruct'
+        #self.llm.default_text_model = 'cerebras/qwen-3-32b'
 
     def get_system_prompt(self):
         system_prompt = self.system_prompt
@@ -147,6 +154,11 @@ In case it is helpful, here is the current output of `ls -R`
             callables=callables,
             )
 
+        # ping the user if a tool was used
+        tool_used = any(['_tool' in k for k in usage.keys()])
+        if tool_used:
+            ping_user()
+
         # log the chat interaction
         with open(self.log_file, "a") as f:
             log_entry = {
@@ -159,6 +171,22 @@ In case it is helpful, here is the current output of `ls -R`
             f.write(json.dumps(log_entry) + "\n")
 
         return response
+
+
+def ping_user():
+    '''
+    This function plays a ping sound which can be used to let the user know that a long running chat command has finished.
+    '''
+
+    module_dir = Path(__file__).parent
+    wav_path = module_dir / 'data' / 'ping.wav'
+
+    try:
+        subprocess.Popen(["paplay", wav_path])
+                         #stdout=subprocess.DEVNULL,
+                         #stderr=subprocess.DEVNULL)
+    except FileNotFoundError:
+        print("paplay not found")
 
 
 def main():
