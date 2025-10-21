@@ -14,5 +14,5 @@
 	path = tests/fac_test_greek
 	url = https://github.com/mikeizbicki/fac_test_greek
 [submodule "greek_story"]
-	path = greek_story
+	path = greek
 	url = https://github.com/mikeizbicki/greek
