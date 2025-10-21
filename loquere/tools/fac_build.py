@@ -9,11 +9,12 @@ def gen_tool(messages):
         tool_print(f'fac_build({target})')
 
         build_system = BuildSystem(
-            targets=[target],
             include_chat=messages,
             overwrite=True,
             auto_commit=False,
             )
+        with build_system:
+            build_system.build_targets([target])
     return tool
 
 data = {

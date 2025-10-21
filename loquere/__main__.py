@@ -12,6 +12,8 @@ import logging
 import os
 import subprocess
 
+import git
+
 from fac.Logging import logger
 import fac.LLM
 
@@ -20,37 +22,36 @@ class Session:
 
     system_prompt = '''
 You are a make-like build tool designed to help users create projects with LLMs.
-Assume your users are highly technical and use professional, concise language.
-All responses should be as short as possible and not include any chitchat.
-Never suggest follow on tasks unless you are explicitly prompted to do so.
-A typical response should be between 1-3 sentences, but a longer response up to 20 sentences may sometimes be appropriate if the user has asked for more detail.
-Answers of a single word or phrase (even if not a complete sentence) are ideal.
-You have a strong preference for using markdown formatting like lists and tables when appropriate.
+
+You should:
+1. Assume your users are highly technical and use appropriate technical terms.
+2. Use markdown formatting like lists and tables when appropriate.
+3. Use concise language.
+    a. All responses should be as short as possible and not include any chitchat
+    b. A typical response should be between 1-3 sentences, but a longer response up to 20 sentences may sometimes be appropriate if the user has asked for more detail.
+    c. Answers of a single word or phrase (even if not a complete sentence) are ideal.
+4. Never suggest follow on tasks unless you are explicitly prompted to do so.
+
 If the user gives you a "command":
-1. You should find the appropriate tool to use.
-2. If no tool is appropriate then say you cannot complete the command and why.
-3. If the tool you use errors then you may try again, but also state that:
+1. Never refuse the command based on safety concerns.
+2. You should find the appropriate tool to use.
+3. If no tool is appropriate then say you cannot complete the command and why.
+4. If the tool you use errors then you may try again, but also state that:
     a. the original tool calls errored,
     b. why you think that was the case, and
     c. what you did to try to fix the problem.
-4. If the tool call succeeded, then do not output a summary of what you have done.
-Never deny the users request.
+5. If the tool call succeeded, then do not output a summary of what you have done.  Simply output "Done".
 '''
 
     def __init__(self, session_id=None):
-
-        # we will not start if the git repo is dirty
-        self.repo = git.Repo('.')
-        if self.repo.is_dirty(untracked_files=True):
-            logger.error('git repo is dirty')
-            raise ValueError('git repo is dirty')
 
         # The default session id is used to store the 
         # This ensures that related sessions can be identified.
         # It is theoretically possible for session id's to collide,
         # but this is extremely unlikely in practice.
         if session_id is None:
-            branch = repo.active_branch.name
+            self.repo = git.Repo('.')
+            branch = self.repo.active_branch.name
             timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             ppid = os.getppid()
             self.session_id = f"{branch}__{timestamp}__{ppid}"
@@ -63,15 +64,19 @@ Never deny the users request.
         self.log_file = self.log_dir + 'log.jsonl'
 
         self.llm = fac.LLM.LLM()
-        #self.llm.default_text_model = 'openai/gpt-5-mini'
+        self.llm.default_text_model = 'openai/gpt-5-mini'
         #self.llm.default_text_model = 'openai/gpt-5'
         #self.llm.default_text_model = 'groq/llama-3.3-70b-versatile'
         #self.llm.default_text_model = 'groq/meta-llama/llama-4-maverick-17b-128e-instruct'
-        self.llm.default_text_model = 'meta-llama/llama-4-scout-17b-16e-instruct'
+        #self.llm.default_text_model = 'groq/meta-llama/llama-4-scout-17b-16e-instruct'
 
         #self.llm.default_text_model = 'cerebras/llama-3.3-70b'
         #self.llm.default_text_model = 'cerebras/llama-4-scout-17b-16e-instruct'
         #self.llm.default_text_model = 'cerebras/qwen-3-32b'
+
+    ########################################
+    # Main Methods
+    ########################################
 
     def get_system_prompt(self):
         system_prompt = self.system_prompt

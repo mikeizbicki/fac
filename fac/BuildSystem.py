@@ -107,8 +107,8 @@ class BuildSystem:
     overwrite: bool = False
     build_postreqs: bool = False
     extend: int = False
-    dry_run: bool = False
     print_prompt: bool = False
+    print_prompt_to_file: bool = False
     print_contexts: bool = False
     print_config: bool = False
     no_validate: bool = False
@@ -123,7 +123,6 @@ class BuildSystem:
         if self.trace:
             logger.setLevel('TRACE')
         self.validate_output = not (self.print_prompt or self.print_contexts) and not self.no_validate
-        self.resolved_paths = {}
 
         # load global settings
         self.global_settings = {
@@ -210,18 +209,18 @@ class BuildSystem:
             logger.error('git repo is dirty; clean repo or set --auto_commit=False')
             raise DirtyRepo()
 
-    def __exit__(self, *exc_info):
+    def __exit__(self, exc_type, exc_value, traceback):
         '''
         Commits all changes to the git repo.
         '''
 
-        if self.auto_commit:
+        if self.auto_commit and exc_type is None:
             self.repo.git.add('.')
             # NOTE:
             # we only commit if files were actually added;
             # otherwise a large ugly warning will appear
             if self.repo.index.diff('HEAD'):
-                self.repo.git.commit('-m', '[bot] fac ' + ' '.join(self.commit_messages))
+                self.repo.git.commit('-m', '[bot] ' + ' '.join(self.commit_messages))
 
         self.repo = None
         self.commit_messages = []
@@ -241,7 +240,7 @@ class BuildSystem:
         if commits:
             return commits[0].committed_date
         else:
-            return float('inf')
+            return 0 #float('inf')
 
     ######################################## 
     # methods for building
@@ -270,8 +269,13 @@ class BuildSystem:
             foreach_context,
             overwrite=False,
             build_postreqs=False,
-            targets_plus_vars=None,
+            traversed_paths=None,
             ):
+
+        # traversed_paths stores which paths have already been recursively traversed;
+        # by storing these paths we can avoid repeating work
+        if traversed_paths is None:
+            traversed_paths = set()
 
         # load target config
         config_targets = self.full_config.keys()
@@ -284,22 +288,6 @@ class BuildSystem:
         assert transformed_target
         assert transformed_target in self.full_config
         config = self.full_config[transformed_target]
-
-        # NOTE:
-        # Many targets will share the same dependency.
-        # If we naively traverse all dependencies,
-        # then these common dependencies will be traversed an exponential number of times.
-        # This is obviously inefficient.
-        # The code below keeps track of which dependencies we've already traversed.
-        # (Note that it is not enough to track the names of targets to determine if we've traversed a dependency due to variable substitution;
-        # therefore we track both the name of the targets and the variables.)
-        if targets_plus_vars is None:
-            targets_plus_vars = set()
-        target_plus_vars = transformed_target + '__vars=' + json.dumps({**target_env})
-        if target_plus_vars in targets_plus_vars:
-            logger.debug(f'infinite for target_to_build={target_to_build} + input_env={input_env}')
-            return []
-        targets_plus_vars.add(target_plus_vars)
 
         # parse the dependencies entry in the yaml into unresolved_dependencies list;
         # each entry in the list is a dictionary with a target and flags key
@@ -496,7 +484,7 @@ class BuildSystem:
                     # skip dependencies that we've already processed
                     all_resolved = True
                     for dep_path in dep_paths:
-                        if dep_path not in self.resolved_paths:
+                        if dep_path not in traversed_paths:
                             all_resolved = False
                     if all_resolved and len(dep_paths) > 0:
                         logger.debug(f'already resolved {dep_paths}')
@@ -513,10 +501,8 @@ class BuildSystem:
                                 context.variables,
                                 foreach_context,
                                 overwrite=self.from_scratch,
-                                targets_plus_vars=targets_plus_vars,
+                                traversed_paths=traversed_paths,
                                 )
-                        if built_paths == 0:
-                            print('ALERT')
                         if dep.get('include', True):
                             include_paths1.extend(built_paths)
 
@@ -613,10 +599,7 @@ class BuildSystem:
                 for path in context.include_paths:
                     logger.info(f' - {path}', submessage=True)
                 foreach_context(path_to_generate, config, context, overwrite)
-
-            # validate file
-            if self.validate_output:
-                validate_file(path_to_generate, config.get('schema_file'))
+            traversed_paths.add(path_to_generate)
 
             # traverse postreqs
             for postreq in context.postreqs:
@@ -626,7 +609,7 @@ class BuildSystem:
                         context.variables,
                         foreach_context,
                         overwrite=self.overwrite or build_postreqs,
-                        targets_plus_vars=targets_plus_vars,
+                        traversed_paths=traversed_paths,
                         )
 
         return generated_paths
@@ -687,7 +670,7 @@ class BuildSystem:
                 logger.error(f'prompt_path={prompt_path} not found')
                 sys.exit(1)
         elif config.get('description'):
-            prompt_cmd = f'Generate a file whose content matches the following description. <description>{config.get("description")}</description>'
+            prompt_cmd = f'Generate a file whose content matches the following description. \n<description>\n{config.get("description")}\n</description>'
         else:
             prompt_cmd = ''
             if 'schema_file' not in config:
@@ -884,13 +867,18 @@ and the 'assistant' comments should only be considered based on how the 'user' c
             return
 
         # write to the output file
-        mode = 'wb'
-        if self.from_scratch or overwrite:
-            if self.extend:
-                mode = 'ab'
-            else:
-                mode = 'wb'
-        if not self.dry_run:
+        if self.print_prompt_to_file:
+            with open(path_to_generate, 'wt') as fout:
+                #json.dump(data, fout, indent=4)
+                fout.write(data[-1]['content'])
+
+        else:
+            mode = 'wb'
+            if self.from_scratch or overwrite:
+                if self.extend:
+                    mode = 'ab'
+                else:
+                    mode = 'wb'
             self.llm.generate_file(
                 filetype,
                 path_to_generate,
@@ -900,4 +888,7 @@ and the 'assistant' comments should only be considered based on how the 'user' c
                 response_format=response_format,
                 )
 
+        # validate file
+        if self.validate_output:
+            validate_file(path_to_generate, config.get('schema_file'))
 
