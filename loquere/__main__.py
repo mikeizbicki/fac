@@ -64,9 +64,11 @@ Never deny the users request.
 
         self.llm = fac.LLM.LLM()
         #self.llm.default_text_model = 'openai/gpt-5-mini'
-        self.llm.default_text_model = 'openai/gpt-5'
+        #self.llm.default_text_model = 'openai/gpt-5'
         #self.llm.default_text_model = 'groq/llama-3.3-70b-versatile'
         #self.llm.default_text_model = 'groq/meta-llama/llama-4-maverick-17b-128e-instruct'
+        self.llm.default_text_model = 'meta-llama/llama-4-scout-17b-16e-instruct'
+
         #self.llm.default_text_model = 'cerebras/llama-3.3-70b'
         #self.llm.default_text_model = 'cerebras/llama-4-scout-17b-16e-instruct'
         #self.llm.default_text_model = 'cerebras/qwen-3-32b'
