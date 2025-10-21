@@ -10,3 +10,6 @@
 [submodule "tests/fac_test_project3"]
 	path = tests/fac_test_project3
 	url = https://github.com/mikeizbicki/fac_test_project3
+[submodule "greek"]
+	path = greek
+	url = https://github.com/mikeizbicki/greek

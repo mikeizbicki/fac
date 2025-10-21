@@ -3,3 +3,4 @@ mdformat >= 0.7.22
 openai >= 1.84.0
 PyYAML >= 6.0.2
 llm >= 0.25
+GitPython >= 3.1.45

@@ -12,6 +12,7 @@ def gen_tool(messages):
             targets=[target],
             include_chat=messages,
             overwrite=True,
+            auto_commit=False,
             )
     return tool
 

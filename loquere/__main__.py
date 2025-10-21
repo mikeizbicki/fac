@@ -39,18 +39,21 @@ Never deny the users request.
 
     def __init__(self, session_id=None):
 
+        # we will not start if the git repo is dirty
+        self.repo = git.Repo('.')
+        if self.repo.is_dirty(untracked_files=True):
+            logger.error('git repo is dirty')
+            raise ValueError('git repo is dirty')
+
+        # The default session id is used to store the 
+        # This ensures that related sessions can be identified.
+        # It is theoretically possible for session id's to collide,
+        # but this is extremely unlikely in practice.
         if session_id is None:
-            # The default session id is a combination of:
-            # 1. the current date,
-            # 2. the parent's pid,
-            # 3. the current process's pid.
-            # This ensures that related sessions can be identified.
-            # It is theoretically possible for session id's to collide,
-            # but this is extremely unlikely in practice.
-            current_date = date.today()
+            branch = repo.active_branch.name
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             ppid = os.getppid()
-            pid = os.getpid()
-            self.session_id = f"{current_date}-{ppid}-{pid}"
+            self.session_id = f"{branch}__{timestamp}__{ppid}"
         else:
             self.session_id = session_id
 
@@ -186,7 +189,7 @@ def ping_user():
                          #stdout=subprocess.DEVNULL,
                          #stderr=subprocess.DEVNULL)
     except FileNotFoundError:
-        print("paplay not found")
+        raise ValueError("paplay not found")
 
 
 def main():

@@ -6,6 +6,7 @@ The Latin verb `facio` means to do/make, and fac is the imperative form.
 
 # standard lib imports
 from collections import namedtuple, Counter
+from datetime import datetime
 from dataclasses import dataclass, fields
 import copy
 import glob
@@ -22,6 +23,7 @@ import tempfile
 import typing
 
 # external lib imports
+import git
 import jsonschema
 import llm
 import mdformat
@@ -565,13 +567,14 @@ class BuildSystem:
     debug: bool = False
     trace: bool = False
     include_chat: str = None
+    auto_commit: bool = True
 
     def __post_init__(self):
         self.llm = LLM()
         if self.debug:
-            logger.setLevel(logging.DEBUG)
+            logger.setLevel('DEBUG')
         if self.trace:
-            logger.setLevel(TRACE_LEVEL)
+            logger.setLevel('TRACE')
         self.validate_output = not (self.print_prompt or self.print_contexts) and not self.no_validate
         self.resolved_paths = {}
         self.targets_plus_vars = set()
@@ -585,6 +588,12 @@ class BuildSystem:
         # load config file
         with open(self.config_file) as fin:
             self.full_config = yaml.safe_load(fin)
+
+        # we will not start the build system if the git repo is dirty
+        self.repo = git.Repo('.')
+        if self.auto_commit and self.repo.is_dirty(untracked_files=True):
+            logger.error('git repo is dirty; clean repo or set --auto_commit=False')
+            raise ValueError()
 
         # several of the keys in the config file allow an abbreviated syntax;
         # first, we need to convert any abbreviated syntax into the full syntax
@@ -651,6 +660,29 @@ class BuildSystem:
                     overwrite=self.overwrite or self.from_scratch,
                     build_postreqs=self.build_postreqs,
                     )
+
+        # commit results
+        # FIXME:
+        # the commit message should change to the equivalent command line executable with all the flags
+        if self.auto_commit:
+            self.repo.git.add('.')
+            self.repo.git.commit('-m', '[bot] fac ' + ' '.join(self.targets))
+
+    def _committed_date(self, path):
+        '''
+        If path is managed by the git repo, the return the timestamp of the most recent commit that mentions the file.
+        Otherwise, return the largest possible date (infinity).
+
+        NOTE:
+        The name committed_date is misleading because we do not return only the date,
+        but the full timestamp information.
+        We use this name because this is the name for the git field that stores the info.
+        '''
+        commits = list(self.repo.iter_commits(paths=path, max_count=1))
+        if commits:
+            return commits[0].committed_date
+        else:
+            return float('inf')
 
     @with_subtree(logger)
     def build_target(self, target_to_build, input_env, overwrite=False, build_postreqs=False):
@@ -901,12 +933,6 @@ class BuildSystem:
                             continue
                     logger.trace(f'resolved dependency: "{dep_target}"')
 
-                    # update resolved_paths with timestamp information
-                    for dep_path in dep_paths:
-                        self.resolved_paths[dep_path] = {
-                            'mtime': os.path.getmtime(dep_path)
-                            }
-
                     # validate all of the dep_paths
                     if dep_paths is not None:
                         for dep_path in dep_paths:
@@ -964,10 +990,11 @@ class BuildSystem:
 
                 # if the file is up-to-date (i.e. all dependencies are older),
                 # then we will not rebuild it
-                path_to_generate_mtime = os.path.getmtime(path_to_generate)
+                path_to_generate_committed_date = self._committed_date(path_to_generate)
                 updated_includes = []
                 for path in context.include_paths:
-                    time_diff = path_to_generate_mtime - self.resolved_paths[path]['mtime']
+                    path_committed_date = self._committed_date(path)
+                    time_diff = path_to_generate_committed_date - path_committed_date
                     if time_diff < 0:
                         updated_includes.append(path)
                 if updated_includes == []:
@@ -1004,8 +1031,11 @@ class BuildSystem:
                         bufsize=1, # line buffered
                         universal_newlines=True,
                         )
-                    for line in iter(process.stdout.readline, ''):
-                        print(line.rstrip())
+                    try:
+                        for line in iter(process.stdout.readline, ''):
+                            print(line.rstrip())
+                    except UnicodeDecodeError:
+                        print('<<INVALID UNICODE>>')
                     process.wait()
 
                     if process.returncode != 0:
@@ -1029,14 +1059,6 @@ class BuildSystem:
                         overwrite=self.overwrite or build_postreqs,
                         )
 
-        for path in generated_paths:
-            try:
-                mtime = os.path.getmtime(path)
-            except FileNotFoundError:
-                mtime = math.inf
-            self.resolved_paths[path] = {
-                'mtime': mtime
-                }
         return generated_paths
 
     def context_to_file(self, path_to_generate, config, context, overwrite):
@@ -1080,8 +1102,15 @@ class BuildSystem:
                 # in theory, weirdly named files could break this hack
                 if 'pipe:[' in path: 
                     path = 0
-                with open(path) as fin:
-                    files_prompt += f'''<document path="{path}">\n{fin.read().strip()}\n</document>\n'''
+
+                # we always try to open the files as text;
+                # but if the file is a binary file (e.g. an image),
+                # we catch the error and do not add the file to the context
+                try:
+                    with open(path) as fin:
+                        files_prompt += f'''<document path="{path}">\n{fin.read().strip()}\n</document>\n'''
+                except UnicodeDecodeError:
+                    logger.trace(f'UnicodeDecodeError: {path}')
             files_prompt += '</documents>'
             logger.trace(f'files_prompt generated; len(context.include_paths)={len(context.include_paths)}')
 
@@ -1266,6 +1295,16 @@ and the 'assistant' comments should only be considered based on how the 'user' c
 # CLI
 ################################################################################
 
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
 def main():
 
     import argparse
@@ -1279,10 +1318,13 @@ def main():
             if typing.get_origin(field.type) is typing.Literal:
                 choices = typing.get_args(field.type)
                 parser.add_argument(name, choices=choices, default=field.default)
-            elif field.type == bool and field.default == False:
-                parser.add_argument(name, action='store_true')
+            elif field.type == bool:
+                if field.default == False:
+                    parser.add_argument(name, action='store_true')
+                else:
+                    parser.add_argument(name, type=str2bool, default=True)
             else:
-                parser.add_argument(name, default=field.default)
+                parser.add_argument(name, default=field.default, type=field.type)
 
     args = parser.parse_args()
     build_system = BuildSystem(**vars(args))
