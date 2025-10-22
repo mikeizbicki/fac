@@ -3,6 +3,8 @@ import os
 
 from loquere.utils import tool_print
 
+enable = False
+
 def tool(path, content, makedirs=True):
     '''
     >>> create_file('/test', 'test')

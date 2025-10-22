@@ -64,10 +64,10 @@ If the user gives you a "command":
         self.log_file = self.log_dir + 'log.jsonl'
 
         self.llm = fac.LLM.LLM()
-        self.llm.default_text_model = 'openai/gpt-5-mini'
+        #self.llm.default_text_model = 'openai/gpt-5-mini'
         #self.llm.default_text_model = 'openai/gpt-5'
         #self.llm.default_text_model = 'groq/llama-3.3-70b-versatile'
-        #self.llm.default_text_model = 'groq/meta-llama/llama-4-maverick-17b-128e-instruct'
+        self.llm.default_text_model = 'groq/meta-llama/llama-4-maverick-17b-128e-instruct'
         #self.llm.default_text_model = 'groq/meta-llama/llama-4-scout-17b-16e-instruct'
 
         #self.llm.default_text_model = 'cerebras/llama-3.3-70b'
@@ -77,28 +77,6 @@ If the user gives you a "command":
     ########################################
     # Main Methods
     ########################################
-
-    def get_system_prompt(self):
-        system_prompt = self.system_prompt
-        try:
-            with open('fac.yaml') as fin:
-                yaml = fin.read()
-            self.system_prompt = Session.system_prompt + f'''
-
-The project config is specified in the following `fac.yaml` file:
-{{yaml}}
-'''
-        except FileNotFoundError:
-            pass
-
-        system_prompt += f'''
-
-In case it is helpful, here is the current output of `ls -R`
-'''
-        result = subprocess.run(['ls', '-R'], capture_output=True, text=True)
-        system_prompt += result.stdout
-
-        return system_prompt
 
     def load_tools(self, messages):
         # NOTE:
@@ -118,12 +96,13 @@ In case it is helpful, here is the current output of `ls -R`
         callables = {}
         for importer, modname, ispkg in pkgutil.iter_modules(loquere.tools.__path__, 'loquere.tools.'):
             module = importlib.import_module(modname)
-            tools.append(module.data)
-            if hasattr(module, 'tool'):
-                callables[module.data['function']['name']] = module.tool
-            else:
-                tool = module.gen_tool(messages)
-                callables[module.data['function']['name']] = tool
+            if hasattr(module, 'enable') and module.enable:
+                tools.append(module.data)
+                if hasattr(module, 'tool'):
+                    callables[module.data['function']['name']] = module.tool
+                else:
+                    tool = module.gen_tool(messages)
+                    callables[module.data['function']['name']] = tool
         return tools, callables
 
     def get_session_messages(self):
@@ -150,12 +129,37 @@ In case it is helpful, here is the current output of `ls -R`
         '''
         '''
 
+        # first build an augmented message to pass to the llm that includes:
+        # the contents of fac.yaml and output of `ls -R`
+        with open('fac.yaml') as fin:
+            fac_yaml = fin.read()
+        ls_R = subprocess.run(['ls', '-R'], capture_output=True, text=True).stdout
+        augmented_message = f'''
+The following information may be useful to respond to the user message below.
+
+```
+$ cat fac.yaml
+{fac_yaml}
+```
+
+```
+$ ls -R
+{ls_R}
+```
+{message}
+
+---
+
+Message:
+{message}
+'''
+
         # send the message to the LLM
-        messages = [{'role': 'system', 'content': self.get_system_prompt()}]
+        messages = [{'role': 'system', 'content': self.system_prompt}]
         messages.extend(self.get_session_messages())
         messages.append({
                 'role': 'user',
-                'content': message
+                'content': augmented_message
             })
         tools, callables = self.load_tools(messages)
         response, usage = self.llm.text(

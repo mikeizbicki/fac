@@ -156,7 +156,7 @@ class LLM():
         logger.info(f'file_cost: ${self._total_price(local_usage):0.4f}  total_cost: ${self._total_price(self.usage):0.4f}', submessage=True)
         return  content, local_usage
 
-    def image(self, fout, data, *, seed=None):
+    def image(self, path, mode, data, *, seed=None):
         logger.trace(f'llm.image; data.keys()={list(data.keys())}')
         client = openai.Client()
         model = self.model_image.split('/')[-1]
@@ -188,7 +188,8 @@ class LLM():
         # save the image
         image_base64 = result.data[0].b64_json
         image_bytes = base64.b64decode(image_base64)
-        fout.write(image_bytes)
+        with open(path, mode) as fout:
+            fout.write(image_bytes)
 
         # update usage info
         usage = {
@@ -241,14 +242,13 @@ class LLM():
             # generate the file
             _, extension = os.path.splitext(path)
             if extension == '.png':
-                with open(path, mode) as fout:
-                    usage = self.image(fout, data)
+                usage = self.image(path, mode, data)
             elif extension == '.wav':
                 usage = self.audio(path, data)
             else:
+                text, usage = self.text(data, model=model, response_format=response_format)
+                blob = text.encode('utf-8')
                 with open(path, mode) as fout:
-                    text, usage = self.text(data, model=model, response_format=response_format)
-                    blob = text.encode('utf-8')
                     fout.write(blob)
 
             # generate build info JSON

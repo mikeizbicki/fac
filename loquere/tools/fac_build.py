@@ -4,6 +4,8 @@ import os
 from loquere.utils import tool_print
 from fac.__main__ import BuildSystem
 
+enable = True
+
 def gen_tool(messages):
     def tool(target):
         tool_print(f'fac_build({target})')

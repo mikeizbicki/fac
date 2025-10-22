@@ -113,6 +113,7 @@ class BuildSystem:
     print_config: bool = False
     no_validate: bool = False
     include_chat: str = None
+    include_old: str = None
     auto_commit: bool = True
     print_cmd_stdout: bool = False
 
@@ -227,20 +228,38 @@ class BuildSystem:
 
     def _committed_date(self, path):
         '''
-        If path is managed by the git repo,
-        then return the timestamp of the most recent commit that mentions the file.
-        Otherwise, return the largest possible date (infinity).
-
-        NOTE:
-        The name committed_date is misleading because we do not return only the date,
-        but the full UNIX timestamp information.
-        This is the named used by git, so for consistency we also use it here.
+        Get the UNIX timestamp of a path for use in checking if dependencies have been updated.
         '''
+
+        # if the file does not exist (or is not an ordinary file)
+        # we return the oldest possible UNIX timestamp;
+        # this ensures that all other files will be registered as newer
+        # and cause the file to be built
+        if not os.path.isfile(path):
+            return 0
+
+        # if a file is dirty or not in the repo,
+        # we use the last modified time;
+        # this should only happen if auto_commit=False
+        dirty_files = [item.a_path for item in self.repo.index.diff(None)]
+        staged_files = [item.a_path for item in self.repo.index.diff('HEAD')]
+        if path in dirty_files or path in staged_files or path in self.repo.untracked_files:
+            return os.path.getmtime(path)
+
+        # if the file has been committed to git and is clean,
+        # we use the git commit timestamp
+        # NOTE:
+        # other build systems (e.g. make) do not use git information
+        # and rely only on modified timestamps to determine when to rebuild a file;
+        # this is desired behavior for them because their builds are deterministic and it is expected to have to rebuild a project after git clone;
+        # our builds, however, are not deterministic and we do not want to have to rebuild after a git clone
         commits = list(self.repo.iter_commits(paths=path, max_count=1))
-        if commits:
+        if len(commits) > 0:
             return commits[0].committed_date
-        else:
-            return 0 #float('inf')
+
+        # the above code should handle all possible cases,
+        # so this should never happen
+        raise ValueError(f'path={path}')
 
     ######################################## 
     # methods for building
@@ -708,21 +727,34 @@ class BuildSystem:
             logger.trace(f'files_prompt generated; len(context.include_paths)={len(context.include_paths)}')
 
         # include a chat history if provided
+        # and the previouse version of the file if available
+        old_version = None
+        try:
+            if self.include_old:
+                with open(path_to_generate) as fin:
+                    old_version = open(path_to_generate)
+        except FileNotFoundError:
+            pass
         chat_prompt = ''
         if self.include_chat is not None:
             chat_prompt = f'''
 <chat>
-The dialogue below records a history of comments that the user has.
-Some of these comments may be related to the task you have been assigned,
-and some of them may not be.
-You will have to use your judgment to consider only the relevant comments.
-The 'user' is MUCH more important than the 'assistant',
-and the 'assistant' comments should only be considered based on how the 'user' comments about them.
-
+The dialogue below records a history of user comments that should guide your creation of {path_to_generate}.  The 'user' is MUCH more important than the 'assistant', and the 'assistant' comments should only be considered based on how the 'user' comments about them.
 {self.include_chat}
-</chat>
+'''
+            if old_version:
+                chat_prompt += '''
+The version of the document the user is commenting on is below.
+Keep the new document as close as possible to this old version,
+except for the changes requested by the user.
+<old_version>
+{old_version}
+</old_version>
 '''
 
+            chat_prompt += '''
+</chat>
+'''
 
         # now we do filetype specific processing
         filename = os.path.basename(path_to_generate)
