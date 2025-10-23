@@ -6,7 +6,7 @@ from fac.__main__ import BuildSystem
 
 enable = True
 
-def gen_tool(messages):
+def gen_tool(session, messages):
     def tool(target):
         tool_print(f'fac_build({target})')
 
@@ -15,6 +15,7 @@ def gen_tool(messages):
             overwrite=True,
             auto_commit=False,
             )
+        build_system.llm = session.llm
         with build_system:
             build_system.build_targets([target])
     return tool

@@ -11,53 +11,111 @@ import openai
 
 from fac.Logging import logger
 
-def generate_uuid7():
-    timestamp = int(time.time() * 1000)
-    random_number = uuid.uuid4().int
-    uuid7 = (timestamp << 64) | random_number
-    return uuid7
+registered_providers = {
+    'anthropic': {
+        'base_url': 'https://api.anthropic.com/v1/',
+        'apikey': 'ANTHROPIC_API_KEY'
+        },
+    'openrouter': {
+        'base_url': 'https://openrouter.ai/api/v1',
+        'apikey': 'OPENROUTER_API_KEY',
+        },
+    'cerebras': {
+        'base_url': 'https://api.cerebras.ai/v1',
+        'apikey': 'CEREBRAS_API_KEY'
+        },
+    'groq': {
+        'base_url': 'https://api.groq.com/openai/v1',
+        'apikey': 'GROQ_API_KEY'
+        },
+    'openai': {
+        'base_url': 'https://api.openai.com/v1',
+        'apikey': 'OPENAI_API_KEY'
+        },
+    }
+
+registered_models = {
+    'anthropic/claude-3-haiku-20240307':    {'text/in': 0.25, 'text/out':  1.25},
+    'anthropic/claude-opus-4-20250514':     {'text/in':15.00, 'text.out': 75.00},
+    'anthropic/claude-sonnet-4-0':          {'text/in': 3.00, 'text/out': 15.00},
+    'anthropic/claude-3-5-haiku-latest':    {'text/in': 0.80, 'text/out':  4.00},
+    'cerebras/qwen-3-235b-a22b-instruct-2507':
+                                            {'text/in': 0.00, 'text/out':  0.00},
+    'groq/llama-3.1-8b-instant':            {'text/in': 0.00, 'text/out':  0.00},
+    'groq/llama-3.3-70b-versatile':         {'text/in': 0.00, 'text/out':  0.00},
+    'groq/meta-llama/llama-4-maverick-17b-128e-instruct': 
+                                            {'text/in': 0.00, 'text/out':  0.00},
+    'groq/meta-llama/llama-4-scout-17b-16e-instruct':
+                                            {'text/in': 0.00, 'text/out':  0.00},
+    'openai/gpt-5':                         {'text/in': 1.25, 'text/out': 10.00},
+    'openai/gpt-5-mini':                    {'text/in': 0.25, 'text/out':  2.00},
+    'openai/gpt-5-nano':                    {'text/in': 0.05, 'text/out':  0.40},
+    'openai/gpt-4.1':                       {'text/in': 2.00, 'text/out':  8.00},
+    'openai/gpt-4.1-mini':                  {'text/in': 0.40, 'text/out':  1.60},
+    'openai/gpt-4.1-nano':                  {'text/in': 0.10, 'text/out':  0.60},
+    'openai/gpt-image-1':                   {'text/in': 5.00, 'image/in': 10.00, 'image/out': 40.00},
+    'openai/gpt-4o-mini-tts':               {'text/in': 0.60, 'audio/out': 12.00},
+    }
+
+
+class ModelUsageSummary():
+    def __init__(self):
+        self.model_details = defaultdict(lambda: Counter())
+        self.tools_used = Counter()
+
+    def register_result(self, model, result):
+
+        # image API calls
+        if hasattr(result.usage, 'input_tokens'): # image
+            tokens = Counter()
+            tokens['text/in'] = result.usage.input_tokens_details.text_tokens
+            tokens['image/in'] = result.usage.input_tokens_details.image_tokens
+            tokens['image/out'] = result.usage.output_tokens
+            self.model_details[model] += tokens
+
+        # text API calls
+        elif hasattr(result.usage, 'completion_tokens'): # text
+            tokens = Counter()
+            tokens['text/in'] = result.usage.completion_tokens
+            tokens['text/out'] = result.usage.prompt_tokens
+            self.model_details[model] += tokens
+
+            # only text results use tool use
+            tools = result.choices[0].message.tool_calls
+            if tools:
+                for tool in tools:
+                    self.tools_used[str(tool)] += 1
+
+        # other API calls
+        else:
+            raise ValueError('unsupported result type')
+
+        # record cost
+        if hasattr(result.usage, 'cost'):
+            self.model_details[model]['cost'] += result.usage.cost
+        elif model not in registered_models:
+            logger.warning(f'model="{model}" not in registered_models')
+        else:
+            prices = registered_models[model]
+            for event in tokens:
+                if event not in prices:
+                    logger.warning(f'model="{model}" does not have event={event}; assuming 0 cost')
+                else:
+                    self.model_details[model]['cost'] += prices['text/in'] / 1000000.0 * tokens[event]
+
+    def total_cost(self):
+        return sum([self.model_details[model]['cost'] for model in self.model_details])
+
+    def __add__(l, r):
+        new = ModelUsageSummary()
+        models = set(self.model_details.keys()) | set(other.model_details.keys)
+        for model in models:
+            new.model_details[model] = l.model_details[model] + r.model_details[model]
+        new.tools_used = l.tools_used + r.tools_used
+        return new
 
 
 class LLM():
-
-    providers = {
-        'anthropic': {
-            'base_url': 'https://api.anthropic.com/v1/',
-            'apikey': 'ANTHROPIC_API_KEY'
-            },
-        'cerebras': {
-            'base_url': 'https://api.cerebras.ai/v1',
-            'apikey': 'CEREBRAS_API_KEY'
-            },
-        'groq': {
-            'base_url': 'https://api.groq.com/openai/v1',
-            'apikey': 'GROQ_API_KEY'
-            },
-        'openai': {
-            'base_url': 'https://api.openai.com/v1',
-            'apikey': 'OPENAI_API_KEY'
-            },
-        }
-
-    models = {
-        'anthropic/claude-3-haiku-20240307':    {'text/in': 0.25, 'text/out':  1.25},
-        'anthropic/claude-opus-4-20250514':     {'text/in':15.00, 'text.out': 75.00},
-        'anthropic/claude-sonnet-4-0':          {'text/in': 3.00, 'text/out': 15.00},
-        'anthropic/claude-3-5-haiku-latest':    {'text/in': 0.80, 'text/out':  4.00},
-        'cerebras/qwen-3-235b-a22b-instruct-2507': {'text/in': 0.00, 'text/out':  0.00},
-        'groq/llama-3.1-8b-instant':            {'text/in': 0.00, 'text/out':  0.00},
-        'groq/llama-3.3-70b-versatile':         {'text/in': 0.00, 'text/out':  0.00},
-        'groq/meta-llama/llama-4-maverick-17b-128e-instruct': {'text/in': 0.00, 'text/out':  0.00},
-        'groq/meta-llama/llama-4-scout-17b-16e-instruct': {'text/in': 0.00, 'text/out':  0.00},
-        'openai/gpt-5':                         {'text/in': 1.25, 'text/out': 10.00},
-        'openai/gpt-5-mini':                    {'text/in': 0.25, 'text/out':  2.00},
-        'openai/gpt-5-nano':                    {'text/in': 0.05, 'text/out':  0.40},
-        'openai/gpt-4.1':                       {'text/in': 2.00, 'text/out':  8.00},
-        'openai/gpt-4.1-mini':                  {'text/in': 0.40, 'text/out':  1.60},
-        'openai/gpt-4.1-nano':                  {'text/in': 0.10, 'text/out':  0.60},
-        'openai/gpt-image-1':                   {'text/in': 5.00, 'image/in': 10.00, 'image/out': 40.00},
-        'openai/gpt-4o-mini-tts':               {'text/in': 0.60, 'audio/out': 12.00},
-        }
 
     def __init__(self):
         #self.default_text_model = 'groq/llama-3.3-70b-versatile'
@@ -71,14 +129,23 @@ class LLM():
         #self.default_text_model = 'anthropic/claude-3-haiku-20240307'
         self.model_image = 'openai/gpt-image-1'
         self.default_audio_model = 'openai/gpt-4o-mini-tts'
-        self.usage = defaultdict(lambda: Counter())
+        self.usage_summary = ModelUsageSummary()
         self.build_id = generate_uuid7()
 
-    def text(self, messages, *, tools=None, callables=None, response_format=None, model=None, seed=None, max_iter=10):
+    def text(self, messages, *,
+            tools=None,
+            callables=None,
+            response_format=None,
+            model=None,
+            seed=None,
+            max_iter=10,
+            ):
 
-        assert (tools is None and callables is None) or (tools is not None and callables is not None)
+        # if either tools/callables is provided, both must be
+        assert ((tools is     None and callables is     None)
+             or (tools is not None and callables is not None))
 
-        local_usage = defaultdict(lambda: Counter())
+        local_usage = ModelUsageSummary()
 
         # extract provider/model info from input model name
         if model is None:
@@ -90,39 +157,43 @@ class LLM():
         # with tool use, this will contain all tool calls and all results of the calls
         new_messages = []
 
+        # openrouter supports supplying additional parameters that other providers do not;
+        # these parameters will ensure fast responses and provide actual costs in the usage field returned;
+        # the cost field is important for openrouter because it can be different for different runs,
+        # and so it cannot be hardcoded in the dictionaries above
+        extra_body = None
+        if provider == 'openrouter':
+            extra_body={
+                "provider": {"sort": "latency"},
+                "usage": {"include": True},
+                }
+
         # call the API;
         # if the result asks for a tool use,
         # then use the tool and retry the API
+        client = openai.Client(
+            api_key = os.environ.get(registered_providers[provider]['apikey']),
+            base_url = registered_providers[provider]['base_url'],
+        )
         for i in range(max_iter):
-            try:
-                client = openai.Client(
-                    api_key = os.environ.get(self.providers[provider]['apikey']),
-                    base_url = self.providers[provider]['base_url'],
-                )
-                logger.trace('calling API: client.chat.completions.create()')
-                result = client.chat.completions.create(
-                    messages=list(messages) + new_messages,
-                    model=model_name,
-                    seed=seed,
-                    tools=tools,
-                    stream=False,
-                )
-                new_messages.append(result.choices[0].message)
-            except openai.BadRequestError as e:
-                print(f'response_format=\n{json.dumps(response_format, indent=2)}')
-                raise e
-
-            # update token usage
-            usage = {
-                'text/out': result.usage.completion_tokens,
-                'text/in': result.usage.prompt_tokens,
-                }
-            local_usage[model] += usage
-            self.usage[model] += usage
+            logger.trace('calling API: client.chat.completions.create()')
+            result = client.chat.completions.create(
+                messages=list(messages) + new_messages,
+                model=model_name,
+                seed=seed,
+                tools=tools,
+                stream=False,
+                extra_body=extra_body,
+            )
+            new_messages.append(result.choices[0].message)
+            local_usage.register_result(model, result)
+            self.usage_summary.register_result(model, result)
 
             # if there is no tool call, then we break from the loop
-            if result.choices[0].message.content is not None:
+            if result.choices[0].message.tool_calls is None:
                 break
+            #if result.choices[0].message.content is not None:
+                #break
 
             # otherwise, we evaluate each tool call
             # and update messages list with their outputs;
@@ -143,23 +214,18 @@ class LLM():
                     "content": content,
                     })
 
-                usage_tool = {
-                    'text/out': result.usage.completion_tokens,
-                    'text/in': result.usage.prompt_tokens,
-                    }
-                local_usage['_tool/'+tool_call.function.name] += usage_tool
-                self.usage['_tool/'+tool_call.function.name] += usage_tool
-
         content = result.choices[0].message.content or ''
 
-        logger.trace(f'self._tokens_to_prices()={self._tokens_to_prices(self.usage)}')
-        logger.info(f'file_cost: ${self._total_price(local_usage):0.4f}  total_cost: ${self._total_price(self.usage):0.4f}', submessage=True)
+        logger.info(f'request_cost: ${local_usage.total_cost():0.4f}  total_cost: ${self.usage_summary.total_cost():0.4f}', submessage=True)
         return  content, local_usage
 
-    def image(self, path, mode, data, *, seed=None):
+    def image(self, path, mode, data, *, model=None, seed=None):
         logger.trace(f'llm.image; data.keys()={list(data.keys())}')
         client = openai.Client()
-        model = self.model_image.split('/')[-1]
+        
+        if model is None:
+            model = self.model_image
+        model_name = self.model_image.split('/')[-1]
         quality = data.get('quality', 'low')
 
         size = '1536x1024'
@@ -171,19 +237,22 @@ class LLM():
         # generate a new image
         if not data.get('reference_images'):
             result = client.images.generate(
-                model=model,
+                model=model_name,
                 prompt=data['prompt'],
                 size=size,
                 quality=quality,
             )
         else:
             result = client.images.edit(
-                model=model,
+                model=model_name,
                 prompt=data['prompt'],
                 size=size,
                 quality=quality,
                 image=[open(path, 'rb') for path in data['reference_images']]
             )
+        local_usage = ModelUsageSummary()
+        local_usage.register_result(model, result)
+        self.usage_summary.register_result(model, result)
 
         # save the image
         image_base64 = result.data[0].b64_json
@@ -191,19 +260,8 @@ class LLM():
         with open(path, mode) as fout:
             fout.write(image_bytes)
 
-        # update usage info
-        usage = {
-            self.model_image: {
-                'text/in': result.usage.input_tokens_details.text_tokens,
-                'image/in': result.usage.input_tokens_details.image_tokens,
-                'image/out': result.usage.output_tokens,
-                }
-            }
-        self.usage[self.model_image] += usage[self.model_image]
-
-        logger.info(f'self._tokens_to_prices()={self._tokens_to_prices(self.usage)}')
-        logger.info(f'self._total_price()={self._total_price(self.usage)}')
-        return usage
+        logger.info(f'request_cost: ${local_usage.total_cost():0.4f}  total_cost: ${self.usage_summary.total_cost():0.4f}', submessage=True)
+        return local_usage
 
     def audio(self, path, data, *, model=None):
 
@@ -231,10 +289,9 @@ class LLM():
                 'text/in': 0,
                 },
             }
-        self.usage[model] += usage[model]
+        self.usages[model] += usage[model]
 
-        logger.info(f'self._tokens_to_prices()={self._tokens_to_prices(self.usage)}')
-        logger.info(f'self._total_price()={self._total_price(self.usage)}')
+        logger.info(f'request_cost: ${local_usage.total_cost():0.4f}  total_cost: ${self.usage_summary.total_cost():0.4f}', submessage=True)
         return usage
 
     def generate_file(self, filetype, path, data, *, mode='xb', response_format, seed=None, model=None):
@@ -257,8 +314,8 @@ class LLM():
                 "time": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "path": path,
                 "build_id": self.build_id,
-                "cost": self._total_price(usage),
-                "usage": usage,
+                "cost": usage.total_cost(),
+                "usage": usage.__dict__,
                 }
             buildinfo_str = json.dumps(buildinfo) + '\n'
 
@@ -273,28 +330,15 @@ class LLM():
         except FileExistsError:
             logger.warning(f'file "{path}" exists; skipping')
 
-    def _total_price(self, tokens):
-        prices = self._tokens_to_prices(tokens)
-        total = sum([sum(prices[model].values()) for model in prices])
-        return total
 
-    def _tokens_to_prices(self, tokens):
-        prices = {}
-        for model in tokens:
-            # model names that start with underscore should be ignored;
-            # they are internally used for tracking non-model info
-            if model.startswith('_'):
-                continue
-            prices[model] = {}
-            for event in tokens[model]:
-                num_tokens = tokens[model][event]
-                token_price = self.models.get(model, {}).get(event, 0.0)
-                if model not in self.models:
-                    logger.warning(f'when calculating pricing, model="{model}" not found')
-                if model in self.models and event not in self.models[model]:
-                    logger.warning(f'when calculating pricing, event="{event}" not found for model="{model}"')
-                prices[model][event] = token_price / 1000000.0 * num_tokens
-        return prices
+################################################################################
+# utils
+################################################################################
 
+def generate_uuid7():
+    timestamp = int(time.time() * 1000)
+    random_number = uuid.uuid4().int
+    uuid7 = (timestamp << 64) | random_number
+    return uuid7
 
 

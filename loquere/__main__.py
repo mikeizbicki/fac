@@ -67,8 +67,11 @@ If the user gives you a "command":
         #self.llm.default_text_model = 'openai/gpt-5-mini'
         #self.llm.default_text_model = 'openai/gpt-5'
         #self.llm.default_text_model = 'groq/llama-3.3-70b-versatile'
-        self.llm.default_text_model = 'groq/meta-llama/llama-4-maverick-17b-128e-instruct'
+        #self.llm.default_text_model = 'groq/meta-llama/llama-4-maverick-17b-128e-instruct'
         #self.llm.default_text_model = 'groq/meta-llama/llama-4-scout-17b-16e-instruct'
+        self.llm.default_text_model = 'openrouter/qwen/qwen3-coder'
+
+
 
         #self.llm.default_text_model = 'cerebras/llama-3.3-70b'
         #self.llm.default_text_model = 'cerebras/llama-4-scout-17b-16e-instruct'
@@ -101,7 +104,7 @@ If the user gives you a "command":
                 if hasattr(module, 'tool'):
                     callables[module.data['function']['name']] = module.tool
                 else:
-                    tool = module.gen_tool(messages)
+                    tool = module.gen_tool(self, messages)
                     callables[module.data['function']['name']] = tool
         return tools, callables
 
@@ -169,8 +172,7 @@ Message:
             )
 
         # ping the user if a tool was used
-        tool_used = any(['_tool' in k for k in usage.keys()])
-        if tool_used:
+        if usage.tools_used:
             ping_user()
 
         # log the chat interaction
@@ -179,8 +181,7 @@ Message:
                 "time": datetime.now().isoformat(),
                 "message": message,
                 "response": response,
-                "cost": self.llm._total_price(usage),
-                "usage": usage
+                "cost": usage.total_cost(),
             }
             f.write(json.dumps(log_entry) + "\n")
 
