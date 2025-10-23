@@ -182,7 +182,7 @@ class LLM():
                 prompt=data['prompt'],
                 size=size,
                 quality=quality,
-                image=data['reference_images'],
+                image=[open(path, 'rb') for path in data['reference_images']]
             )
 
         # save the image

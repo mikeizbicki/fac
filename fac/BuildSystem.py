@@ -243,8 +243,12 @@ class BuildSystem:
         # this should only happen if auto_commit=False
         dirty_files = [item.a_path for item in self.repo.index.diff(None)]
         staged_files = [item.a_path for item in self.repo.index.diff('HEAD')]
-        if path in dirty_files or path in staged_files or path in self.repo.untracked_files:
-            return os.path.getmtime(path)
+        if (path in dirty_files or
+            path in staged_files or
+            path in self.repo.untracked_files
+            ):
+            mtime = os.path.getmtime(path)
+            return mtime
 
         # if the file has been committed to git and is clean,
         # we use the git commit timestamp
@@ -322,7 +326,7 @@ class BuildSystem:
         # the algorithm for generating the final contexts list is a bit subtle
         BuildContext = namedtuple('BuildContext', [
             'variables',
-            'include_paths',
+            'dependency_paths',
             'unresolved_dependencies',
             'postreqs',
             ])
@@ -438,7 +442,7 @@ class BuildSystem:
                     postreqs1 = [substitute_vars(postreq, variables1) for postreq in context.postreqs]
                     context1 = BuildContext(
                         variables1,
-                        context.include_paths,
+                        context.dependency_paths,
                         context.unresolved_dependencies,
                         postreqs1,
                         )
@@ -467,7 +471,7 @@ class BuildSystem:
                     continue
 
                 # compute the dependencies
-                include_paths1 = []
+                dependency_paths1 = []
                 unresolved_dependencies1 = []
                 for dep in context.unresolved_dependencies:
                     dep_target = dep['target']
@@ -487,9 +491,6 @@ class BuildSystem:
                     # expand dep_paths into real file paths
                     try:
                         dep_paths = expand_path(dep_target, context.variables)
-                        #logger.debug(f'dep_paths={dep_paths}')
-                        #if dep.get('include', True):
-                            #include_paths1.extend(dep_paths)
                     except TemplateProcessingError as e:
                         # NOTE:
                         # This code path should never happen.
@@ -507,7 +508,7 @@ class BuildSystem:
                             all_resolved = False
                     if all_resolved and len(dep_paths) > 0:
                         logger.debug(f'already resolved {dep_paths}')
-                        include_paths1.extend(dep_paths)
+                        dependency_paths1.extend(dep_paths)
                         continue
                     #logger.info(f'resolving dependency: "{dep_target}", vars={context.variables}')
                     expanded_target = substitute_vars(dep_target, context.variables)
@@ -522,8 +523,7 @@ class BuildSystem:
                                 overwrite=self.from_scratch,
                                 traversed_paths=traversed_paths,
                                 )
-                        if dep.get('include', True):
-                            include_paths1.extend(built_paths)
+                        dependency_paths1.extend(built_paths)
 
                     except TargetNotFound:
                         valid_paths = len(dep_paths) > 0
@@ -531,7 +531,7 @@ class BuildSystem:
                             if not os.path.exists(path):
                                 valid_paths = False
                             else:
-                                include_paths1.append(path)
+                                dependency_paths1.append(path)
                         if not valid_paths:
                             logger.trace(f'dep_paths={dep_paths} not valid paths')
                             unresolved_dependencies1.append(dep)
@@ -545,11 +545,11 @@ class BuildSystem:
                             if not validate_file(dep_path, fix=False):
                                 logger.warning(f'failed to validate dep_path={dep_path}')
 
-                logger.trace(f"include_paths1={include_paths1}")
+                logger.trace(f"dependency_paths1={dependency_paths1}")
                 logger.trace(f"unresolved_dependencies1={unresolved_dependencies1}")
                 context1 = BuildContext(
                     context.variables,
-                    sorted(context.include_paths + include_paths1),
+                    sorted(context.dependency_paths + dependency_paths1),
                     unresolved_dependencies1,
                     context.postreqs,
                     )
@@ -596,13 +596,13 @@ class BuildSystem:
                 # if the file is up-to-date (i.e. all dependencies are older),
                 # then we will not rebuild it
                 path_to_generate_committed_date = self._committed_date(path_to_generate)
-                updated_includes = []
-                for path in context.include_paths:
+                updated_deps = []
+                for path in context.dependency_paths:
                     path_committed_date = self._committed_date(path)
                     time_diff = path_to_generate_committed_date - path_committed_date
                     if time_diff < 0:
-                        updated_includes.append(path)
-                if updated_includes == []:
+                        updated_deps.append(path)
+                if updated_deps == []:
                     build_context = False
                     logger.info(f'file up-to-date {i+1}/{len(contexts)} "{path_to_generate}"')
 
@@ -614,8 +614,8 @@ class BuildSystem:
             # perform the actual build
             if build_context or overwrite:
                 logger.info(f'building file {i+1}/{len(contexts)} "{path_to_generate}"')
-                logger.info('include_paths:', submessage=True)
-                for path in context.include_paths:
+                logger.info('dependency_paths:', submessage=True)
+                for path in context.dependency_paths:
                     logger.info(f' - {path}', submessage=True)
                 foreach_context(path_to_generate, config, context, overwrite)
             traversed_paths.add(path_to_generate)
@@ -701,13 +701,30 @@ class BuildSystem:
             prompt_cmd += '\n'
 
         # next we compile all the documents that will be passed to the LLM,
-        # which will be stored in the `files_prompt` variable
-        if len(context.include_paths) == 0:
+        # text documents are processed to form part of the prompt
+        # and binary files are stored in a list for later processing
+        binary_files = []
+        if len(context.dependency_paths) == 0:
             files_prompt = ''
         else:
             files_prompt = '<documents>\n'
-            for path in context.include_paths:
-                # XXX:
+            for path in context.dependency_paths:
+
+                # skip paths that are annotated with "include: False"
+                include_dep = True
+                for dep in config['dependencies']:
+                    if dep.get('include', True) == False:
+                        # NOTE:
+                        # it is a minor optimization to perform the match_pattern check inside of the if statement;
+                        # it is rare for a dependency to not be included,
+                        # and the match_patterns function is slightly expensive for an inner loop
+                        target, env = match_pattern([dep['target']], path)
+                        if target is not None:
+                            include_dep = False
+                if not include_dep:
+                    continue
+
+                # NOTE:
                 # when piping into stdin, open('/dev/stdin') fails because the open function does not work on pipe "files";
                 # this is a hackish way to detect that we're piping into stdin,
                 # and then changing path to a value that is compatible with open;
@@ -722,9 +739,9 @@ class BuildSystem:
                     with open(path) as fin:
                         files_prompt += f'''<document path="{path}">\n{fin.read().strip()}\n</document>\n'''
                 except UnicodeDecodeError:
-                    logger.trace(f'UnicodeDecodeError: {path}')
+                    binary_files.append(path)
             files_prompt += '</documents>'
-            logger.trace(f'files_prompt generated; len(context.include_paths)={len(context.include_paths)}')
+            logger.trace(f'files_prompt generated; len(context.dependency_paths)={len(context.dependency_paths)}')
 
         # include a chat history if provided
         # and the previouse version of the file if available
@@ -775,11 +792,7 @@ except for the changes requested by the user.
             logger.trace(f'filetype={filetype}')
             data = {}
             data['prompt'] = prompt_cmd + files_prompt + chat_prompt
-            if 'image_references' in config:
-                image_paths = expand_path(config['image_references'], env_vars=context.variables)
-                data['reference_images'] = image=[open(image, 'rb') for image in image_paths]
-            else:
-                data['reference_images'] = None
+            data['reference_images'] = binary_files
             data['quality'] = config.get('image_quality', 'low')
             data['orientation'] = config.get('image_orientation', 'landscape')
 
