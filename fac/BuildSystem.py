@@ -751,7 +751,7 @@ class BuildSystem:
         try:
             if self.include_old:
                 with open(path_to_generate) as fin:
-                    old_version = open(path_to_generate)
+                    old_version = fin.read()
         except FileNotFoundError:
             pass
         chat_prompt = ''
@@ -762,7 +762,7 @@ The dialogue below records a history of user comments that should guide your cre
 {self.include_chat}
 '''
             if old_version:
-                chat_prompt += '''
+                chat_prompt += f'''
 The version of the document the user is commenting on is below.
 Keep the new document as close as possible to this old version,
 except for the changes requested by the user.
@@ -910,7 +910,8 @@ except for the changes requested by the user.
         # stop processing if printing the prompt
         if self.print_prompt:
             import pprint
-            pprint.pprint(data)
+            #pprint.pprint(data)
+            print(data[-1]['content'])
             return
 
         # write to the output file

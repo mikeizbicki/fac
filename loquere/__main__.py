@@ -20,6 +20,8 @@ import fac.LLM
 
 class Session:
 
+    log_dir = '.loquere'
+
     system_prompt = '''
 You are a make-like build tool designed to help users create projects with LLMs.
 
@@ -45,24 +47,28 @@ If the user gives you a "command":
 
     def __init__(self, session_id=None):
 
-        # The default session id is used to store the 
-        # This ensures that related sessions can be identified.
-        # It is theoretically possible for session id's to collide,
-        # but this is extremely unlikely in practice.
+        self.repo = git.Repo('.')
+        os.makedirs(self.log_dir, exist_ok=True)
+
+        # create the session_id
         if session_id is None:
-            self.repo = git.Repo('.')
-            branch = self.repo.active_branch.name
-            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            ppid = os.getppid()
-            self.session_id = f"{branch}__{timestamp}__{ppid}"
+            self.session_id = self.get_default_session_id()
         else:
             self.session_id = session_id
 
-        self.log_dir = f'.loquere/{self.session_id}/'
-        os.makedirs(self.log_dir, exist_ok=True)
+        # create the log folders for the session
+        self.session_dir = f'.loquere/{self.session_id}/'
+        self.log_file = os.path.join(self.session_dir, 'log.jsonl')
 
-        self.log_file = self.log_dir + 'log.jsonl'
+        # log satus
+        messages = self.get_session_messages()
+        if len(messages) == 0:
+            logger.info(f'Starting new session: "{self.session_id}".')
+        else:
+            logger.info(f'Continuing prev session: "{self.session_id}". There are {len(messages)} messages.')
 
+        # initialize the LLM;
+        # we prefer a fast model trained for tool use
         self.llm = fac.LLM.LLM()
         #self.llm.default_text_model = 'openai/gpt-5-mini'
         #self.llm.default_text_model = 'openai/gpt-5'
@@ -70,12 +76,55 @@ If the user gives you a "command":
         #self.llm.default_text_model = 'groq/meta-llama/llama-4-maverick-17b-128e-instruct'
         #self.llm.default_text_model = 'groq/meta-llama/llama-4-scout-17b-16e-instruct'
         self.llm.default_text_model = 'openrouter/qwen/qwen3-coder'
-
-
-
         #self.llm.default_text_model = 'cerebras/llama-3.3-70b'
         #self.llm.default_text_model = 'cerebras/llama-4-scout-17b-16e-instruct'
         #self.llm.default_text_model = 'cerebras/qwen-3-32b'
+
+    ########################################
+    # Util Methods
+    ########################################
+
+    def get_default_session_id(self):
+        '''
+        Every session has a unique session_id,
+        and a session is "dirty" if its corresponding git folder has any dirty files.
+        There should be at most one dirty session at any time.
+
+        If there are no currently dirty sessions,
+        then the default session_id is a combination of git branch and timestamp.
+        (This information can be useful to help group related sessions together.)
+
+        If there is a dirty session,
+        then the default session_id is the session_id of that session.
+        '''
+
+        # find dirty files in self.log_dir
+        all_dirty_files = (self.repo.untracked_files +
+                          [item.a_path for item in self.repo.index.diff(None)] +
+                          [item.a_path for item in self.repo.index.diff("HEAD")])
+        dirty_sessions = []
+        for item in os.listdir(self.log_dir):
+            item_path = os.path.join(self.log_dir, item)
+            if os.path.isdir(item_path):
+                dirty_files = (f.startswith(item_path + os.sep) for f in all_dirty_files)
+                if any(dirty_files):
+                    dirty_sessions.append(item)
+
+        # create new session_id
+        if len(dirty_sessions) == 0:
+            branch = self.repo.active_branch.name
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            session_id = f"{branch}__{timestamp}"
+            return session_id
+
+        # continue with prev session_id
+        elif len(dirty_sessions) == 1:
+            session_id = os.path.basename(dirty_sessions[0])
+            return session_id
+
+        # this should never happen
+        else:
+            raise ValueError('Multiple ongoing sessions')
 
     ########################################
     # Main Methods
@@ -131,8 +180,26 @@ If the user gives you a "command":
     def send_message(self, message):
         '''
         '''
+        
+        # generate tools
+        # NOTE:
+        # we use a different set of messages for the tools and the chat LLM;
+        # the tools messages contain only the user-visible messages that have been displayed in the chat REPL;
+        # this saves tokens in the build step and prevents the build step from getting confused with extraneous context
+        messages_tool = []
+        messages_tool.extend(self.get_session_messages())
+        messages_tool.append({
+                'role': 'user',
+                'content': message
+            })
+        tools, callables = self.load_tools(messages_tool)
 
-        # first build an augmented message to pass to the llm that includes:
+        # now we build the messages for the chat LLM
+        # these messages contain additional system prompt and background project info that is useful for determining which tools to use
+        messages_chat = [{'role': 'system', 'content': self.system_prompt}]
+        messages_chat.extend(self.get_session_messages())
+
+        # we augment the most recent chat message with
         # the contents of fac.yaml and output of `ls -R`
         with open('fac.yaml') as fin:
             fac_yaml = fin.read()
@@ -156,17 +223,12 @@ $ ls -R
 Message:
 {message}
 '''
-
-        # send the message to the LLM
-        messages = [{'role': 'system', 'content': self.system_prompt}]
-        messages.extend(self.get_session_messages())
-        messages.append({
+        messages_chat.append({
                 'role': 'user',
                 'content': augmented_message
             })
-        tools, callables = self.load_tools(messages)
         response, usage = self.llm.text(
-            messages,
+            messages_chat,
             tools=tools,
             callables=callables,
             )
@@ -176,6 +238,7 @@ Message:
             ping_user()
 
         # log the chat interaction
+        os.makedirs(self.session_dir, exist_ok=True)
         with open(self.log_file, "a") as f:
             log_entry = {
                 "time": datetime.now().isoformat(),
@@ -186,6 +249,29 @@ Message:
             f.write(json.dumps(log_entry) + "\n")
 
         return response
+
+
+def is_direct_child(filepath, folder):
+    '''
+    Check if file is directly in the folder (not in subdirectories)
+
+    >>> is_direct_child('/home/user/file.txt', '/home/user')
+    True
+    >>> is_direct_child('/home/user/subdir/file.txt', '/home/user')
+    False
+    >>> is_direct_child('/home/other/file.txt', '/home/user')
+    False
+    >>> is_direct_child('/home/user', '/home/user')
+    False
+    >>> is_direct_child('C:\\Users\\file.txt', 'C:\\Users')
+    True
+    >>> is_direct_child('C:\\Users\\subfolder\\file.txt', 'C:\\Users')
+    False
+    '''
+    if not filepath.startswith(folder + os.sep):
+        return False
+    relative_path = filepath[len(folder + os.sep):]
+    return os.sep not in relative_path
 
 
 def ping_user():

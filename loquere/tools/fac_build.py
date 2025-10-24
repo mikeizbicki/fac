@@ -1,3 +1,4 @@
+import json
 import pathlib
 import os
 
@@ -8,11 +9,12 @@ enable = True
 
 def gen_tool(session, messages):
     def tool(target):
-        tool_print(f'fac_build({target})')
+        tool_print(f"fac '{target}' --overwrite")
 
         build_system = BuildSystem(
-            include_chat=messages,
+            include_chat=json.dumps(messages, indent=4),
             overwrite=True,
+            include_old=True,
             auto_commit=False,
             )
         build_system.llm = session.llm
