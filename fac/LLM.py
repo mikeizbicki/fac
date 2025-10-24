@@ -123,7 +123,7 @@ class LLM():
         #self.default_text_model = 'openai/gpt-4.1-mini'
         self.default_text_model = 'openai/gpt-5'
         #self.default_text_model = 'openai/gpt-5-nano'
-        #self.default_text_model = 'groq/llama-3.3-70b-versatile'
+        self.default_text_model = 'groq/llama-3.3-70b-versatile'
         #self.default_text_model = 'anthropic/claude-sonnet-4-0'
         #self.default_text_model = 'anthropic/claude-3-5-haiku-latest'
         #self.default_text_model = 'anthropic/claude-3-haiku-20240307'

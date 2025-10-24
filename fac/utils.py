@@ -451,3 +451,42 @@ def match_pattern(patterns, input_string):
     else:
         return (None, {})
 
+
+def expand_vars_on_newlines(env_vars):
+    r'''
+    Takes a dictionary where values may contain newline characters and returns
+    a list of dictionaries representing all possible combinations where each
+    newline-separated value is treated as an alternative.
+    
+    >>> expand_vars_on_newlines({})
+    [{}]
+    >>> expand_vars_on_newlines({'a': 'test'})
+    [{'a': 'test'}]
+    >>> expand_vars_on_newlines({'a': 'hello\nworld'})
+    [{'a': 'hello'}, {'a': 'world'}]
+    >>> expand_vars_on_newlines({'a': 'one\ntwo\nthree'})
+    [{'a': 'one'}, {'a': 'two'}, {'a': 'three'}]
+
+    >>> expand_vars_on_newlines({'a': 'test', 'b': 'prueba'})
+    [{'a': 'test', 'b': 'prueba'}]
+    >>> expand_vars_on_newlines({'a': 'hello\nworld', 'b': 'prueba'})
+    [{'a': 'hello', 'b': 'prueba'}, {'a': 'world', 'b': 'prueba'}]
+    >>> expand_vars_on_newlines({'a': 'hello\nworld', 'b': 'hola\nmundo'})
+    [{'a': 'hello', 'b': 'hola'}, {'a': 'hello', 'b': 'mundo'}, {'a': 'world', 'b': 'hola'}, {'a': 'world', 'b': 'mundo'}]
+
+    >>> expand_vars_on_newlines({'a': 'x\ny', 'b': '1\n2'})
+    [{'a': 'x', 'b': '1'}, {'a': 'x', 'b': '2'}, {'a': 'y', 'b': '1'}, {'a': 'y', 'b': '2'}]
+
+    >>> expand_vars_on_newlines({'PATH': '/bin\n/usr/bin', 'HOME': '/root'})
+    [{'PATH': '/bin', 'HOME': '/root'}, {'PATH': '/usr/bin', 'HOME': '/root'}]
+    '''
+    # Split values on newlines and create lists
+    split_vars = {k: v.split('\n') if isinstance(v, str) else [v]
+                  for k, v in env_vars.items()}
+
+    # Generate all combinations
+    from itertools import product
+    keys = list(split_vars.keys())
+    combinations = product(*[split_vars[k] for k in keys])
+
+    return [dict(zip(keys, combo)) for combo in combinations]

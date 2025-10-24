@@ -314,8 +314,11 @@ class BuildSystem:
 
         # parse the dependencies entry in the yaml into unresolved_dependencies list;
         # each entry in the list is a dictionary with a target and flags key
-        unresolved_dependencies = config.get('dependencies', '')
+        unresolved_dependencies = config.get('dependencies', [])
         logger.debug(f"unresolved_dependencies={unresolved_dependencies}")
+        dependency_variables = set()
+        for dep in unresolved_dependencies:
+            dependency_variables |= set(extract_variables(dep['target']))
 
         # a BuildContext contains all the information needed to build a file;
         # the contexts list contains a BuildContext for each file that will be generated;
@@ -332,12 +335,14 @@ class BuildSystem:
             ])
         postreqs = config.get('postreqs', [])
         assert type(postreqs) == list
-        contexts = [BuildContext(
-            {**input_env, **target_env},
-            [],
-            unresolved_dependencies,
-            postreqs,
-            )]
+        contexts = []
+        for context_vars in expand_vars_on_newlines({**input_env, **target_env}):
+            contexts.append(BuildContext(
+                context_vars,
+                [],
+                unresolved_dependencies,
+                postreqs,
+                ))
 
         config_variables = config.get('variables')
         if not config_variables:
@@ -346,6 +351,7 @@ class BuildSystem:
         DUMMY_VAR = '__NONE__'
         config_variables[DUMMY_VAR] = 'DUMMY_VAL'
 
+        #ordered_variables = [DUMMY_VAR] + list(set(target_variables) | dependency_variables)
         ordered_variables = [DUMMY_VAR] + target_variables
         for var in config_variables:
             if var not in ordered_variables:
@@ -385,20 +391,7 @@ class BuildSystem:
 
                 # evaluate var by running expr in a bash shell
                 else:
-                    expr = config_variables[var].strip()
-                    full_command = "set -eu; " + expr
-                    cmd = subprocess.run(
-                        full_command,
-                        shell=True,
-                        capture_output=True,
-                        text=True,
-                        executable="/bin/bash",
-                        env=context.variables,
-                        )
-                    if cmd.returncode != 0:
-                        raise VariableEvaluationError(var, expr, context, cmd)
-                    value = cmd.stdout.strip()
-                    logger.trace(f'cmd.stdout={value.replace("\n", "\\n")}')
+                    value = eval_expr(config_variables[var], context)
 
                 def raw_variable_to_list(raw):
                     '''
@@ -482,6 +475,7 @@ class BuildSystem:
                     unmatched_vars = []
                     for dep_var in dep_vars:
                         if dep_var not in context.variables and dep_var in target_variables:
+                        #if dep_var not in context.variables and (dep_var in target_variables or dep_var in config['variables']):
                             unmatched_vars.append(dep_var)
                     if len(unmatched_vars) > 0:
                         logger.trace(f'unmatched_vars={unmatched_vars}')
@@ -516,9 +510,13 @@ class BuildSystem:
 
                     # build dependencies recursively
                     try:
+                        nontarget_variables = {}
+                        for var in dep_vars:
+                            if var not in context.variables and var in config['variables']:
+                                nontarget_variables[var] = eval_expr(config['variables'][var], context)
                         built_paths = self._traverse_target(
                                 dep_target,
-                                context.variables,
+                                {**context.variables, **nontarget_variables},
                                 foreach_context,
                                 overwrite=self.from_scratch,
                                 traversed_paths=traversed_paths,
@@ -584,6 +582,7 @@ class BuildSystem:
             if context.unresolved_dependencies:
                 for dep in context.unresolved_dependencies:
                     logger.error(f'unresolved dependency: dep["target"]="{dep["target"]}", vars={context.variables}')
+                raise ValueError('something bad happend')
                 # FIXME:
                 #sys.exit(1)
 
@@ -937,3 +936,17 @@ except for the changes requested by the user.
         if self.validate_output:
             validate_file(path_to_generate, config.get('schema_file'))
 
+
+def eval_expr(expr, context):
+    full_command = "set -eu; " + expr.strip()
+    cmd = subprocess.run(
+        full_command,
+        shell=True,
+        capture_output=True,
+        text=True,
+        executable="/bin/bash",
+        env=context.variables,
+        )
+    if cmd.returncode != 0:
+        raise VariableEvaluationError(var, expr, context, cmd)
+    return cmd.stdout.strip()
