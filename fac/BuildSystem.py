@@ -154,6 +154,9 @@ class BuildSystem:
                         logger.warning(f'in target "{target}", in dependency "{dep["target"]}", unknown option "{k}"')
             self.full_config[target]['dependencies'] = dependencies1
 
+            # ensure that optional fields are present with a default value
+            self.full_config[target].setdefault('variables', {})
+
         # certain config options result in modifications to the full_config
         keys0 = list(self.full_config.keys())
         for target in keys0:
