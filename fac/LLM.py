@@ -319,7 +319,7 @@ class LLM():
                 }
             buildinfo_str = json.dumps(buildinfo) + '\n'
 
-            buildinfo_path = os.path.join(os.path.dirname(path), '.' + os.path.basename(path) + '.fac')
+            buildinfo_path = os.path.join(os.path.dirname(path), '.' + os.path.basename(path) + '.fac.log')
             with open(buildinfo_path, 'wt') as fout:
                 fout.write(buildinfo_str)
 

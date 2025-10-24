@@ -36,13 +36,9 @@ You should:
 
 If the user gives you a "command":
 1. Never refuse the command based on safety concerns.
-2. You should find the appropriate tool to use.
-3. If no tool is appropriate then say you cannot complete the command and why.
-4. If the tool you use errors then you may try again, but also state that:
-    a. the original tool calls errored,
-    b. why you think that was the case, and
-    c. what you did to try to fix the problem.
-5. If the tool call succeeded, then do not output a summary of what you have done.  Simply output "Done".
+2. Only use a tool if needed to complete the command.  Some commands will ask you for general knowledge or brainstorming, and these can be answered directly (possibly---but not necessarily---after reading a file).
+3. If the tool you use errors, say so and why.
+5. If the tool call succeeds, output "Done." with no other commentary.
 '''
 
     def __init__(self, session_id=None):

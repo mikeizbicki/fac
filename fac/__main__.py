@@ -35,6 +35,7 @@ def main():
     # whenever we add new fields to BuildSystem, they will automatically be added to the CLI
     for field in fields(BuildSystem):
         if field.name != 'targets':
+            field.name, field.default, field.type
             name = f'--{field.name}'
             if typing.get_origin(field.type) is typing.Literal:
                 choices = typing.get_args(field.type)
@@ -44,6 +45,8 @@ def main():
                     parser.add_argument(name, action='store_true')
                 else:
                     parser.add_argument(name, type=str2bool, default=True)
+            elif field.type == list[str]:
+                parser.add_argument(name, default=field.default_factory(), type=str, nargs='*')
             else:
                 parser.add_argument(name, default=field.default, type=field.type)
     args = parser.parse_args()

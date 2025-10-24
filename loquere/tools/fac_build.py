@@ -26,7 +26,7 @@ data = {
     "type": "function",
     "function": {
         "name": "fac_build",
-        "description": "Runs a build target specified in the `fac.yaml` file.  Any files that are managed by `fac.yaml` should be created using this command.",
+        "description": "Runs a build target specified in the `fac.yaml` file. Only use this tool if the message uses the verb 'build'.",
         "parameters": {
             "type": "object",
             "properties": {

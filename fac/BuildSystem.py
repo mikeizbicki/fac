@@ -1,7 +1,7 @@
 # standard lib imports
 from collections import namedtuple, Counter
-from datetime import datetime
 from dataclasses import dataclass
+from datetime import datetime
 import copy
 import itertools
 import json
@@ -116,6 +116,9 @@ class BuildSystem:
     include_old: str = None
     auto_commit: bool = True
     print_cmd_stdout: bool = False
+    freeze: bool = False
+    thaw: bool = False
+    no_build: bool = False
 
     def __post_init__(self):
         self.llm = LLM()
@@ -300,8 +303,10 @@ class BuildSystem:
 
         # traversed_paths stores which paths have already been recursively traversed;
         # by storing these paths we can avoid repeating work
+        root_call = False
         if traversed_paths is None:
             traversed_paths = set()
+            root_call = True
 
         # load target config
         config_targets = self.full_config.keys()
@@ -608,8 +613,12 @@ class BuildSystem:
                     build_context = False
                     logger.info(f'file up-to-date {i+1}/{len(contexts)} "{path_to_generate}"')
 
+                elif FacJSON(path_to_generate).get('frozen', False):
+                    build_context = False
+                    logger.info(f'file frozen {i+1}/{len(contexts)} "{path_to_generate}"')
+
                 # do not rebuild the file if auto_rebuild is disabled
-                if not config.get('auto_rebuild', True) and build_context:
+                elif not config.get('auto_rebuild', True) and build_context:
                     build_context = False
                     logger.info(f'auto_rebuild disabled {i+1}/{len(contexts)} "{path_to_generate}"')
 
@@ -621,6 +630,23 @@ class BuildSystem:
                     logger.info(f' - {path}', submessage=True)
                 foreach_context(path_to_generate, config, context, overwrite)
             traversed_paths.add(path_to_generate)
+
+            # validate file
+            if self.validate_output:
+                validate_file(path_to_generate, config.get('schema_file'))
+
+            # freeze/thaw file
+            if root_call:
+                if self.freeze:
+                    facjson = FacJSON(path_to_generate)
+                    facjson.set('frozen', True)
+                    facjson.save()
+                    logger.info(f'freezing... done.', submessage=True)
+                elif self.thaw:
+                    facjson = FacJSON(path_to_generate)
+                    facjson.set('frozen', False)
+                    facjson.save()
+                    logger.info(f'thawing... done.', submessage=True)
 
             # traverse postreqs
             for postreq in context.postreqs:
@@ -635,15 +661,9 @@ class BuildSystem:
 
         return generated_paths
 
-    def _build_context(
-            self,
-            path_to_generate,
-            config,
-            context,
-            overwrite
-            ):
+    def _build_context(self, path_to_generate, config, context, overwrite):
         '''
-        Actually build a file given the specified information.
+        Build a file given the specified information.
         '''
 
         # create output directory if needed
@@ -927,18 +947,15 @@ except for the changes requested by the user.
                     mode = 'ab'
                 else:
                     mode = 'wb'
-            self.llm.generate_file(
-                filetype,
-                path_to_generate,
-                data,
-                mode=mode,
-                model=config.get('model'),
-                response_format=response_format,
-                )
-
-        # validate file
-        if self.validate_output:
-            validate_file(path_to_generate, config.get('schema_file'))
+            if not self.no_build:
+                self.llm.generate_file(
+                    filetype,
+                    path_to_generate,
+                    data,
+                    mode=mode,
+                    model=config.get('model'),
+                    response_format=response_format,
+                    )
 
 
 def eval_expr(expr, context):
@@ -954,3 +971,76 @@ def eval_expr(expr, context):
     if cmd.returncode != 0:
         raise VariableEvaluationError(var, expr, context, cmd)
     return cmd.stdout.strip()
+
+
+class FacJSON:
+    """
+    A JSON-backed dictionary-like class that persists data to disk.
+    Used for storing settings for targets.
+
+    >>> # tests need to create a temporary file
+    >>> import tempfile, os
+    >>> with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+    ...     temp_path = f.name
+    >>>
+    >>> # test getting/setting
+    >>> fac = FacJSON(temp_path)
+    >>> fac.set('name', 'John')
+    >>> fac.get('name')
+    'John'
+    >>> fac.set('age', 30)
+    >>> fac.get('age', 0)
+    30
+    >>> fac.get('missing', 'default')
+    'default'
+    >>>
+    >>> # test persistence
+    >>> fac2 = FacJSON(temp_path)
+    >>> fac2.get('name')
+    'John'
+    >>> fac2.get('age')
+    30
+    >>> # cleanup tests
+    >>> os.unlink(temp_path)
+    """
+    def __init__(self, path):
+        # Validate original path exists
+        with open(path):
+            pass
+
+        self._path = path
+        self._fac_path = self.convert_path(path)
+        try:
+            with open(self._fac_path) as fin:
+                self._data = json.load(fin)
+        except FileNotFoundError:
+            self._data = {}
+
+    def get(self, key, default=None):
+        return self._data.get(key, default)
+
+    def set(self, key, value):
+        self._data[key] = value
+        self.save()
+
+    def save(self):
+        """Save the current dict contents to disk."""
+        with open(self._fac_path, 'w') as fout:
+            json.dump(self._data, fout)
+
+    @staticmethod
+    def convert_path(path):
+        """
+        Prefix the filename with '.' and suffix with '.facjson'.
+
+        >>> FacJSON.convert_path("/home/user/document.txt")
+        '/home/user/.document.txt.facjson'
+        >>> FacJSON.convert_path("document.txt")
+        '.document.txt.facjson'
+        >>> FacJSON.convert_path("/path/to/file")
+        '/path/to/.file.facjson'
+        """
+        directory = os.path.dirname(path)
+        filename = os.path.basename(path)
+        new_filename = f".{filename}.facjson"
+        return os.path.join(directory, new_filename)
