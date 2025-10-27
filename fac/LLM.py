@@ -101,7 +101,7 @@ class ModelUsageSummary():
                 if event not in prices:
                     logger.warning(f'model="{model}" does not have event={event}; assuming 0 cost')
                 else:
-                    self.model_details[model]['cost'] += prices['text/in'] / 1000000.0 * tokens[event]
+                    self.model_details[model]['cost'] += prices[event] / 1000000.0 * tokens[event]
 
     def total_cost(self):
         return sum([self.model_details[model]['cost'] for model in self.model_details])
