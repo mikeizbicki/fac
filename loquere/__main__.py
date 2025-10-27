@@ -246,6 +246,23 @@ Message:
 
         return response
 
+    def commit(self):
+        '''
+        Commit all untracked files to the git repo.
+        This method will at a minimum commit the session log and any files built by the session.
+
+        WARNING:
+        This method internally runs `git add .`.
+        Therefore all files which have been created (and are not explicitly in .gitignore) will be added to the repo.
+        This includes any sensitive files (e.g. with API keys) that you might have.
+        '''
+
+        commit_message = self.send_message('generate a commit message that summarizes our conversation')
+        commit_message = f'[loquere] {commit_message}'
+        self.repo.git.add('.')
+        self.repo.git.commit('-m', commit_message)
+        return commit_message
+
 
 def is_direct_child(filepath, folder):
     '''
@@ -303,11 +320,24 @@ def main():
     session = Session(session_id=args.session_id)
     while not done:
         try:
+            # get the user input
             if args.message:
                 message = args.message
                 done = True
             else:
                 message = input('loquere> ')
+
+            # handle built-in commands
+            if message.lower().strip() == 'commit':
+                response = session.commit()
+                blue_response = "\033[94m" + response + "\033[0m"
+                print(blue_response)
+                break
+            elif message.lower().strip() == 'exit':
+                blue_response = "\033[94m" + 'Exiting without committing.' + "\033[0m"
+                break
+
+            # if not a built-in command, send to LLM
             response = session.send_message(message)
             blue_response = "\033[94m" + response + "\033[0m"
             print(blue_response)
