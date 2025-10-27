@@ -271,9 +271,9 @@ class BuildSystem:
         # so this should never happen
         raise ValueError(f'path={path}')
 
-    ######################################## 
+    ########################################
     # methods for building
-    ######################################## 
+    ########################################
 
     def build_targets(self, targets):
         for target in targets:
@@ -300,6 +300,10 @@ class BuildSystem:
             build_postreqs=False,
             traversed_paths=None,
             ):
+        # verify that variables are correctly formatted
+        for var in input_env:
+            assert '$' not in input_env[var]
+            assert ' ' not in input_env[var]
 
         # traversed_paths stores which paths have already been recursively traversed;
         # by storing these paths we can avoid repeating work
@@ -328,12 +332,30 @@ class BuildSystem:
         for dep in unresolved_dependencies:
             dependency_variables |= set(extract_variables(dep['target']))
 
+        # sanity check config
+        postreqs = config.get('postreqs', [])
+        assert type(postreqs) == list
+
+        config_variables = config.get('variables')
+        if not config_variables:
+            config_variables = {}
+        assert type(config_variables) is dict
+
+        # warn the user if they have defined a variable that is not used
+        for var in config_variables:
+            if var not in (target_variables + list(dependency_variables)):
+                logger.warning(f'variable {var} defined in config but not used in target or dependencies; this currently has no effect on the build')
+
+        ########################################
+        # Compute the contexts list
+        ########################################
+
+        # NOTE:
         # a BuildContext contains all the information needed to build a file;
         # the contexts list contains a BuildContext for each file that will be generated;
-        # we start with a list that contains a single BuildContext but many unresolved_dependencies;
         # as we process the dependencies/variables in the config,
         # the unresolved_dependencies list should shrink to [],
-        # but the total number of contexts (i.e. files needed to build) may grow;
+        # but the total number of contexts (i.e. files needed to build) may grow
         # the algorithm for generating the final contexts list is a bit subtle
         BuildContext = namedtuple('BuildContext', [
             'variables',
@@ -341,8 +363,6 @@ class BuildSystem:
             'unresolved_dependencies',
             'postreqs',
             ])
-        postreqs = config.get('postreqs', [])
-        assert type(postreqs) == list
         contexts = []
         for context_vars in expand_vars_on_newlines({**input_env, **target_env}):
             contexts.append(BuildContext(
@@ -352,38 +372,43 @@ class BuildSystem:
                 postreqs,
                 ))
 
-        config_variables = config.get('variables')
-        if not config_variables:
-            config_variables = {}
-        assert type(config_variables) is dict
+        # Perform the main traversal
+        # NOTE:
+        # Variables and dependencies have a complicated relationship where
+        # they are each defined in terms of each other.
+        # Therefore, we cannot resolve all of the vars or all of the deps at once;
+        # we must loop over both simultaneously,
+        # and resolve only those vars/deps that can currently resolvable
+        # (i.e. vars not defined in terms of unresolved deps; and deps not defined in terms of unresolved vars).
+        # Our strategy is to loop over the variables,
+        # and for each variable perform two steps:
+        # 1) resolve any resolvable dependencies
+        # 2) resolve any resolvable variables
+        # We start the iteration by looping over a DUMMY_VAR which does not actually exist;
+        # this allows us to resolve any dependencies that do not contain variables.
+        # (It is fairly common for dependencies to not contain variables,
+        # but uncommon for variables to not contain dependencies.)
         DUMMY_VAR = '__NONE__'
-        config_variables[DUMMY_VAR] = 'DUMMY_VAL'
-
-        #ordered_variables = [DUMMY_VAR] + list(set(target_variables) | dependency_variables)
-        ordered_variables = [DUMMY_VAR] + target_variables
-        for var in config_variables:
-            if var not in ordered_variables:
-                logger.warning(f'variable {var} defined in config but not used in target; this currently has no effect on the build')
-
-        for var in ordered_variables:
+        for var in [DUMMY_VAR] + target_variables:
             logger.trace(f'resolving var={var}')
 
-            # each iteration has two steps:
-            # first we evaluate the var,
-            # then we resolve any dependencies that relied on the var
+            ########################################
+            # STEP 1: resolve var
+            ########################################
 
-            # STEP 1:
-            # we must do both steps for each BuildContext,
-            # so we loop over the contexts list;
-            # if var resolves into a list, we will need to expand the contexts list;
-            # therefore, we loop over a copy and reconstruct a new list from scratch
-            contexts0 = contexts
-            contexts = []
+            # The value of var will depend on the context,
+            # and if var is a list then the size of the context will expand;
+            # Therefore we loop over a copy of the contexts list and reconstruct a new one.
+            contexts0 = contexts # old contexts
+            contexts = [] # new contexts
             for context in contexts0:
                 logger.trace(f'STEP1: evaluating var="{var}"; context={context}')
 
+                ########################################
+                # STEP 1A: compute the value of var in this context
+                ########################################
                 # raise error if var is not defined
-                if var not in config_variables and var not in context.variables:
+                if var not in [DUMMY_VAR] + target_variables + list(context.variables):
                     logger.error(f'var="{var}" required for {target_to_build} but not defined')
                     logger.error(f'HINT: you can define {var} as (1) an environment variable; (2) by providing it in the path; or (3) by defining it in the fac.yaml file')
                     sys.exit(1)
@@ -399,7 +424,7 @@ class BuildSystem:
 
                 # evaluate var by running expr in a bash shell
                 else:
-                    value = eval_expr(config_variables[var], context)
+                    value = eval_var(var, config_variables[var], context)
 
                 def raw_variable_to_list(raw):
                     '''
@@ -425,21 +450,25 @@ class BuildSystem:
 
                     return value_list
 
+                ########################################
+                # STEP 2A: Generate new contexts
+                ########################################
 
                 for val in raw_variable_to_list(value):
 
-                    # if val is an integer, pad it with zeros
-                    try:
-                        intval = int(val)
-                        val = f'{intval:04d}'
-                    except ValueError:
-                        pass
+                    # if val references another variable,
+                    # then we should substitute that variables' value
+                    if len(val) > 0 and '$' == val[0]:
+                        val = context.variables[val[1:]]
+                    assert '$' not in val, f'val={val}' # ensure that the variable actually got resolved to a value and not another variable
 
-                    # add the context
+                    # create a new dictionary with the newly evaluated variables;
+                    # but we do not add DUMMY_VAR to the context
+                    variables1 = {**context.variables}
                     if var != DUMMY_VAR:
-                        variables1 = {**context.variables, var: val}
-                    else:
-                        variables1 = context.variables
+                        variables1[var] = val
+
+                    # generate the new context
                     postreqs1 = [substitute_vars(postreq, variables1) for postreq in context.postreqs]
                     context1 = BuildContext(
                         variables1,
@@ -449,15 +478,22 @@ class BuildSystem:
                         )
                     contexts.append(context1)
 
-            # STEP 2: resolve any new dependencies
+            # log the success
             if var != DUMMY_VAR: # and len(contexts) > 1:
                 logger.info(f'resolved variable {var}; len(contexts)={len(contexts)}')
 
+            ########################################
+            # STEP 2: resolve any new dependencies
+            ########################################
+
+            # once again we will be modifying the contexts list,
+            # so we loop over a copy as in STEP 1
             contexts0 = contexts
             contexts = []
             for context in contexts0:
                 logger.trace(f'STEP2: context={context}')
 
+                '''
                 # skip variables that have nothing assigned to them
                 # FIXME:
                 # we use a janky system that uses the '' to represent empty variables;
@@ -470,6 +506,7 @@ class BuildSystem:
                         build_context = False
                 if not build_context:
                     continue
+                '''
 
                 # compute the dependencies
                 dependency_paths1 = []
@@ -478,29 +515,45 @@ class BuildSystem:
                     dep_target = dep['target']
                     logger.trace(f'dep_target="{dep_target}"')
 
-                    # only resolve a dependency if all needed variables have been resolved
+                    ########################################
+                    # STEP 2A: skip dependencies that have unresolved variables
+                    ########################################
+
+                    # the outer for-loop guarantees that one variable
+                    # will be evaluated in each iteration,
+                    # and so we will eventually evaluate this target in a later iteration
+                    # (if all the variables are actually defined)
+
                     dep_vars = extract_variables(dep_target)
                     unmatched_vars = []
                     for dep_var in dep_vars:
                         if dep_var not in context.variables and dep_var in target_variables:
-                        #if dep_var not in context.variables and (dep_var in target_variables or dep_var in config['variables']):
                             unmatched_vars.append(dep_var)
                     if len(unmatched_vars) > 0:
                         logger.trace(f'unmatched_vars={unmatched_vars}')
                         unresolved_dependencies1.append(dep)
                         continue
 
+                    ########################################
+                    # STEP 2B: skip dependencies that represent already processed files
+                    # NOTE:
+                    # not required for correctness of dependency evaluation;
+                    # just improves runtime efficiency and makes logs easier to read
+                    ########################################
+
                     # expand dep_paths into real file paths
                     try:
                         dep_paths = expand_path(dep_target, context.variables)
                     except TemplateProcessingError as e:
-                        # NOTE:
-                        # This code path should never happen.
+                        # FIXME:
                         # TemplateProcessingError is thrown when there is a variable used in the template that still needs resolving.
-                        # We check for unresolved variables above,
-                        # so this code path shouldn't trigger if everything is working correctly.
-                        #logger.error(f'expand_path("{dep_target}", ...) failed to expand with TemplateProcessingError; this should never happen')
+                        # This only happens when we use variables in a dependency that are not in the target (and hence not looped over).
+                        # The FIXME annotation below describes how this can happen,
+                        # and after that is fixed, then this code would not be needed.
+                        # For now, we set dep_paths=[] which means that we will not check for duplicate processing of files and prevent recursion.
+                        # This shouldn't affect correctness, but just reduce efficiency for those cases.
                         dep_paths = []
+                        #logger.error(f'expand_path("{dep_target}", ...) failed to expand with TemplateProcessingError; this should never happen')
                         #sys.exit(1)
 
                     # skip dependencies that we've already processed
@@ -512,16 +565,23 @@ class BuildSystem:
                         logger.debug(f'already resolved {dep_paths}')
                         dependency_paths1.extend(dep_paths)
                         continue
-                    #logger.info(f'resolving dependency: "{dep_target}", vars={context.variables}')
+
+                    ########################################
+                    # STEP 2C: recursively build dependencies
+                    ########################################
                     expanded_target = substitute_vars(dep_target, context.variables)
                     logger.info(f'resolving dependency: "{expanded_target}"')
 
-                    # build dependencies recursively
                     try:
+                        # FIXME:
+                        # we evaluate variables that do not depend on the target definition here;
+                        # this is a bit inefficient as the same variable/expression pair can be evaluated multiple times;
+                        # it also does not allow for specifying variables via the environment;
+                        # it would be "cleaner" to process these variables in the outer loop above
                         nontarget_variables = {}
                         for var in dep_vars:
                             if var not in context.variables and var in config['variables']:
-                                nontarget_variables[var] = eval_expr(config['variables'][var], context)
+                                nontarget_variables[var] = eval_var(var, config['variables'][var], context)
                         built_paths = self._traverse_target(
                                 dep_target,
                                 {**context.variables, **nontarget_variables},
@@ -532,6 +592,10 @@ class BuildSystem:
                         dependency_paths1.extend(built_paths)
 
                     except TargetNotFound:
+                        # NOTE:
+                        # Not all dependencies have to correspond to a valid target.
+                        # Non-target dependencies would be files that must be created by the user manually.
+                        # We ensure that these files exist here.
                         valid_paths = len(dep_paths) > 0
                         for path in dep_paths:
                             if not os.path.exists(path):
@@ -544,7 +608,12 @@ class BuildSystem:
                             continue
                     logger.trace(f'resolved dependency: "{dep_target}"')
 
-                    # validate all of the dep_paths
+                    ########################################
+                    # STEP 2D: validate dependencies
+                    # NOTE:
+                    # not required for correctness of dependency evaluation;
+                    # just warns users of likely bugs due to malformed input
+                    ########################################
                     if dep_paths is not None:
                         for dep_path in dep_paths:
                             logger.trace(f'validating dep_path={dep_path}')
@@ -560,6 +629,10 @@ class BuildSystem:
                     context.postreqs,
                     )
                 contexts.append(context1)
+
+        ########################################
+        # Build each context
+        ########################################
 
         # print contexts debug information
         if self.print_contexts:
@@ -772,7 +845,15 @@ class BuildSystem:
             if self.include_old:
                 with open(path_to_generate) as fin:
                     old_version = fin.read()
+                    include_threshold = 8096
+                    if len(old_version) > include_threshold:
+                        logger.warning('len(old_version) > {include_threshold}; cannot include file')
+                        old_version = None
         except FileNotFoundError:
+            # if there is no old version of the file to include, then do nothing
+            pass
+        except UnicodeDecodeError:
+            # if the file is non-text, then do nothing
             pass
         chat_prompt = ''
         if self.include_chat is not None:
@@ -932,6 +1013,7 @@ except for the changes requested by the user.
             import pprint
             #pprint.pprint(data)
             print(data[-1]['content'])
+            #sys.exit(0)
             return
 
         # write to the output file
@@ -958,7 +1040,8 @@ except for the changes requested by the user.
                     )
 
 
-def eval_expr(expr, context):
+def eval_var(var, expr, context):
+    # evaluate expr in bash
     full_command = "set -eu; " + expr.strip()
     cmd = subprocess.run(
         full_command,
@@ -970,7 +1053,23 @@ def eval_expr(expr, context):
         )
     if cmd.returncode != 0:
         raise VariableEvaluationError(var, expr, context, cmd)
-    return cmd.stdout.strip()
+    stdout = cmd.stdout.strip()
+
+    # if val is an integer, pad it with zeros
+    lines = []
+    for line in stdout.splitlines():
+        line = line.strip()
+        if line:
+            try:
+                # zero pad integers before adding to list
+                intval = int(line)
+                line = f'{intval:04d}'
+            except ValueError:
+                pass
+            lines.append(line)
+
+    result = '\n'.join(lines)
+    return result
 
 
 class FacJSON:
@@ -1044,3 +1143,38 @@ class FacJSON:
         filename = os.path.basename(path)
         new_filename = f".{filename}.facjson"
         return os.path.join(directory, new_filename)
+
+
+class CommandExecutionError(Exception):
+    def __init__(self, result):
+        errorstrs = [
+            f"result.returncode={result.returncode}",
+            f"result.output={result.stdout.read()}",
+            ]
+        super().__init__('\n'.join(errorstrs))
+
+
+class VariableEvaluationError(Exception):
+    def __init__(self, var, expr, context, result):
+        errorstrs = [
+            f'error evaluating {var}=$({expr})',
+            f'context={context}',
+            f"result.returncode={result.returncode}",
+            f"result.stdout={result.stdout}",
+            f"result.stderr={result.stderr}",
+            ]
+        super().__init__('\n'.join(errorstrs))
+
+
+class EmptyVariableError(Exception):
+    def __init__(self, var, expr):
+        errorstrs = [
+            f'{var}=$({expr})',
+            ]
+        super().__init__('\n'.join(errorstrs))
+
+
+class TargetNotFound(Exception):
+    pass
+
+

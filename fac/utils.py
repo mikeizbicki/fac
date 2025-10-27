@@ -152,36 +152,6 @@ class TemplateProcessingError(Exception):
         super().__init__(stderr)
 
 
-class CommandExecutionError(Exception):
-    def __init__(self, result):
-        self.result = result
-        super().__init__(result.stderr)
-
-
-class VariableEvaluationError(Exception):
-    def __init__(self, var, expr, context, result):
-        errorstrs = [
-            f'error evaluating {var}=$({expr})',
-            f'context={context}',
-            f"result.returncode={result.returncode}",
-            f"result.stdout={result.stdout}",
-            f"result.stderr={result.stderr}",
-            ]
-        super().__init__('\n'.join(errorstrs))
-
-
-class EmptyVariableError(Exception):
-    def __init__(self, var, expr):
-        errorstrs = [
-            f'{var}=$({expr})',
-            ]
-        super().__init__('\n'.join(errorstrs))
-
-
-class TargetNotFound(Exception):
-    pass
-
-
 def expand_path(path, env_vars=None):
     """
     Expand environment variables and wildcards in a path.
