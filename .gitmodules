@@ -16,3 +16,6 @@
 [submodule "greek_story"]
 	path = greek
 	url = https://github.com/mikeizbicki/greek
+[submodule "fac_test_depvars"]
+	path = tests/fac_test_depvars
+	url = https://github.com/mikeizbicki/fac_test_depvars

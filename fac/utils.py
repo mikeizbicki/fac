@@ -37,6 +37,89 @@ def substitute_vars(template_str, vars_dict=None):
     return template_str
 
 
+def substitute_vars_list(template_str, vars_dict=None):
+    """
+    Substitute variables in a string with values from a dictionary, returning a list.
+
+    If a variable contains newlines, it's split and creates multiple output strings.
+    If no variables contain newlines, returns a single-item list.
+
+    >>> substitute_vars_list('Path is $VAR1', {'VAR1': 'value1'})
+    ['Path is value1']
+    >>> substitute_vars_list('Path is $VAR1', {'VAR1': 'line1\\nline2'})
+    ['Path is line1', 'Path is line2']
+    >>> substitute_vars_list('$VAR1 and $VAR2', {'VAR1': 'a\\nb', 'VAR2': '1\\n2'})
+    ['a and 1', 'a and 2', 'b and 1', 'b and 2']
+
+    >>> substitute_vars_list('Path is $VAR1 and $VAR2', {})
+    ['Path is $VAR1 and $VAR2']
+    >>> substitute_vars_list('$VAR1 and $VAR2', {'VAR1': 'a\\nb'})
+    ['a and $VAR2', 'b and $VAR2']
+    """
+    if vars_dict is None:
+        vars_dict = {}
+
+    results = [template_str]
+
+    for var, value in vars_dict.items():
+        new_results = []
+        for result in results:
+            if f'${var}' in result or f'${{{var}}}' in result:
+                lines = str(value).split('\n')
+                for line in lines:
+                    new_str = result.replace(f'${var}', line).replace(f'${{{var}}}', line)
+                    new_results.append(new_str)
+            else:
+                new_results.append(result)
+        results = new_results
+
+    return results
+
+
+def substitute_vars_with_multiline(template_str, vars_dict=None):
+    """
+    Substitute variables in a string, but leave multiline variables unsubstituted.
+    
+    Returns a tuple of (substituted_string, multiline_vars_dict).
+    Variables with newlines are not substituted and are returned in the dict.
+    
+    >>> substitute_vars_with_multiline('Path is $VAR1', {'VAR1': 'value1'})
+    ('Path is value1', {})
+    >>> substitute_vars_with_multiline('Path is $VAR1', {'VAR1': 'line1\\nline2'})
+    ('Path is $VAR1', {'VAR1': ['line1', 'line2']})
+    >>> substitute_vars_with_multiline('$VAR1 and $VAR2', {'VAR1': 'single', 'VAR2': 'a\\nb'})
+    ('single and $VAR2', {'VAR2': ['a', 'b']})
+    >>> substitute_vars_with_multiline('$VAR1 and $VAR2', {'VAR1': 'single', 'VAR2': 'a\\nb', 'VAR3': 'a\\nb'})
+    ('single and $VAR2', {'VAR2': ['a', 'b']})
+    >>> substitute_vars_with_multiline('$VAR1 and $VAR2', {'VAR1': 'single', 'VAR2': 'a\\nb', 'VAR3': 'a'})
+    ('single and $VAR2', {'VAR2': ['a', 'b']})
+    >>> substitute_vars_with_multiline('Path is $VAR1 and $VAR2', {'VAR1': 'value1'})
+    ('Path is value1 and $VAR2', {})
+    >>> substitute_vars_with_multiline('Path is $VAR1 and $VAR2', {})
+    ('Path is $VAR1 and $VAR2', {})
+    >>> substitute_vars_with_multiline('Path is $VAR1 and $VAR2', {'VAR3': 'a\\nb'})
+    ('Path is $VAR1 and $VAR2', {})
+    >>> substitute_vars_with_multiline('Path is $VAR1 and $VAR2', {'VAR3': 'a'})
+    ('Path is $VAR1 and $VAR2', {})
+    """
+    if vars_dict is None:
+        vars_dict = {}
+    
+    result_str = template_str
+    multiline_vars = {}
+    
+    for var, value in vars_dict.items():
+        if f'${var}' in template_str or f'${{{var}}}' in template_str:
+            value_str = str(value)
+            if '\n' in value_str:
+                multiline_vars[var] = value_str.split('\n')
+            else:
+                result_str = result_str.replace(f'${var}', value_str)
+                result_str = result_str.replace(f'${{{var}}}', value_str)
+    
+    return result_str, multiline_vars
+
+
 def process_template(template_content, env_vars=None):
     """
     Process a template string by evaluating shell expressions within it.
@@ -133,7 +216,7 @@ def process_template(template_content, env_vars=None):
         # Execute the script and capture output
         result = subprocess.run([script_path], capture_output=True, text=True, env={**os.environ, **env_vars})
         if result.returncode != 0 or len(result.stderr.strip()) > 0:
-            raise TemplateProcessingError(result.returncode, result.stdout, result.stderr)
+            raise TemplateProcessingError(result.returncode, result.stdout, result.stderr, env_vars)
         return result.stdout.strip()
 
     finally:
@@ -145,10 +228,11 @@ def process_template(template_content, env_vars=None):
 class TemplateProcessingError(Exception):
     """Exception raised when template processing fails."""
 
-    def __init__(self, returncode, stdout, stderr):
+    def __init__(self, returncode, stdout, stderr, env_vars):
         self.returncode = returncode
         self.stdout = stdout
         self.stderr = stderr
+        self.env_vars = env_vars
         super().__init__(stderr)
 
 
@@ -460,3 +544,55 @@ def expand_vars_on_newlines(env_vars):
     combinations = product(*[split_vars[k] for k in keys])
 
     return [dict(zip(keys, combo)) for combo in combinations]
+
+
+def variable_dictionary_resolve(env_vars):
+    '''
+    The input dictionary represents a set of variable assignments.
+    Some variables may be assigned to other variables (using $VAR shell notation).
+    This function returns a resolved dictionary where all of these substitutions have occurred.
+
+    # Chain resolution
+    >>> variable_dictionary_resolve({'a': '1', 'b': '$a', 'c': '$b'})
+    {'a': '1', 'b': '1', 'c': '1'}
+
+    # Multiple variables in one value
+    >>> variable_dictionary_resolve({'a': '1', 'b': '2', 'c': '$a$b'})
+    {'a': '1', 'b': '2', 'c': '12'}
+    >>> variable_dictionary_resolve({'a': 'hello', 'b': 'world', 'c': '$a $b'})
+    {'a': 'hello', 'b': 'world', 'c': 'hello world'}
+
+    # Partial matches
+    >>> variable_dictionary_resolve({'a': '1', 'ab': '$a2'})
+    {'a': '1', 'ab': '$a2'}
+    >>> variable_dictionary_resolve({'a': '1', 'b': 'prefix$a'})
+    {'a': '1', 'b': 'prefix1'}
+
+    # Undefined variables (remain as-is)
+    >>> variable_dictionary_resolve({'a': '$undefined'})
+    {'a': '$undefined'}
+
+    # Empty dictionary
+    >>> variable_dictionary_resolve({})
+    {}
+    '''
+    resolved = env_vars.copy()
+    changed = True
+
+    # Keep resolving until no more substitutions are made
+    while changed:
+        changed = False
+        for key, value in resolved.items():
+            # Find all $VAR patterns in the value
+            matches = re.findall(r'\$([a-zA-Z_][a-zA-Z0-9_]*)', str(value))
+            new_value = str(value)
+
+            for var_name in matches:
+                if var_name in resolved:
+                    # Replace $var_name with its resolved value
+                    new_value = new_value.replace(f'${var_name}', str(resolved[var_name]))
+                    changed = True
+
+            resolved[key] = new_value
+
+    return resolved
