@@ -46,6 +46,7 @@ def validate_file(path, schema_file=None, fix=False):
         try:
             json.loads(text)
         except json.JSONDecodeError as e:
+            logger.warning(f'JSONDecodeError: path={path} schema_file={schema_file}')
             if fix:
                 logger.info(f'fixing JSONDecodeError in path={path}')
                 import json_repair
@@ -60,9 +61,13 @@ def validate_file(path, schema_file=None, fix=False):
             logger.trace(f'verifying that "{path}" satisfies schema "{schema_file}"')
             with open(path) as fin:
                 data = json.load(fin)
-            with open(schema_file) as fin:
-                schema = json.load(fin)
-                jsonschema.validate(instance=data, schema=schema)
+            try:
+                with open(schema_file) as fin:
+                    schema = json.load(fin)
+                    jsonschema.validate(instance=data, schema=schema)
+            except jsonschema.exceptions.ValidationError as e:
+                log_message = str(e).split('\n')[0]
+                logger.warning(f'JSON schema validation error: {log_message}')
 
         # reformat with pretty indentation
         if fix:
@@ -374,10 +379,8 @@ class BuildSystem:
             'postreqs',
             ])
         contexts = []
-        #filtered_input_env = {k: v for k, v in {**input_env, **target_env}.items() if k in target_variables}
         filtered_input_env = {k: v for k, v in {**input_env, **target_env}.items()}
-        for context_vars in expand_vars_on_newlines(filtered_input_env):
-        #for context_vars in expand_vars_on_newlines({**input_env, **target_env}):
+        for context_vars in expand_vars_on_newlines(filtered_input_env, filter_variables=target_variables):
             contexts.append(BuildContext(
                 context_vars,
                 [],
@@ -424,15 +427,6 @@ class BuildSystem:
                 ########################################
                 # STEP 1A: compute the value of var in this context
                 ########################################
-                '''
-                # raise error if var is not defined
-                if var not in [DUMMY_VAR] + target_variables + list(context.variables):
-                    print(f"target_variables={target_variables}")
-                    print(f"context.variables={context.variables}")
-                    logger.error(f'var="{var}" required for {target_to_build} but not defined')
-                    logger.error(f'HINT: you can define {var} as (1) an environment variable; (2) by providing it in the path; or (3) by defining it in the fac.yaml file')
-                    sys.exit(1)
-                '''
 
                 # do not evaluate var if it is DUMMY_VAR,
                 # since it was created only to force the unresolved_dependencies to run once
@@ -574,7 +568,7 @@ class BuildSystem:
                     if all_resolved and len(dep_paths) > 0:
                         logger.debug(f'already resolved {dep_paths}')
                         dependency_paths1.extend(dep_paths)
-                        #continue
+                        continue
 
                     # skip dependencies that we've already processed
                     expanded_target, expanded_vars = substitute_vars_with_multiline(dep_target, context.variables)

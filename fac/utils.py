@@ -43,18 +43,38 @@ def substitute_vars_list(template_str, vars_dict=None):
 
     If a variable contains newlines, it's split and creates multiple output strings.
     If no variables contain newlines, returns a single-item list.
+    If any variable is empty, returns an empty list.
 
-    >>> substitute_vars_list('Path is $VAR1', {'VAR1': 'value1'})
-    ['Path is value1']
-    >>> substitute_vars_list('Path is $VAR1', {'VAR1': 'line1\\nline2'})
-    ['Path is line1', 'Path is line2']
-    >>> substitute_vars_list('$VAR1 and $VAR2', {'VAR1': 'a\\nb', 'VAR2': '1\\n2'})
-    ['a and 1', 'a and 2', 'b and 1', 'b and 2']
+    Basic substitution:
+    >>> substitute_vars_list('Hello $name', {'name': 'world'})
+    ['Hello world']
+    >>> substitute_vars_list('$greeting $name', {'greeting': 'Hi', 'name': 'Alice'})
+    ['Hi Alice']
+    >>> substitute_vars_list('${var1}_${var2}', {'var1': 'prefix', 'var2': 'suffix'})
+    ['prefix_suffix']
 
-    >>> substitute_vars_list('Path is $VAR1 and $VAR2', {})
-    ['Path is $VAR1 and $VAR2']
-    >>> substitute_vars_list('$VAR1 and $VAR2', {'VAR1': 'a\\nb'})
-    ['a and $VAR2', 'b and $VAR2']
+    Multiline variables:
+    >>> substitute_vars_list('Name: $name', {'name': 'Alice\\nBob'})
+    ['Name: Alice', 'Name: Bob']
+    >>> substitute_vars_list('$x-$y', {'x': 'a\\nb', 'y': '1\\n2'})
+    ['a-1', 'a-2', 'b-1', 'b-2']
+
+    Edge cases with empty/whitespace:
+    >>> substitute_vars_list('Value: $var', {'var': ''})
+    []
+    >>> substitute_vars_list('$a and $b', {'a': 'hello', 'b': ''})
+    []
+    >>> substitute_vars_list('$var', {'var': '  \\n  \\nvalid\\n  '})
+    ['valid']
+
+    No substitutions:
+    >>> substitute_vars_list('No variables here', {})
+    ['No variables here']
+    >>> substitute_vars_list('$missing stays', {'other': 'value'})
+    ['$missing stays']
+    >>> substitute_vars_list('$found and $missing', {'found': 'exists'})
+    ['exists and $missing']
+
     """
     if vars_dict is None:
         vars_dict = {}
@@ -67,11 +87,14 @@ def substitute_vars_list(template_str, vars_dict=None):
             if f'${var}' in result or f'${{{var}}}' in result:
                 lines = str(value).split('\n')
                 for line in lines:
-                    new_str = result.replace(f'${var}', line).replace(f'${{{var}}}', line)
-                    new_results.append(new_str)
+                    line = line.strip()
+                    if line:  # Only append if line is non-empty
+                        new_str = result.replace(f'${var}', line).replace(f'${{{var}}}', line)
+                        new_results.append(new_str)
             else:
                 new_results.append(result)
         results = new_results
+
 
     return results
 
@@ -506,43 +529,93 @@ def match_pattern(patterns, input_string):
         return (None, {})
 
 
-def expand_vars_on_newlines(env_vars):
+def expand_vars_on_newlines(env_vars, filter_variables=None):
     r'''
     Takes a dictionary where values may contain newline characters and returns
     a list of dictionaries representing all possible combinations where each
     newline-separated value is treated as an alternative.
-    
+
+    If filter_variables is provided, variables in that list will cause the
+    function to return [] if they have no valid values.
+
+    Basic cases:
     >>> expand_vars_on_newlines({})
     [{}]
     >>> expand_vars_on_newlines({'a': 'test'})
     [{'a': 'test'}]
+
+    Single variable with multiple values:
     >>> expand_vars_on_newlines({'a': 'hello\nworld'})
     [{'a': 'hello'}, {'a': 'world'}]
     >>> expand_vars_on_newlines({'a': 'one\ntwo\nthree'})
     [{'a': 'one'}, {'a': 'two'}, {'a': 'three'}]
 
+    Multiple variables - no newlines:
     >>> expand_vars_on_newlines({'a': 'test', 'b': 'prueba'})
     [{'a': 'test', 'b': 'prueba'}]
+
+    Multiple variables - combinations:
     >>> expand_vars_on_newlines({'a': 'hello\nworld', 'b': 'prueba'})
     [{'a': 'hello', 'b': 'prueba'}, {'a': 'world', 'b': 'prueba'}]
-    >>> expand_vars_on_newlines({'a': 'hello\nworld', 'b': 'hola\nmundo'})
-    [{'a': 'hello', 'b': 'hola'}, {'a': 'hello', 'b': 'mundo'}, {'a': 'world', 'b': 'hola'}, {'a': 'world', 'b': 'mundo'}]
-
     >>> expand_vars_on_newlines({'a': 'x\ny', 'b': '1\n2'})
     [{'a': 'x', 'b': '1'}, {'a': 'x', 'b': '2'}, {'a': 'y', 'b': '1'}, {'a': 'y', 'b': '2'}]
 
+    Whitespace handling:
+    >>> expand_vars_on_newlines({'a': ' hello \n world '})
+    [{'a': 'hello'}, {'a': 'world'}]
+    >>> expand_vars_on_newlines({'a': 'test\n  \nmore'})
+    [{'a': 'test'}, {'a': 'more'}]
+
+    Empty variables (default behavior - kept in results):
+    >>> expand_vars_on_newlines({'a': ''})
+    [{}]
+    >>> expand_vars_on_newlines({'a': '   '})
+    [{}]
+    >>> expand_vars_on_newlines({'a': 'test', 'b': ''})
+    [{'a': 'test'}]
+    >>> expand_vars_on_newlines({'a': '\n\n\n'})
+    [{}]
+
+    Filter variables (collapse to [] if filtered variables are empty):
+    >>> expand_vars_on_newlines({'a': ''}, filter_variables=['a'])
+    []
+    >>> expand_vars_on_newlines({'a': 'test', 'b': ''}, filter_variables=['b'])
+    []
+    >>> expand_vars_on_newlines({'a': 'test', 'b': ''}, filter_variables=['a'])
+    [{'a': 'test'}]
+    >>> expand_vars_on_newlines({'a': '  \n  ', 'b': 'valid'}, filter_variables=['a'])
+    []
+
+    Real-world example:
     >>> expand_vars_on_newlines({'PATH': '/bin\n/usr/bin', 'HOME': '/root'})
     [{'PATH': '/bin', 'HOME': '/root'}, {'PATH': '/usr/bin', 'HOME': '/root'}]
     '''
-    # Split values on newlines and create lists
-    split_vars = {k: v.split('\n') if isinstance(v, str) else [v]
-                  for k, v in env_vars.items()}
+    if filter_variables is None:
+        filter_variables = []
+
+    # Split values on newlines and create lists, filtering out empty/whitespace entries
+    split_vars = {}
+    for k, v in env_vars.items():
+        if isinstance(v, str):
+            values = [val.strip() for val in v.split('\n') if val.strip()]
+        else:
+            values = [str(v).strip()] if str(v).strip() else []
+
+        # If this variable is in filter_variables and has no valid values, return empty list
+        if k in filter_variables and not values:
+            return []
+
+        # Only include variables that have valid values
+        if values:
+            split_vars[k] = values
 
     # Generate all combinations
     from itertools import product
     keys = list(split_vars.keys())
-    combinations = product(*[split_vars[k] for k in keys])
+    if not keys:
+        return [{}]
 
+    combinations = product(*[split_vars[k] for k in keys])
     return [dict(zip(keys, combo)) for combo in combinations]
 
 
