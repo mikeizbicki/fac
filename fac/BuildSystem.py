@@ -304,7 +304,7 @@ class BuildSystem:
         # verify that variables are correctly formatted
         for var in input_env:
             assert '$' not in input_env[var], f'input_env[var]={input_env[var]}'
-            assert ' ' not in input_env[var]
+            assert ' ' not in input_env[var], f'input_env[var]={input_env[var]}'
 
         # load target config
         config_targets = self.full_config.keys()
