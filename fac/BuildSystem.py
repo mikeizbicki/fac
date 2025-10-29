@@ -252,12 +252,13 @@ class BuildSystem:
         # if a file is dirty or not in the repo,
         # we use the last modified time;
         # this should only happen if auto_commit=False
-        dirty_files = [item.a_path for item in self.repo.index.diff(None)]
-        staged_files = [item.a_path for item in self.repo.index.diff('HEAD')]
-        if (path in dirty_files or
-            path in staged_files or
-            path in self.repo.untracked_files
-            ):
+        # computing whether a file is dirty is expensive,
+        # so we precompute a set once and store it for future calls of this function
+        if not hasattr(self, '_dirty_files'):
+            modified_files = [item.a_path for item in self.repo.index.diff(None)]
+            staged_files = [item.a_path for item in self.repo.index.diff('HEAD')]
+            self._dirty_files = set(modified_files) | set(staged_files) | set(self.repo.untracked_files)
+        if path in self._dirty_files:
             mtime = os.path.getmtime(path)
             return mtime
 
