@@ -567,8 +567,8 @@ class BuildSystem:
                     except TemplateProcessingError as e:
                         # NOTE:
                         # TemplateProcessingError is thrown when there is a variable used in the template that still needs resolving.
-                        # But all the variables should be resolved because we are looping over the variables and resolving them.
-                        # This check is only here to aid debugging.
+                        # This can happen when we are depending on a target and not defining the variables in the current target.
+                        # we don't know what the dep_paths are, so we "skip" it.
                         dep_paths = []
                         #logger.error(f'expand_path("{dep_target}", ...) failed to expand with TemplateProcessingError; this should never happen')
                         #sys.exit(1)
@@ -588,6 +588,8 @@ class BuildSystem:
                     var_str = ''.join([f', {k}={v}' for k, v in expanded_vars.items()])
                     target_str = expanded_target + var_str
                     if target_str in traversed_deps:
+                        target_deps = substitute_vars_list(dep_target, context.variables)
+                        dependency_paths1.extend(target_deps)
                         continue
                     traversed_deps.add(target_str)
 
@@ -865,7 +867,7 @@ class BuildSystem:
             if self.include_old:
                 with open(path_to_generate) as fin:
                     old_version = fin.read()
-                    include_threshold = 8096
+                    include_threshold = 1e6
                     if len(old_version) > include_threshold:
                         logger.warning('len(old_version) > {include_threshold}; cannot include file')
                         old_version = None
