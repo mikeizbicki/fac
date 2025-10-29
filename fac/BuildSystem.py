@@ -257,8 +257,8 @@ class BuildSystem:
         if not hasattr(self, '_dirty_files'):
             modified_files = [item.a_path for item in self.repo.index.diff(None)]
             staged_files = [item.a_path for item in self.repo.index.diff('HEAD')]
-            self._dirty_files = set(modified_files) | set(staged_files) | set(self.repo.untracked_files)
-        if path in self._dirty_files:
+            self._dirty_files = set(modified_files) | set(staged_files)
+        if path in self._dirty_files or self._is_path_untracked(path):
             mtime = os.path.getmtime(path)
             return mtime
 
@@ -276,6 +276,18 @@ class BuildSystem:
         # the above code should handle all possible cases,
         # so this should never happen
         raise ValueError(f'path={path}')
+
+    def _is_path_untracked(self, path):
+        '''
+        Helper function for _committed_date that returns whether a file is tracked by git or not in O(1) time.
+        '''
+        try:
+            # If file is tracked, this won't raise an exception
+            self.repo.git.ls_files('--error-unmatch', path)
+            return False
+        except:
+            # File is untracked if it exists but ls-files fails
+            return os.path.exists(path)
 
     ########################################
     # methods for building
