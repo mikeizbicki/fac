@@ -254,11 +254,16 @@ class BuildSystem:
         # this should only happen if auto_commit=False
         # computing whether a file is dirty is expensive,
         # so we precompute a set once and store it for future calls of this function
+        '''
         if not hasattr(self, '_dirty_files'):
             modified_files = [item.a_path for item in self.repo.index.diff(None)]
             staged_files = [item.a_path for item in self.repo.index.diff('HEAD')]
             self._dirty_files = set(modified_files) | set(staged_files)
         if path in self._dirty_files or self._is_path_untracked(path):
+        '''
+        # FIXME: code above has a bug where the self._dirty_files becomes stale;
+        # below should fix but it's not thoroughly tested yet
+        if self._is_file_dirty(path) or self._is_path_untracked(path):
             mtime = os.path.getmtime(path)
             return mtime
 
@@ -276,6 +281,14 @@ class BuildSystem:
         # the above code should handle all possible cases,
         # so this should never happen
         raise ValueError(f'path={path}')
+
+    def _is_file_dirty(self, path):
+        try:
+            # Git status returns empty if file is clean
+            result = self.repo.git.status('--porcelain', path)
+            return len(result.strip()) > 0
+        except:
+            return False
 
     def _is_path_untracked(self, path):
         '''
