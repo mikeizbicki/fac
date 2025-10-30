@@ -24,13 +24,16 @@ def tool(path):
 
     # read the file
     with open(path, 'rt') as fin:
-        return fin.read()
+        try:
+            return fin.read()
+        except UnicodeDecodeError as e:
+            return f'"{path}" is a binary file and cannot be loaded'
 
 data = {
     "type": "function",
     "function": {
         "name": "read_file",
-        "description": "Read the contents of the specified file.  If you think you might need to read the contents of multiple files, multiple tool requests should be sent at the same time to speed up processing.  Never read files before using fac_build (if a file needs to be read, fac_build will read it automatically).",
+        "description": "Read the contents of the specified text file.  If you think you might need to read the contents of multiple files, multiple tool requests should be sent at the same time to speed up processing.  Never read files before using fac_build (if a file needs to be read, fac_build will read it automatically).",
         "parameters": {
             "type": "object",
             "properties": {
