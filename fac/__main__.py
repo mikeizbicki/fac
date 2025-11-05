@@ -7,7 +7,7 @@ The Latin verb `facio` means to do/make, and fac is the imperative form.
 from dataclasses import fields
 import typing
 
-from fac.BuildSystem import BuildSystem, DirtyRepo
+from fac.BuildSystem import *
 
 
 def str2bool(v):
@@ -58,7 +58,7 @@ def main():
     try:
         with build_system:
             build_system.build_targets(args.targets)
-    except DirtyRepo:
+    except (DirtyRepo, NoTargetsMatched):
         return 1
 
 

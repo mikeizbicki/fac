@@ -3,6 +3,7 @@ from collections import namedtuple, Counter
 from dataclasses import dataclass
 from datetime import datetime
 import copy
+import hashlib
 import itertools
 import json
 import os
@@ -112,8 +113,9 @@ class BuildSystem:
     overwrite: bool = False
     build_postreqs: bool = False
     extend: int = False
+    print_dependencies: bool = True
     print_prompt: bool = False
-    print_prompt_to_file: bool = False
+    print_prompt_to_file: str = False
     print_contexts: bool = False
     print_config: bool = False
     no_validate: bool = False
@@ -132,6 +134,12 @@ class BuildSystem:
         if self.trace:
             logger.setLevel('TRACE')
         self.validate_output = not (self.print_prompt or self.print_contexts) and not self.no_validate
+
+        # freeze/thaw
+        assert not (self.freeze and self.thaw)
+        if self.freeze or self.thaw:
+            self.no_build = True
+            self.print_dependencies = False
 
         # load global settings
         self.global_settings = {
@@ -307,11 +315,23 @@ class BuildSystem:
     ########################################
 
     def build_targets(self, targets):
-        for target in targets:
+        config_targets = self.full_config.keys()
+        expanded_targets = [(target, match_pattern_starstar(config_targets, target)) for target in targets]
+
+        flattened_targets = []
+        for target, matches in expanded_targets:
+            if len(matches) == 0:
+                err_message = f"no target matched for '{target}'"
+                logger.error(err_message)
+                raise NoTargetsMatched(err_message)
+            flattened_targets.extend(matches)
+        flattened_targets.sort()
+
+        for target, target_vars in flattened_targets:
             logger.info(f'target="{target}"')
             self._traverse_target(
                     target,
-                    {},
+                    target_vars,
                     foreach_context=self._build_context,
                     overwrite=self.overwrite or self.from_scratch,
                     build_postreqs=self.build_postreqs,
@@ -703,8 +723,19 @@ class BuildSystem:
             # NOTE:
             # by default, we will build the given context;
             # but we may not rebuild if the path already exists
+            file_status = []
             build_context = True
             if os.path.exists(path_to_generate):
+
+                # do not rebuild if file is frozen
+                if FacJSON(path_to_generate).get('frozen', False):
+                    file_status.append('frozen')
+                    build_context = False
+
+                # do not rebuild the file if auto_rebuild is disabled
+                if not config.get('auto_rebuild', True) and build_context:
+                    file_status.append('auto_rebuild disabled')
+                    build_context = False
 
                 # if the file is up-to-date (i.e. all dependencies are older),
                 # then we will not rebuild it
@@ -716,24 +747,20 @@ class BuildSystem:
                     if time_diff < 0:
                         updated_deps.append(path)
                 if updated_deps == []:
+                    file_status.append('up-to-date')
                     build_context = False
-                    logger.info(f'file up-to-date {i+1}/{len(contexts)} "{path_to_generate}"')
+                else:
+                    file_status.append('out-of-date')
 
-                elif FacJSON(path_to_generate).get('frozen', False):
-                    build_context = False
-                    logger.info(f'file frozen {i+1}/{len(contexts)} "{path_to_generate}"')
-
-                # do not rebuild the file if auto_rebuild is disabled
-                elif not config.get('auto_rebuild', True) and build_context:
-                    build_context = False
-                    logger.info(f'auto_rebuild disabled {i+1}/{len(contexts)} "{path_to_generate}"')
-
-            # perform the actual build
-            if build_context or overwrite:
-                logger.info(f'building file {i+1}/{len(contexts)} "{path_to_generate}"')
+            # print logging info
+            logger.info(f'file {i+1}/{len(contexts)} [{", ".join(file_status)}] "{path_to_generate}"')
+            if self.print_dependencies and (build_context or overwrite):
                 logger.info('dependency_paths:', submessage=True)
                 for path in context.dependency_paths:
                     logger.info(f' - {path}', submessage=True)
+
+            # perform the actual build
+            if build_context or overwrite:
                 foreach_context(path_to_generate, config, context, overwrite)
             traversed_paths.add(path_to_generate)
 
@@ -743,16 +770,16 @@ class BuildSystem:
 
             # freeze/thaw file
             if root_call:
-                if self.freeze:
-                    facjson = FacJSON(path_to_generate)
+                facjson = FacJSON(path_to_generate)
+                is_frozen = facjson.get('frozen')
+                if self.freeze and not is_frozen:
                     facjson.set('frozen', True)
                     facjson.save()
-                    logger.info(f'freezing... done.', submessage=True)
-                elif self.thaw:
-                    facjson = FacJSON(path_to_generate)
+                    logger.info(f'freezing...', submessage=True)
+                elif self.thaw and is_frozen:
                     facjson.set('frozen', False)
                     facjson.save()
-                    logger.info(f'thawing... done.', submessage=True)
+                    logger.info(f'thawing...', submessage=True)
 
             # traverse postreqs
             for postreq in context.postreqs:
@@ -807,28 +834,17 @@ class BuildSystem:
 
         # first we generate the instructions for the llm,
         # which will be stored in the `prompt_cmd` variable.
-        if 'prompt' in config:
-            prompt_cmd = config['prompt'] or ''
-        elif 'prompt_file' in config:
-            prompt_path_template = config['prompt_file']
-            prompt_path = process_template(prompt_path_template, env_vars=context.variables)
-            try:
-                with open(prompt_path) as fin:
-                    prompt_cmd = fin.read()
-            except FileNotFoundError:
-                logger.error(f'prompt_path={prompt_path} not found')
-                sys.exit(1)
-        elif config.get('description'):
-            prompt_cmd = f'Generate a file whose content matches the following description. \n<description>\n{config.get("description")}\n</description>'
+        prompt_instructions = f'''<instructions>
+Generate the file "{path_to_generate}" based on the information below.
+</instructions>
+'''
+
+        if 'description' in config:
+            prompt_description = f'<file_description>\n{config.get("description")}\n</file_description>'
+            prompt_description = process_template(prompt_description, env_vars=context.variables)
+            prompt_description += '\n'
         else:
-            prompt_cmd = ''
-            if 'schema_file' not in config:
-                logger.error('no prompt given and no schema given')
-                sys.exit(1)
-        if len(prompt_cmd) > 0:
-            prompt_cmd = "<instructions>\n" + prompt_cmd.strip() + "\n</instructions>"
-            prompt_cmd = process_template(prompt_cmd, env_vars=context.variables)
-            prompt_cmd += '\n'
+            prompt_description = ''
 
         # next we compile all the documents that will be passed to the LLM,
         # text documents are processed to form part of the prompt
@@ -837,7 +853,7 @@ class BuildSystem:
         if len(context.dependency_paths) == 0:
             files_prompt = ''
         else:
-            files_prompt = '<documents>\n'
+            files_prompt = '<reference_documents>\n'
             for path in context.dependency_paths:
 
                 # skip paths that are annotated with "include: False"
@@ -870,7 +886,7 @@ class BuildSystem:
                         files_prompt += f'''<document path="{path}">\n{fin.read().strip()}\n</document>\n'''
                 except UnicodeDecodeError:
                     binary_files.append(path)
-            files_prompt += '</documents>'
+            files_prompt += '</reference_documents>'
             logger.trace(f'files_prompt generated; len(context.dependency_paths)={len(context.dependency_paths)}')
 
         # include a chat history if provided
@@ -929,7 +945,7 @@ except for the changes requested by the user.
             filetype = 'image'
             logger.trace(f'filetype={filetype}')
             data = {}
-            data['prompt'] = prompt_cmd + files_prompt + chat_prompt
+            data['prompt'] = prompt_instructions + prompt_description + files_prompt + chat_prompt
             data['reference_images'] = binary_files
             data['quality'] = config.get('image_quality', 'low')
             data['orientation'] = config.get('image_orientation', 'landscape')
@@ -1016,7 +1032,7 @@ except for the changes requested by the user.
             # add the user role + message
             messages.append({
                 'role': 'user',
-                'content': f'Generate the file {path_to_generate} based on the information below.\n' + prompt_cmd + format_cmd + files_prompt + chat_prompt,
+                'content':  prompt_instructions + prompt_description + format_cmd + files_prompt + chat_prompt,
                 })
 
             # extend the existing output
@@ -1048,15 +1064,39 @@ except for the changes requested by the user.
             import pprint
             #pprint.pprint(data)
             print(data[-1]['content'])
-            #sys.exit(0)
-            return
+            # FIXME:
+            # this words for printing the text prompts nicely,
+            # but not other formats
 
-        # write to the output file
+        # write prompt to the output file
         if self.print_prompt_to_file:
-            with open(path_to_generate, 'wt') as fout:
+            with open(self.print_prompt_to_file, 'wt') as fout:
                 #json.dump(data, fout, indent=4)
                 fout.write(data[-1]['content'])
 
+        # NOTE:
+        # sometimes it is not necessary to rebuild a file even if the dependencies have been updated;
+        # this can occur, for example, when the prompt depends only on part of the dependencies;
+        # we check hashes of the prompt/file to see if we can skip rebuilding
+        facjson = FacJSON(path_to_generate)
+        try:
+            with open(path_to_generate, 'rb') as fin:
+                hash_contents_fin = hashlib.sha256(fin.read()).hexdigest()
+                contents_changed = hash_contents_fin != facjson.get('hash_contents')
+        except FileNotFoundError as e:
+            contents_changed = True
+        encoded_prompt = json.dumps(data).encode('utf-8')
+        hash_prompt_new = hashlib.sha256(encoded_prompt).hexdigest()
+        prompt_changed = hash_prompt_new != facjson.get('hash_prompt')
+
+        # skip building file if not needed
+        if not (contents_changed or prompt_changed):
+            logger.info('content/prompts match, building not needed', submessage=True)
+
+        elif self.no_build:
+            logger.info('build required, but skipping...', submessage=True)
+
+        # actually build the file
         else:
             mode = 'wb'
             if self.from_scratch or overwrite:
@@ -1064,15 +1104,22 @@ except for the changes requested by the user.
                     mode = 'ab'
                 else:
                     mode = 'wb'
-            if not self.no_build:
-                self.llm.generate_file(
-                    filetype,
-                    path_to_generate,
-                    data,
-                    mode=mode,
-                    model=config.get('model'),
-                    response_format=response_format,
-                    )
+            logger.info('building...', submessage=True)
+            self.llm.generate_file(
+                filetype,
+                path_to_generate,
+                data,
+                mode=mode,
+                model=config.get('model'),
+                response_format=response_format,
+                )
+
+            # record new hashes for future skip-tests
+            with open(path_to_generate, 'rb') as fin:
+                hash_contents = hashlib.sha256(fin.read()).hexdigest()
+                facjson.set('hash_contents', hash_contents)
+            facjson.set('hash_prompt', hash_prompt_new)
+            facjson.save()
 
 
 def eval_var(var, expr, context):
@@ -1138,10 +1185,6 @@ class FacJSON:
     >>> os.unlink(temp_path)
     """
     def __init__(self, path):
-        # Validate original path exists
-        with open(path):
-            pass
-
         self._path = path
         self._fac_path = self.convert_path(path)
         try:
@@ -1210,6 +1253,10 @@ class EmptyVariableError(Exception):
 
 
 class TargetNotFound(Exception):
+    pass
+
+
+class NoTargetsMatched(ValueError):
     pass
 
 

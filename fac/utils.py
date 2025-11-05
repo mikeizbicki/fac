@@ -329,206 +329,6 @@ def extract_variables(pattern):
     return variables
 
 
-def match_pattern(patterns, input_string):
-    """
-    Match an input string against a list of patterns and extract variables.
-
-    Args:
-        patterns: List of pattern strings with variables like "$SERIES/$STORY/outline.json"
-        input_string: String to match against patterns, e.g. "a/b/outline.json"
-                     If input_string contains variables like $STORY, no extraction is done for those
-
-    Returns:
-        Tuple of (matched_pattern, extracted_variables) or (None, {}) if no match
-
-    Raises:
-        TemplateProcessingError: If multiple patterns match the input string (ambiguous patterns)
-
-    Examples:
-
-        >>> patterns = ["$SERIES/$STORY/outline.json"]
-        >>> match_pattern(patterns, "a/b/outline.json")
-        ('$SERIES/$STORY/outline.json', {'SERIES': 'a', 'STORY': 'b'})
-
-        >>> patterns = ["$SERIES/$STORY/chapter$CHAPTER/chapter.json"]
-        >>> match_pattern(patterns, "mystory/adventure/chapter3/chapter.json")
-        ('$SERIES/$STORY/chapter$CHAPTER/chapter.json', {'SERIES': 'mystory', 'STORY': 'adventure', 'CHAPTER': '3'})
-
-        >>> patterns = ["$SERIES/characters/$CHARACTER/about.json"]
-        >>> match_pattern(patterns, "starwars/characters/luke/about.json")
-        ('$SERIES/characters/$CHARACTER/about.json', {'SERIES': 'starwars', 'CHARACTER': 'luke'})
-
-        >>> patterns = ["$SERIES/$STORY/outline.json", "$SERIES/$STORY/locations.json"]
-        >>> match_pattern(patterns, "a/b/locations.json")
-        ('$SERIES/$STORY/locations.json', {'SERIES': 'a', 'STORY': 'b'})
-
-    If `input_string` does not match any patterns,
-    then we return `(None, {})`.
-
-        >>> patterns = ["$SERIES/$STORY/outline.json"]
-        >>> match_pattern(patterns, "a/b/c/outline.json")
-        (None, {})
-
-        >>> patterns = ["$SERIES/$STORY/outline.json"]
-        >>> match_pattern(patterns, "a/b/summary.json")
-        (None, {})
-
-    If there are `.` references to the current directory,
-    we should still match the pattern.
-
-        >>> patterns = ['$PROJECT/outline.json', '$PROJECT/$LEVEL1/blurb.json']
-        >>> match_pattern(patterns, 'test_project/outline.json')
-        ('$PROJECT/outline.json', {'PROJECT': 'test_project'})
-
-        >>> patterns = ['./$PROJECT/outline.json', '$PROJECT/$LEVEL1/blurb.json']
-        >>> match_pattern(patterns, 'test_project/outline.json')
-        ('$PROJECT/outline.json', {'PROJECT': 'test_project'})
-
-        >>> patterns = ['././$PROJECT/./outline.json', '$PROJECT/$LEVEL1/blurb.json']
-        >>> match_pattern(patterns, 'test_project/outline.json')
-        ('$PROJECT/outline.json', {'PROJECT': 'test_project'})
-
-        >>> patterns = ['./$PROJECT/outline.json', '$PROJECT/$LEVEL1/blurb.json']
-        >>> match_pattern(patterns, './test_project/outline.json')
-        ('$PROJECT/outline.json', {'PROJECT': 'test_project'})
-
-        >>> patterns = ['./$PROJECT/./outline.json', '$PROJECT/$LEVEL1/blurb.json']
-        >>> match_pattern(patterns, './test_project/outline.json')
-        ('$PROJECT/outline.json', {'PROJECT': 'test_project'})
-
-        >>> patterns = ['$PROJECT/./outline.json', '$PROJECT/$LEVEL1/blurb.json']
-        >>> match_pattern(patterns, './test_project/outline.json')
-        ('$PROJECT/outline.json', {'PROJECT': 'test_project'})
-
-    If there are multiple patterns that could match,
-    then the choice of pattern is ambiguous.
-    Raise a ValueError.
-    This likely indicates a problem with the structure of the dependencies in the config.
-
-        >>> patterns = ["$A/$B/$C/file.json", "$X/something/$Y/file.json"]
-        >>> match_pattern(patterns, "first/something/second/file.json")
-        Traceback (most recent call last):
-            ...
-        ValueError: Ambiguous pattern match for 'first/something/second/file.json'
-
-    If we pass a variable in the `input_string`,
-    we should not match that variable to one of the patterns in the returned variable list.
-
-        >>> patterns = ["$SERIES/$STORY/outline.json"]
-        >>> match_pattern(patterns, "a/$STORY/outline.json")
-        ('$SERIES/$STORY/outline.json', {'SERIES': 'a'})
-
-        >>> patterns = ["$SERIES/$STORY/chapter$CHAPTER/chapter.json"]
-        >>> match_pattern(patterns, "a/b/chapter$CHAPTER/chapter.json")
-        ('$SERIES/$STORY/chapter$CHAPTER/chapter.json', {'SERIES': 'a', 'STORY': 'b'})
-
-        >>> patterns = ["$SERIES/$STORY/chapter$CHAPTER/chapter.json"]
-        >>> match_pattern(patterns, "$SERIES/$STORY/chapter$CHAPTER/chapter.json")
-        ('$SERIES/$STORY/chapter$CHAPTER/chapter.json', {})
-
-        >>> patterns = ["$SERIES/$STORY/chapter$CHAPTER/chapter.json"]
-        >>> match_pattern(patterns, "$SERIES/b/chapter$CHAPTER/chapter.json")
-        ('$SERIES/$STORY/chapter$CHAPTER/chapter.json', {'STORY': 'b'})
-    """
-    import re
-    import os
-
-    # Normalize input string by removing './' references
-    norm_input = re.sub(r'(\.\/)+', '', input_string)
-
-    # Create a mapping of normalized patterns to original patterns
-    norm_to_orig = {}
-    normalized_patterns = []
-
-    for pattern in patterns:
-        # Normalize pattern by removing './' references
-        norm_pattern = re.sub(r'(\.\/)+', '', pattern)
-        normalized_patterns.append(norm_pattern)
-        norm_to_orig[norm_pattern] = pattern
-
-    matched_patterns = []
-    matched_vars = []
-
-    input_segments = norm_input.split('/')
-
-    for norm_pattern in normalized_patterns:
-        pattern_segments = norm_pattern.split('/')
-
-        # Skip patterns with different number of segments
-        if len(pattern_segments) != len(input_segments):
-            continue
-
-        variables = {}
-        is_match = True
-
-        for i, (p_seg, i_seg) in enumerate(zip(pattern_segments, input_segments)):
-            # Check if pattern segment contains variables
-            if '$' in p_seg:
-                # Convert pattern segment to regex
-                regex = '^'
-                pos = 0
-                var_names = []
-
-                while pos < len(p_seg):
-                    if p_seg[pos] == '$':
-                        # Found start of a variable
-                        var_start = pos + 1
-                        var_end = var_start
-                        while var_end < len(p_seg) and (p_seg[var_end].isalnum() or p_seg[var_end] == '_'):
-                            var_end += 1
-
-                        var_name = p_seg[var_start:var_end]
-                        var_placeholder = f"${var_name}"
-
-                        # Check if this variable appears in input segment
-                        if var_placeholder in i_seg:
-                            # Match literally
-                            regex += re.escape(var_placeholder)
-                        else:
-                            # Capture the variable value
-                            var_names.append(var_name)
-                            regex += '(.*?)'
-
-                        pos = var_end
-                    else:
-                        # Add regular character to regex
-                        if p_seg[pos] in '.^$*+?{}[]\\|()':
-                            regex += '\\'
-                        regex += p_seg[pos]
-                        pos += 1
-
-                regex += '$'
-
-                # Apply regex to input segment
-                match = re.match(regex, i_seg)
-
-                if not match:
-                    is_match = False
-                    break
-
-                # Extract captured variables
-                for j, var_name in enumerate(var_names):
-                    variables[var_name] = match.group(j+1)
-
-            elif p_seg != i_seg:
-                # Literal segments must match exactly
-                is_match = False
-                break
-
-        if is_match:
-            matched_patterns.append(norm_pattern)
-            matched_vars.append(variables)
-
-    if len(matched_patterns) > 1:
-        raise ValueError(f"Ambiguous pattern match for '{input_string}'")
-
-    if matched_patterns:
-        # For tests, we should return the clean version of the pattern
-        return (matched_patterns[0], matched_vars[0])
-    else:
-        return (None, {})
-
-
 def expand_vars_on_newlines(env_vars, filter_variables=None):
     r'''
     Takes a dictionary where values may contain newline characters and returns
@@ -669,3 +469,386 @@ def variable_dictionary_resolve(env_vars):
             resolved[key] = new_value
 
     return resolved
+
+
+################################################################################
+
+
+def match_pattern(patterns, input_string):
+    """
+    Match an input string against a list of patterns and extract variables.
+
+    Args:
+        patterns: List of pattern strings with variables like "$SERIES/$STORY/outline.json"
+        input_string: String to match against patterns, e.g. "a/b/outline.json"
+                     If input_string contains variables like $STORY, no extraction is done for those
+
+    Returns:
+        Tuple of (matched_pattern, extracted_variables) or (None, {}) if no match
+
+    Raises:
+        TemplateProcessingError: If multiple patterns match the input string (ambiguous patterns)
+
+    Examples:
+
+        >>> patterns = ["$SERIES/$STORY/outline.json"]
+        >>> match_pattern(patterns, "a/b/outline.json")
+        ('$SERIES/$STORY/outline.json', {'SERIES': 'a', 'STORY': 'b'})
+
+        >>> patterns = ["$SERIES/$STORY/chapter$CHAPTER/chapter.json"]
+        >>> match_pattern(patterns, "mystory/adventure/chapter3/chapter.json")
+        ('$SERIES/$STORY/chapter$CHAPTER/chapter.json', {'SERIES': 'mystory', 'STORY': 'adventure', 'CHAPTER': '3'})
+
+        >>> patterns = ["$SERIES/characters/$CHARACTER/about.json"]
+        >>> match_pattern(patterns, "starwars/characters/luke/about.json")
+        ('$SERIES/characters/$CHARACTER/about.json', {'SERIES': 'starwars', 'CHARACTER': 'luke'})
+
+        >>> patterns = ["$SERIES/$STORY/outline.json", "$SERIES/$STORY/locations.json"]
+        >>> match_pattern(patterns, "a/b/locations.json")
+        ('$SERIES/$STORY/locations.json', {'SERIES': 'a', 'STORY': 'b'})
+
+    If `input_string` does not match any patterns,
+    then we return `(None, {})`.
+
+        >>> patterns = ["$SERIES/$STORY/outline.json"]
+        >>> match_pattern(patterns, "a/b/c/outline.json")
+        (None, {})
+
+        >>> patterns = ["$SERIES/$STORY/outline.json"]
+        >>> match_pattern(patterns, "a/b/summary.json")
+        (None, {})
+
+    If there are `.` references to the current directory,
+    we should still match the pattern.
+
+        >>> patterns = ['$PROJECT/outline.json', '$PROJECT/$LEVEL1/blurb.json']
+        >>> match_pattern(patterns, 'test_project/outline.json')
+        ('$PROJECT/outline.json', {'PROJECT': 'test_project'})
+
+        >>> patterns = ['./$PROJECT/outline.json', '$PROJECT/$LEVEL1/blurb.json']
+        >>> match_pattern(patterns, 'test_project/outline.json')
+        ('$PROJECT/outline.json', {'PROJECT': 'test_project'})
+
+        >>> patterns = ['././$PROJECT/./outline.json', '$PROJECT/$LEVEL1/blurb.json']
+        >>> match_pattern(patterns, 'test_project/outline.json')
+        ('$PROJECT/outline.json', {'PROJECT': 'test_project'})
+
+        >>> patterns = ['./$PROJECT/outline.json', '$PROJECT/$LEVEL1/blurb.json']
+        >>> match_pattern(patterns, './test_project/outline.json')
+        ('$PROJECT/outline.json', {'PROJECT': 'test_project'})
+
+        >>> patterns = ['./$PROJECT/./outline.json', '$PROJECT/$LEVEL1/blurb.json']
+        >>> match_pattern(patterns, './test_project/outline.json')
+        ('$PROJECT/outline.json', {'PROJECT': 'test_project'})
+
+        >>> patterns = ['$PROJECT/./outline.json', '$PROJECT/$LEVEL1/blurb.json']
+        >>> match_pattern(patterns, './test_project/outline.json')
+        ('$PROJECT/outline.json', {'PROJECT': 'test_project'})
+
+    If there are multiple patterns that could match,
+    then the choice of pattern is ambiguous.
+    Raise a ValueError.
+    This likely indicates a problem with the structure of the dependencies in the config.
+
+        >>> patterns = ["$A/$B/$C/file.json", "$X/something/$Y/file.json"]
+        >>> match_pattern(patterns, "first/something/second/file.json")
+        Traceback (most recent call last):
+            ...
+        ValueError: Ambiguous pattern match for 'first/something/second/file.json'
+
+    If we pass a variable in the `input_string`,
+    we should not match that variable to one of the patterns in the returned variable list.
+
+        >>> patterns = ["$SERIES/$STORY/outline.json"]
+        >>> match_pattern(patterns, "a/$STORY/outline.json")
+        ('$SERIES/$STORY/outline.json', {'SERIES': 'a'})
+
+        >>> patterns = ["$SERIES/$STORY/chapter$CHAPTER/chapter.json"]
+        >>> match_pattern(patterns, "a/b/chapter$CHAPTER/chapter.json")
+        ('$SERIES/$STORY/chapter$CHAPTER/chapter.json', {'SERIES': 'a', 'STORY': 'b'})
+
+        >>> patterns = ["$SERIES/$STORY/chapter$CHAPTER/chapter.json"]
+        >>> match_pattern(patterns, "$SERIES/$STORY/chapter$CHAPTER/chapter.json")
+        ('$SERIES/$STORY/chapter$CHAPTER/chapter.json', {})
+
+        >>> patterns = ["$SERIES/$STORY/chapter$CHAPTER/chapter.json"]
+        >>> match_pattern(patterns, "$SERIES/b/chapter$CHAPTER/chapter.json")
+        ('$SERIES/$STORY/chapter$CHAPTER/chapter.json', {'STORY': 'b'})
+    """
+
+    if '**' in input_string:
+        raise ValueError(f"wildcard ** not allowed in input string")
+
+    matches = match_pattern_starstar(patterns, input_string)
+    if len(matches) == 0:
+        return (None, {})
+    elif len(matches) > 1:
+        raise ValueError(f"Ambiguous pattern match for '{input_string}'")
+    return matches[0]
+
+
+def match_pattern_starstar(patterns, input_string):
+    """
+    Match an input string (containing **) against patterns and extract variables.
+
+    ** in input_string can match any number of path segments in patterns.
+    Variables matched by ** are not extracted (similar to how $VAR in input_string are not extracted).
+
+    Args:
+        patterns: List of pattern strings with variables like "$SERIES/$STORY/outline.json"
+        input_string: String that may contain ** wildcards, e.g. "a/**/outline.json"
+
+    Returns:
+        List of tuples: [(matched_pattern, extracted_variables), ...]
+        Empty list if no matches. Variables consumed by ** are not included in extracted_variables.
+
+    Examples:
+
+        >>> match_pattern_starstar(["$SERIES/$STORY/outline.json"], "mystory/**/outline.json")
+        [('$SERIES/$STORY/outline.json', {'SERIES': 'mystory'})]
+        >>> match_pattern_starstar(["$SERIES/$PART/$CHAPTER/outline.json"], "mystory/**/outline.json")
+        [('$SERIES/$PART/$CHAPTER/outline.json', {'SERIES': 'mystory'})]
+        >>> match_pattern_starstar(["$SERIES/$STORY/outline.json"], "**/outline.json")
+        [('$SERIES/$STORY/outline.json', {})]
+        >>> match_pattern_starstar(["$SERIES/$STORY/outline.json"], "mystory/**")
+        [('$SERIES/$STORY/outline.json', {'SERIES': 'mystory'})]
+        >>> match_pattern_starstar(["$A/$B/$C/file.json"], "start/**/file.json")
+        [('$A/$B/$C/file.json', {'A': 'start'})]
+
+    Multiple patterns:
+
+        >>> match_pattern_starstar(["$A/$B/file.json", "$X/$Y/$Z/file.json"], "test/**/file.json")
+        [('$A/$B/file.json', {'A': 'test'}), ('$X/$Y/$Z/file.json', {'X': 'test'})]
+        >>> match_pattern_starstar(["$A/$B/file.json", "$X/$Y/file.json"], "test/**/file.json")
+        [('$A/$B/file.json', {'A': 'test'}), ('$X/$Y/file.json', {'X': 'test'})]
+        >>> match_pattern_starstar(["$A/specific/file.json", "$X/$Y/$Z/file.json"], "test/**/file.json")
+        [('$A/specific/file.json', {'A': 'test'}), ('$X/$Y/$Z/file.json', {'X': 'test'})]
+        >>> match_pattern_starstar(["$A/$B/config.json", "$X/$Y/$Z/config.json", "$P/$Q/$R/$S/config.json"], "proj/**/config.json")
+        [('$A/$B/config.json', {'A': 'proj'}), ('$X/$Y/$Z/config.json', {'X': 'proj'}), ('$P/$Q/$R/$S/config.json', {'P': 'proj'})]
+        >>> match_pattern_starstar(["$A/$B/outline.json", "$X/$Y/summary.json"], "proj/**/outline.json")
+        [('$A/$B/outline.json', {'A': 'proj'})]
+        >>> match_pattern_starstar(["$A/chapter/$B/file.json", "$X/$Y/$Z/file.json"], "book/**/file.json")
+        [('$A/chapter/$B/file.json', {'A': 'book'}), ('$X/$Y/$Z/file.json', {'X': 'book'})]
+        >>> match_pattern_starstar(["$A/$B/file.json", "$X/exact/file.json"], "test/exact/file.json")
+        [('$A/$B/file.json', {'A': 'test', 'B': 'exact'}), ('$X/exact/file.json', {'X': 'test'})]
+
+    If a variable matches with another variable with the "incorrect name", we include it in the output:
+
+        >>> match_pattern_starstar(["$A/$B/file.json", "$X/$Y/$Z/file.json"], "test/$VAR/file.json")
+        [('$A/$B/file.json', {'A': 'test', 'B': '$VAR'})]
+
+    No match cases:
+
+        >>> match_pattern_starstar(["$SERIES/$STORY/outline.json"], "mystory/**/summary.json")
+        []
+        >>> match_pattern_starstar(["$A/$B/file.json"], "first/file.json")
+        []
+        >>> match_pattern_starstar([], "test/**/file.json")
+        []
+        >>> match_pattern_starstar(['about.md', 'art.md', 'writing.md', 'characters/$CHARACTER/about.json', 'characters/$CHARACTER/artist_instructions.md', 'characters/$CHARACTER/character_sheet.png', 'locations/$LOCATION/about.json', 'locations/$LOCATION/reference.png', 'books/$LEVEL/themes.md', 'books/$LEVEL/$BOOK/content.jsonl', 'books/$LEVEL/$BOOK/frames/$FRAME_ID/art.json', 'books/$LEVEL/$BOOK/frames/$FRAME_ID/art.png', 'books/$LEVEL/$BOOK/frames/$FRAME_ID/page.pdf', 'books/$LEVEL/$BOOK/pages.pdf', 'books/$LEVEL/$BOOK/description.json'], 'locations/familyhouse_interior_diningroom/reference.json')
+        []
+
+    Real world examples:
+
+        >>> match_pattern_starstar(["$PROJ/$MOD/src/$FILE.py", "$PROJ/tests/$TEST.py", "$PROJ/$DIR/$SUBDIR/config.json"], "myproj/**/config.json")
+        [('$PROJ/$DIR/$SUBDIR/config.json', {'PROJ': 'myproj'})]
+        >>> match_pattern_starstar(["$ORG/$REPO/src/main/$MODULE.rs", "$ORG/$REPO/target/debug/$BINARY", "$ORG/$REPO/docs/$SECTION/$PAGE.md", "$PROJECT/build/$ARTIFACT.jar"], "acme/widget/**/UserGuide.md")
+        [('$ORG/$REPO/target/debug/$BINARY', {'ORG': 'acme', 'REPO': 'widget', 'BINARY': 'UserGuide.md'}), ('$ORG/$REPO/docs/$SECTION/$PAGE.md', {'ORG': 'acme', 'REPO': 'widget', 'PAGE': 'UserGuide'})]
+        >>> match_pattern_starstar(["$APP/static/css/$THEME/$STYLE.css", "$APP/templates/$SECTION/$TEMPLATE.html", "$APP/api/v$VERSION/$ENDPOINT.py", "$APP/$MODULE/$COMPONENT/views.py"], "webapp/**/main.css")
+        [('$APP/static/css/$THEME/$STYLE.css', {'APP': 'webapp', 'STYLE': 'main'})]
+        >>> match_pattern_starstar(["services/$SERVICE/src/$MODULE.go", "services/$SERVICE/config/$ENV.yaml", "libs/$LIBRARY/$VERSION/src/$FILE.ts", "$ROOT/tools/$TOOL/bin/$EXECUTABLE"], "services/**/production.yaml")
+        [('services/$SERVICE/config/$ENV.yaml', {'ENV': 'production'}), ('$ROOT/tools/$TOOL/bin/$EXECUTABLE', {'ROOT': 'services', 'EXECUTABLE': 'production.yaml'})]
+        >>> match_pattern_starstar(["docs/$LANG/api/$MODULE/$CLASS.md", "docs/$LANG/guides/$CATEGORY/$GUIDE.md", "docs/assets/images/$SECTION/$IMAGE.png", "$PROJECT/wiki/$TOPIC.md"], "docs/**/Authentication.md")
+        [('docs/$LANG/api/$MODULE/$CLASS.md', {'CLASS': 'Authentication'}), ('docs/$LANG/guides/$CATEGORY/$GUIDE.md', {'GUIDE': 'Authentication'}), ('$PROJECT/wiki/$TOPIC.md', {'PROJECT': 'docs', 'TOPIC': 'Authentication'})]
+        >>> match_pattern_starstar(["build/$TARGET/$ARCH/lib$LIB.so", "build/$TARGET/bin/$BINARY", "dist/$PLATFORM/$VERSION/$PACKAGE.tar.gz", "cache/$HASH/$TEMP.tmp"], "build/**/myapp")
+        [('build/$TARGET/bin/$BINARY', {'BINARY': 'myapp'})]
+        >>> match_pattern_starstar(["$ENV/config/$SERVICE.conf", "global/config/$SETTING.ini", "$PROJECT/$MODULE/config/local.json", "deploy/$STAGE/$REGION/settings.yaml"], "prod/**/local.json")
+        [('$PROJECT/$MODULE/config/local.json', {'PROJECT': 'prod'})]
+        >>> match_pattern_starstar(["media/$TYPE/$YEAR/$MONTH/$FILE.$EXT", "assets/images/$CATEGORY/$SIZE/$IMAGE.jpg", "content/$SECTION/gallery/$ALBUM/$PHOTO.png"], "media/**/vacation.jpg")
+        [('media/$TYPE/$YEAR/$MONTH/$FILE.$EXT', {'FILE': 'vacation', 'EXT': 'jpg'})]
+    """
+    # Check for multiple ** in input_string
+    if input_string.count('**') > 1:
+        raise ValueError("Multiple ** wildcards are not supported in input_string")
+
+    # Normalize input
+    norm_input = re.sub(r'(\.\/)+', '', input_string)
+    
+    input_segments = norm_input.split('/')
+    matches = []
+    
+    for pattern in patterns:
+        # Normalize pattern
+        norm_pattern = re.sub(r'(\.\/)+', '', pattern)
+        pattern_segments = norm_pattern.split('/')
+        
+        # Try to match this pattern
+        result = _match_pattern_with_starstar(pattern_segments, input_segments)
+        if result is not None:
+            matches.append((norm_pattern, result))
+    
+    return matches
+
+def _match_pattern_with_starstar(pattern_segments, input_segments):
+    """Helper to match pattern against input containing **."""
+    
+    # ** must match at least one segment, so input can't be longer than pattern
+    num_stars = input_segments.count('**')
+    non_star_segments = len(input_segments) - num_stars
+    
+    if len(pattern_segments) < non_star_segments + num_stars:
+        return None
+    
+    variables = {}
+    p_idx = 0  # pattern index  
+    i_idx = 0  # input index
+    
+    while i_idx < len(input_segments):
+        input_seg = input_segments[i_idx]
+        
+        if input_seg == '**':
+            # ** consumes pattern segments until we find the next matching input segment
+            if i_idx == len(input_segments) - 1:
+                # ** at end, consume all remaining pattern segments
+                p_idx = len(pattern_segments)
+                i_idx += 1
+            else:
+                # Find next non-** input segment
+                next_i_idx = i_idx + 1
+                while next_i_idx < len(input_segments) and input_segments[next_i_idx] == '**':
+                    next_i_idx += 1
+                
+                if next_i_idx >= len(input_segments):
+                    # Rest of input is **, consume all remaining pattern segments
+                    p_idx = len(pattern_segments)
+                    i_idx = len(input_segments)
+                else:
+                    next_input_seg = input_segments[next_i_idx]
+                    
+                    # Calculate how many pattern segments we need to leave for remaining input
+                    remaining_input_segments = len(input_segments) - next_i_idx
+                    remaining_stars = sum(1 for seg in input_segments[next_i_idx:] if seg == '**')
+                    min_pattern_segments_needed = remaining_input_segments - remaining_stars + remaining_stars
+                    
+                    # Find the rightmost pattern segment that could match next_input_seg
+                    # while leaving enough segments for the rest of the input
+                    found_match = False
+                    max_p_idx = len(pattern_segments) - min_pattern_segments_needed
+                    
+                    for try_p_idx in range(p_idx, max_p_idx + 1):
+                        if try_p_idx < len(pattern_segments):
+                            try_pattern_seg = pattern_segments[try_p_idx]
+                            if _segment_can_match(try_pattern_seg, next_input_seg):
+                                # Check if we can match the rest of the input from this position
+                                temp_vars = _try_match_from_position(
+                                    pattern_segments[try_p_idx:], 
+                                    input_segments[next_i_idx:]
+                                )
+                                if temp_vars is not None:
+                                    # ** consumes segments from p_idx to try_p_idx (exclusive)
+                                    p_idx = try_p_idx
+                                    i_idx = next_i_idx
+                                    found_match = True
+                                    break
+                    
+                    if not found_match:
+                        return None
+        else:
+            # Regular segment matching
+            if p_idx >= len(pattern_segments):
+                return None
+                
+            pattern_seg = pattern_segments[p_idx]
+            match_result = _match_single_segment(pattern_seg, input_seg)
+            if match_result is None:
+                return None
+            variables.update(match_result)
+            p_idx += 1
+            i_idx += 1
+    
+    # Check if we consumed all pattern segments
+    if p_idx != len(pattern_segments):
+        return None
+        
+    return variables
+
+def _try_match_from_position(pattern_segments, input_segments):
+    """Try to match remaining pattern and input segments."""
+    temp_vars = {}
+    p_idx = 0
+    i_idx = 0
+    
+    while i_idx < len(input_segments) and p_idx < len(pattern_segments):
+        input_seg = input_segments[i_idx]
+        
+        if input_seg == '**':
+            # Skip ahead in pattern - simplified logic for validation
+            segments_to_skip = 1
+            if i_idx == len(input_segments) - 1:
+                segments_to_skip = len(pattern_segments) - p_idx
+            p_idx += segments_to_skip
+            i_idx += 1
+        else:
+            pattern_seg = pattern_segments[p_idx]
+            match_result = _match_single_segment(pattern_seg, input_seg)
+            if match_result is None:
+                return None
+            temp_vars.update(match_result)
+            p_idx += 1
+            i_idx += 1
+    
+    if p_idx == len(pattern_segments) and i_idx == len(input_segments):
+        return temp_vars
+    return None
+
+def _segment_can_match(pattern_seg, input_seg):
+    """Check if a pattern segment could match an input segment."""
+    return _match_single_segment(pattern_seg, input_seg) is not None
+
+def _match_single_segment(pattern_seg, input_seg):
+    """Match a single pattern segment against input segment."""
+    import re
+    
+    if '$' not in pattern_seg:
+        return {} if pattern_seg == input_seg else None
+    
+    # Handle variables in pattern segment
+    regex = '^'
+    pos = 0
+    var_names = []
+    
+    while pos < len(pattern_seg):
+        if pattern_seg[pos] == '$':
+            var_start = pos + 1
+            var_end = var_start
+            while var_end < len(pattern_seg) and (pattern_seg[var_end].isalnum() or pattern_seg[var_end] == '_'):
+                var_end += 1
+            
+            var_name = pattern_seg[var_start:var_end]
+            var_placeholder = f"${var_name}"
+            
+            if var_placeholder in input_seg:
+                regex += re.escape(var_placeholder)
+            else:
+                var_names.append(var_name)
+                regex += '(.*?)'
+            
+            pos = var_end
+        else:
+            if pattern_seg[pos] in '.^$*+?{}[]\\|()':
+                regex += '\\'
+            regex += pattern_seg[pos]
+            pos += 1
+    
+    regex += '$'
+    match = re.match(regex, input_seg)
+    
+    if not match:
+        return None
+    
+    variables = {}
+    for j, var_name in enumerate(var_names):
+        variables[var_name] = match.group(j + 1)
+    
+    return variables
+

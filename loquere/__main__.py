@@ -64,17 +64,7 @@ If the user gives you a "command":
             logger.info(f'Continuing prev session: "{self.session_id}". There are {len(messages)} messages.')
 
         # initialize the LLM;
-        # we prefer a fast model trained for tool use
         self.llm = fac.LLM.LLM()
-        #self.llm.default_text_model = 'openai/gpt-5-mini'
-        #self.llm.default_text_model = 'openai/gpt-5'
-        #self.llm.default_text_model = 'groq/llama-3.3-70b-versatile'
-        #self.llm.default_text_model = 'groq/meta-llama/llama-4-maverick-17b-128e-instruct'
-        #self.llm.default_text_model = 'groq/meta-llama/llama-4-scout-17b-16e-instruct'
-        self.llm.default_text_model = 'openrouter/qwen/qwen3-coder'
-        #self.llm.default_text_model = 'cerebras/llama-3.3-70b'
-        #self.llm.default_text_model = 'cerebras/llama-4-scout-17b-16e-instruct'
-        #self.llm.default_text_model = 'cerebras/qwen-3-32b'
 
     ########################################
     # Util Methods
@@ -227,6 +217,15 @@ Message:
             messages_chat,
             tools=tools,
             callables=callables,
+            # model='openai/gpt-5-mini'
+            # model='openai/gpt-5'
+            # model='groq/llama-3.3-70b-versatile'
+            # model='groq/meta-llama/llama-4-maverick-17b-128e-instruct'
+            # model='groq/meta-llama/llama-4-scout-17b-16e-instruct'
+            #model='openrouter/qwen/qwen3-coder',
+            # model='cerebras/llama-3.3-70b'
+            # model='cerebras/llama-4-scout-17b-16e-instruct'
+            #model='cerebras/qwen-3-32b'
             )
 
         # ping the user if a tool was used
