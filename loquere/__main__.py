@@ -222,7 +222,7 @@ Message:
             # model='groq/llama-3.3-70b-versatile'
             # model='groq/meta-llama/llama-4-maverick-17b-128e-instruct'
             # model='groq/meta-llama/llama-4-scout-17b-16e-instruct'
-            #model='openrouter/qwen/qwen3-coder',
+            model='openrouter/qwen/qwen3-coder',
             # model='cerebras/llama-3.3-70b'
             # model='cerebras/llama-4-scout-17b-16e-instruct'
             #model='cerebras/qwen-3-32b'

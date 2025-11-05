@@ -2,6 +2,7 @@
 from collections import namedtuple, Counter
 from dataclasses import dataclass
 from datetime import datetime
+import asyncio
 import copy
 import hashlib
 import itertools
@@ -21,8 +22,8 @@ import mdformat
 import yaml
 
 # project imports
-from fac.Logging import logger, with_subtree
 from fac.LLM import LLM
+from fac.Logging import *
 from fac.utils import *
 
 
@@ -107,6 +108,7 @@ class BuildSystem:
     config_file: str = 'fac.yaml'
     debug: bool = False
     trace: bool = False
+    jobs: int = 1
 
     # build settings
     from_scratch: bool = False
@@ -707,61 +709,35 @@ class BuildSystem:
             contexts = [contexts[0]]
 
         # loop over each context and run the processing code for the context
+        if contexts:
+            if len(contexts) > 1 and self.jobs != 1:
+                if self.jobs == 0:
+                    jobs_str = '∞'
+                else:
+                    jobs_str = str(self.jobs)
+                logger.info(f'concurrently building {len(contexts)} contexts with {jobs_str} jobs')
+            async def run_all_contexts():
+                semaphore = asyncio.Semaphore(self.jobs)
+                async def _sem_foreach_context(context_id, context):
+                    if self.jobs > 0:
+                        async with semaphore:
+                            return await foreach_context(context_id, len(contexts), target_to_build, config, context, overwrite)
+                    else:
+                        return await foreach_context(context_id, len(contexts), target_to_build, config, context, overwrite)
+                if self.jobs != 1:
+                    _sem_foreach_context = with_buffered_logs(logger)(_sem_foreach_context)
+
+                return await asyncio.gather(*[
+                    _sem_foreach_context(i+1, context)
+                    for i, context in enumerate(contexts)
+                ])
+            asyncio.run(run_all_contexts())
+
         generated_paths = []
         for i, context in enumerate(contexts):
             path_to_generate = process_template(target_to_build, context.variables)
             generated_paths.append(path_to_generate)
             logger.debug(f'context={context}')
-
-            # ensure no unresolved dependencies
-            if context.unresolved_dependencies:
-                for dep in context.unresolved_dependencies:
-                    message = f'unresolved dependency: dep["target"]="{dep["target"]}", vars={context.variables}'
-                    logger.error(message)
-                raise UnresolvedDependencies(message)
-
-            # NOTE:
-            # by default, we will build the given context;
-            # but we may not rebuild if the path already exists
-            file_status = []
-            build_context = True
-            if os.path.exists(path_to_generate):
-
-                # do not rebuild if file is frozen
-                if FacJSON(path_to_generate).get('frozen', False):
-                    file_status.append('frozen')
-                    build_context = False
-
-                # do not rebuild the file if auto_rebuild is disabled
-                if not config.get('auto_rebuild', True) and build_context:
-                    file_status.append('auto_rebuild disabled')
-                    build_context = False
-
-                # if the file is up-to-date (i.e. all dependencies are older),
-                # then we will not rebuild it
-                path_to_generate_committed_date = self._committed_date(path_to_generate)
-                updated_deps = []
-                for path in context.dependency_paths:
-                    path_committed_date = self._committed_date(path)
-                    time_diff = path_to_generate_committed_date - path_committed_date
-                    if time_diff < 0:
-                        updated_deps.append(path)
-                if updated_deps == []:
-                    file_status.append('up-to-date')
-                    build_context = False
-                else:
-                    file_status.append('out-of-date')
-
-            # print logging info
-            logger.info(f'file {i+1}/{len(contexts)} [{", ".join(file_status)}] "{path_to_generate}"')
-            if self.print_dependencies and (build_context or overwrite):
-                logger.info('dependency_paths:', submessage=True)
-                for path in context.dependency_paths:
-                    logger.info(f' - {path}', submessage=True)
-
-            # perform the actual build
-            if build_context or overwrite:
-                foreach_context(path_to_generate, config, context, overwrite)
             traversed_paths.add(path_to_generate)
 
             # validate file
@@ -795,10 +771,64 @@ class BuildSystem:
 
         return generated_paths
 
-    def _build_context(self, path_to_generate, config, context, overwrite):
+    async def _build_context(self, context_id, num_contexts, target_to_build, config, context, overwrite):
         '''
         Build a file given the specified information.
         '''
+        path_to_generate = process_template(target_to_build, context.variables)
+        logger.debug(f'context={context}')
+
+        # ensure no unresolved dependencies
+        if context.unresolved_dependencies:
+            for dep in context.unresolved_dependencies:
+                message = f'unresolved dependency: dep["target"]="{dep["target"]}", vars={context.variables}'
+                logger.error(message)
+            raise UnresolvedDependencies(message)
+
+        # NOTE:
+        # by default, we will build the given context;
+        # but we may not rebuild if the path already exists
+        file_status = []
+        build_context = True
+        if os.path.exists(path_to_generate):
+
+            # do not rebuild if file is frozen
+            if FacJSON(path_to_generate).get('frozen', False):
+                file_status.append('frozen')
+                build_context = False
+
+            # do not rebuild the file if auto_rebuild is disabled
+            if not config.get('auto_rebuild', True) and build_context:
+                file_status.append('auto_rebuild disabled')
+                build_context = False
+
+            # if the file is up-to-date (i.e. all dependencies are older),
+            # then we will not rebuild it
+            path_to_generate_committed_date = self._committed_date(path_to_generate)
+            updated_deps = []
+            for path in context.dependency_paths:
+                path_committed_date = self._committed_date(path)
+                time_diff = path_to_generate_committed_date - path_committed_date
+                if time_diff < 0:
+                    updated_deps.append(path)
+            if updated_deps == []:
+                file_status.append('up-to-date')
+                build_context = False
+            else:
+                file_status.append('out-of-date')
+
+        # print logging info
+        logger.info(f'file {context_id}/{num_contexts} [{", ".join(file_status)}] "{path_to_generate}"')
+        if self.print_dependencies and (build_context or overwrite):
+            logger.info('dependency_paths:', submessage=True)
+            for path in context.dependency_paths:
+                logger.info(f' - {path}', submessage=True)
+
+        if not (build_context or overwrite):
+            return
+
+        ################################################################################
+        # FIXME:original function below
 
         # create output directory if needed
         dirname = os.path.dirname(path_to_generate)
@@ -807,16 +837,13 @@ class BuildSystem:
 
         # build with a custom shell command
         if config.get('cmd'):
-            process = subprocess.Popen(
+            logger.info('building with bash...', submessage=True)
+            process = await asyncio.create_subprocess_shell(
                 config['cmd'],
-                shell=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT, # merge stderr into stdout
-                text=True,
                 executable='/bin/bash',
                 env=variable_dictionary_resolve({**os.environ, **context.variables}),
-                bufsize=1, # line buffered
-                universal_newlines=True,
                 )
             if self.print_cmd_stdout:
                 try:
@@ -824,7 +851,7 @@ class BuildSystem:
                         print(line.rstrip())
                 except UnicodeDecodeError:
                     print('<<INVALID UNICODE>>')
-            process.wait()
+            await process.wait()
 
             if process.returncode != 0:
                 print(f"context.variables={context.variables}")
@@ -890,7 +917,7 @@ Generate the file "{path_to_generate}" based on the information below.
             logger.trace(f'files_prompt generated; len(context.dependency_paths)={len(context.dependency_paths)}')
 
         # include a chat history if provided
-        # and the previouse version of the file if available
+        # and the previous version of the file if available
         old_version = None
         try:
             if self.include_old:
@@ -935,11 +962,13 @@ except for the changes requested by the user.
         if extension == '.wav':
             filetype = 'audio'
             logger.trace(f'filetype={filetype}')
-            assert 'raw_data' in config
-            path = process_template(config['raw_data'], env_vars=context.variables)
-            logger.trace(f"path={path}")
-            with open(path) as fin:
-                data = json.load(fin)
+            # NOTE:
+            # we need a copy of the config here
+            # because we will be modifying the contents with the process_template function;
+            # without a copy, we get a bug where building multiple files results in the same config for all files
+            data = copy.deepcopy(config.get('options', {}))
+            for option in data:
+                data[option] = process_template(data[option], env_vars=context.variables)
 
         elif extension == '.png':
             filetype = 'image'
@@ -947,8 +976,9 @@ except for the changes requested by the user.
             data = {}
             data['prompt'] = prompt_instructions + prompt_description + files_prompt + chat_prompt
             data['reference_images'] = binary_files
-            data['quality'] = config.get('image_quality', 'low')
-            data['orientation'] = config.get('image_orientation', 'landscape')
+            options = copy.deepcopy(config.get('options'), {})
+            for option in options:
+                data[option] = process_template(options[option], env_vars=context.variables)
 
         # process text output by default
         else:
@@ -1090,7 +1120,7 @@ except for the changes requested by the user.
         prompt_changed = hash_prompt_new != facjson.get('hash_prompt')
 
         # skip building file if not needed
-        if not (contents_changed or prompt_changed):
+        if not (contents_changed or prompt_changed) and not overwrite:
             logger.info('content/prompts match, building not needed', submessage=True)
 
         elif self.no_build:
@@ -1104,8 +1134,8 @@ except for the changes requested by the user.
                     mode = 'ab'
                 else:
                     mode = 'wb'
-            logger.info('building...', submessage=True)
-            self.llm.generate_file(
+            logger.info('building with LLM...', submessage=True)
+            await self.llm.generate_file(
                 filetype,
                 path_to_generate,
                 data,

@@ -1,5 +1,6 @@
 
 from collections import defaultdict, Counter
+import asyncio
 import base64
 import datetime
 import json
@@ -64,18 +65,21 @@ class ModelUsageSummary():
         self.tools_used = Counter()
 
     def register_result(self, model, result):
+        tokens = Counter()
+
+        # TTS API calls
+        if 'StreamedBinaryAPIResponse' in str(result):
+            logger.warning('TTS API does not support usage information', submessage=True)
 
         # image API calls
-        if hasattr(result.usage, 'input_tokens'): # image
-            tokens = Counter()
+        elif hasattr(result.usage, 'input_tokens'):
             tokens['text/in'] = result.usage.input_tokens_details.text_tokens
             tokens['image/in'] = result.usage.input_tokens_details.image_tokens
             tokens['image/out'] = result.usage.output_tokens
             self.model_details[model] += tokens
 
         # text API calls
-        elif hasattr(result.usage, 'completion_tokens'): # text
-            tokens = Counter()
+        elif hasattr(result.usage, 'completion_tokens'):
             tokens['text/in'] = result.usage.completion_tokens
             tokens['text/out'] = result.usage.prompt_tokens
             self.model_details[model] += tokens
@@ -91,7 +95,7 @@ class ModelUsageSummary():
             raise ValueError('unsupported result type')
 
         # record cost
-        if hasattr(result.usage, 'cost'):
+        if hasattr(result, 'usage') and hasattr(result.usage, 'cost'):
             self.model_details[model]['cost'] += result.usage.cost
         elif model not in registered_models:
             logger.warning(f'model="{model}" not in registered_models')
@@ -140,6 +144,24 @@ class LLM():
             seed=None,
             max_iter=10,
             ):
+        return asyncio.run(self.text_async(
+            messages,
+            tools=tools,
+            callables=callables,
+            response_format=response_format,
+            model=model,
+            seed=seed,
+            max_iter=max_iter
+        ))
+
+    async def text_async(self, messages, *,
+            tools=None,
+            callables=None,
+            response_format=None,
+            model=None,
+            seed=None,
+            max_iter=10,
+            ):
 
         # if either tools/callables is provided, both must be
         assert ((tools is     None and callables is     None)
@@ -171,13 +193,13 @@ class LLM():
         # call the API;
         # if the result asks for a tool use,
         # then use the tool and retry the API
-        client = openai.Client(
+        client = openai.AsyncOpenAI(
             api_key = os.environ.get(registered_providers[provider]['apikey']),
             base_url = registered_providers[provider]['base_url'],
         )
         for i in range(max_iter):
             logger.trace('calling API: client.chat.completions.create()')
-            result = client.chat.completions.create(
+            result = await client.chat.completions.create(
                 messages=list(messages) + new_messages,
                 model=model_name,
                 seed=seed,
@@ -192,8 +214,6 @@ class LLM():
             # if there is no tool call, then we break from the loop
             if result.choices[0].message.tool_calls is None:
                 break
-            #if result.choices[0].message.content is not None:
-                #break
 
             # otherwise, we evaluate each tool call
             # and update messages list with their outputs;
@@ -217,11 +237,15 @@ class LLM():
         content = result.choices[0].message.content or ''
 
         logger.info(f'request_cost: ${local_usage.total_cost():0.4f}  total_cost: ${self.usage_summary.total_cost():0.4f}', submessage=True)
-        return  content, local_usage
+        return content, local_usage
+
 
     def image(self, path, mode, data, *, model=None, seed=None):
+        return asyncio.run(self.image_async(path, mode, data, model=model, seed=seed))
+
+    async def image_async(self, path, mode, data, *, model=None, seed=None):
         logger.trace(f'llm.image; data.keys()={list(data.keys())}')
-        client = openai.Client()
+        client = openai.AsyncOpenAI()
         
         if model is None:
             model = self.model_image
@@ -236,14 +260,14 @@ class LLM():
 
         # generate a new image
         if not data.get('reference_images'):
-            result = client.images.generate(
+            result = await client.images.generate(
                 model=model_name,
                 prompt=data['prompt'],
                 size=size,
                 quality=quality,
             )
         else:
-            result = client.images.edit(
+            result = await client.images.edit(
                 model=model_name,
                 prompt=data['prompt'],
                 size=size,
@@ -264,6 +288,9 @@ class LLM():
         return local_usage
 
     def audio(self, path, data, *, model=None):
+        return asyncio.run(self.audio_async(path, data, model=model))
+
+    async def audio_async(self, path, data, *, model=None):
 
         # extract provider/model info from input model name
         if model is None:
@@ -271,39 +298,32 @@ class LLM():
         provider, model_name = model.split('/')
 
         # call API
-        client = openai.Client()
+        client = openai.AsyncOpenAI()
         assert set(data.keys()) == set(['input', 'instructions', 'voice'])
-        with client.audio.speech.with_streaming_response.create(
+        async with client.audio.speech.with_streaming_response.create(
             model=model_name,
             response_format="wav",
             **data,
-        ) as response:
-            response.stream_to_file(path)
+        ) as result:
+            await result.stream_to_file(path)
 
-        # FIXME:
-        # I don't know how to get usage info out of the TTS API :(
-        logger.warning(f'unable to count token usage for model="{model}"')
-        usage = {
-            model: {
-                'audio/out': 0,
-                'text/in': 0,
-                },
-            }
-        self.usages[model] += usage[model]
-
+        # log usage
+        local_usage = ModelUsageSummary()
+        local_usage.register_result(model, result)
+        self.usage_summary.register_result(model, result)
         logger.info(f'request_cost: ${local_usage.total_cost():0.4f}  total_cost: ${self.usage_summary.total_cost():0.4f}', submessage=True)
-        return usage
+        return local_usage
 
-    def generate_file(self, filetype, path, data, *, mode='xb', response_format, seed=None, model=None):
+    async def generate_file(self, filetype, path, data, *, mode='xb', response_format, seed=None, model=None):
         try:
             # generate the file
             _, extension = os.path.splitext(path)
             if extension == '.png':
-                usage = self.image(path, mode, data)
+                usage = await self.image_async(path, mode, data)
             elif extension == '.wav':
-                usage = self.audio(path, data)
+                usage = await self.audio_async(path, data)
             else:
-                text, usage = self.text(data, model=model, response_format=response_format)
+                text, usage = await self.text_async(data, model=model, response_format=response_format)
                 blob = text.encode('utf-8')
                 with open(path, mode) as fout:
                     fout.write(blob)
