@@ -717,21 +717,39 @@ class BuildSystem:
                     jobs_str = str(self.jobs)
                 logger.info(f'concurrently building {len(contexts)} contexts with {jobs_str} jobs')
             async def run_all_contexts():
-                semaphore = asyncio.Semaphore(self.jobs)
+                semaphore_value = float('inf') if self.jobs == 0 else self.jobs
+                semaphore = asyncio.Semaphore(semaphore_value)
+                stop_new_work = asyncio.Event()
+                exceptions = []
+
                 async def _sem_foreach_context(context_id, context):
-                    if self.jobs > 0:
+                    try:
                         async with semaphore:
+                            if stop_new_work.is_set():  # Double-check after acquiring semaphore
+                                return None
                             return await foreach_context(context_id, len(contexts), target_to_build, config, context, overwrite)
-                    else:
-                        return await foreach_context(context_id, len(contexts), target_to_build, config, context, overwrite)
+                    except Exception as e:
+                        stop_new_work.set()  # Signal to stop new work
+                        exceptions.append((context_id, e))
+                        return None
+
                 if self.jobs != 1:
                     _sem_foreach_context = with_buffered_logs(logger)(_sem_foreach_context)
 
-                return await asyncio.gather(*[
+                # Run all tasks
+                results = await asyncio.gather(*[
                     _sem_foreach_context(i+1, context)
                     for i, context in enumerate(contexts)
-                ])
+                ], return_exceptions=True)
+
+                # Handle any exceptions that occurred
+                if exceptions:
+                    for context_id, exception in exceptions:
+                        logger.error(f"Exception in context {context_id}: {exception}")
+                    raise exceptions[0][1]
+
             asyncio.run(run_all_contexts())
+
 
         generated_paths = []
         for i, context in enumerate(contexts):
@@ -855,7 +873,8 @@ class BuildSystem:
 
             if process.returncode != 0:
                 print(f"context.variables={context.variables}")
-                raise CommandExecutionError(process)
+                stdout = await process.stdout.read()
+                raise CommandExecutionError(process.returncode, stdout)
 
             return
 
@@ -970,13 +989,23 @@ except for the changes requested by the user.
             for option in data:
                 data[option] = process_template(data[option], env_vars=context.variables)
 
+        elif extension == '.mp4':
+            filetype = 'video'
+            logger.trace(f'filetype={filetype}')
+            data = {}
+            data['prompt'] = prompt_instructions + prompt_description + files_prompt + chat_prompt
+            data['reference_images'] = binary_files
+            options = copy.deepcopy(config.get('options', {}))
+            for option in options:
+                data[option] = process_template(options[option], env_vars=context.variables)
+
         elif extension == '.png':
             filetype = 'image'
             logger.trace(f'filetype={filetype}')
             data = {}
             data['prompt'] = prompt_instructions + prompt_description + files_prompt + chat_prompt
             data['reference_images'] = binary_files
-            options = copy.deepcopy(config.get('options'), {})
+            options = copy.deepcopy(config.get('options', {}))
             for option in options:
                 data[option] = process_template(options[option], env_vars=context.variables)
 
@@ -1060,10 +1089,19 @@ except for the changes requested by the user.
             format_cmd = '<formatting>\n' + format_cmd + '\n</formatting>\n'
 
             # add the user role + message
-            messages.append({
+            message = {
                 'role': 'user',
-                'content':  prompt_instructions + prompt_description + format_cmd + files_prompt + chat_prompt,
+                'content': [{ 'type': 'text', 'text': prompt_instructions + prompt_description + format_cmd + files_prompt + chat_prompt}]
+                }
+            for binary_file in binary_files:
+                base64_image = encode_image(binary_file)
+                message['content'].append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{base64_image}",
+                    }
                 })
+            messages.append(message)
 
             # extend the existing output
             if self.extend:
@@ -1254,10 +1292,10 @@ class FacJSON:
 
 
 class CommandExecutionError(Exception):
-    def __init__(self, result):
+    def __init__(self, returncode, stdout):
         errorstrs = [
-            f"result.returncode={result.returncode}",
-            f"result.output={result.stdout.read()}",
+            f"result.returncode={returncode}",
+            f"result.output={stdout}",
             ]
         super().__init__('\n'.join(errorstrs))
 
@@ -1292,3 +1330,9 @@ class NoTargetsMatched(ValueError):
 
 class UnresolvedDependencies(ValueError):
     pass
+
+
+def encode_image(image_path):
+    import base64
+    with open(image_path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode('utf-8')

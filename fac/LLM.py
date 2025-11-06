@@ -1,10 +1,12 @@
 
 from collections import defaultdict, Counter
+from pathlib import Path
 import asyncio
 import base64
 import datetime
 import json
 import os
+import sys
 import time
 import uuid
 
@@ -56,6 +58,10 @@ registered_models = {
     'openai/gpt-4.1-nano':                  {'text/in': 0.10, 'text/out':  0.60},
     'openai/gpt-image-1':                   {'text/in': 5.00, 'image/in': 10.00, 'image/out': 40.00},
     'openai/gpt-4o-mini-tts':               {'text/in': 0.60, 'audio/out': 12.00},
+
+    # video prices are measured in seconds, not tokens
+    'openai/sora-2':                        {'video/out': 0.10},
+    'openai/sora-2-pro':                    {'video/out': 0.50},
     }
 
 
@@ -67,8 +73,12 @@ class ModelUsageSummary():
     def register_result(self, model, result):
         tokens = Counter()
 
+        # Video Generation calls
+        if str(result).startswith('Video'):
+            tokens['video/out'] = float(result.seconds)
+
         # TTS API calls
-        if 'StreamedBinaryAPIResponse' in str(result):
+        elif 'StreamedBinaryAPIResponse' in str(result):
             logger.warning('TTS API does not support usage information', submessage=True)
 
         # image API calls
@@ -314,6 +324,45 @@ class LLM():
         logger.info(f'request_cost: ${local_usage.total_cost():0.4f}  total_cost: ${self.usage_summary.total_cost():0.4f}', submessage=True)
         return local_usage
 
+    async def video_async(self, path, data, model='openai/sora-2'):
+        client = openai.OpenAI()
+        provider, model_name = model.split('/', 1)
+        assert len(data['reference_images']) == 1
+        input_reference = Path(data['reference_images'][0])
+        video = openai.videos.create(
+                model=model_name,
+                prompt=data['prompt'],
+                input_reference=input_reference,
+                size="1280x720",
+                seconds=4,
+                )
+
+        # async sleep until video ready
+        while video.status in ("in_progress", "queued"):
+            await asyncio.sleep(2)
+            video = openai.videos.retrieve(video.id)
+        local_usage = ModelUsageSummary()
+
+        # check for errors
+        if video.status == "failed":
+            message = getattr(
+                getattr(video, "error", None), "message", "Video generation failed"
+            )
+            logger.error(message)
+            return local_usage
+
+        # write video to file
+        content = openai.videos.download_content(video.id, variant="video")
+        content.write_to_file(path)
+
+        # calculate usage info
+        local_usage.register_result(model, video)
+        self.usage_summary.register_result(model, video)
+        logger.info(f'request_cost: ${local_usage.total_cost():0.4f}  total_cost: ${self.usage_summary.total_cost():0.4f}', submessage=True)
+
+        return local_usage
+
+
     async def generate_file(self, filetype, path, data, *, mode='xb', response_format, seed=None, model=None):
         try:
             # generate the file
@@ -322,6 +371,8 @@ class LLM():
                 usage = await self.image_async(path, mode, data)
             elif extension == '.wav':
                 usage = await self.audio_async(path, data)
+            elif extension == '.mp4':
+                usage = await self.video_async(path, data)
             else:
                 text, usage = await self.text_async(data, model=model, response_format=response_format)
                 blob = text.encode('utf-8')
