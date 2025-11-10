@@ -1005,7 +1005,14 @@ except for the changes requested by the user.
             data['reference_images'] = binary_files
             options = copy.deepcopy(config.get('options', {}))
             for option in options:
-                data[option] = process_template(options[option], env_vars=context.variables)
+                # YAML files will store values as non-string sometimes (e.g. for ints);
+                # we convert them to string here,
+                # also as a minor runtime optimization
+                # we do not try to process variables for these non-string values
+                if type(options[option]) != str:
+                    options[option] = str(options[option])
+                else:
+                    data[option] = process_template(options[option], env_vars=context.variables)
 
         elif extension == '.png':
             filetype = 'image'

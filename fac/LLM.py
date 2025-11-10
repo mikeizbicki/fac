@@ -326,8 +326,9 @@ class LLM():
         logger.info(f'request_cost: ${local_usage.total_cost():0.4f}  total_cost: ${self.usage_summary.total_cost():0.4f}', submessage=True)
         return local_usage
 
-    async def video_async(self, path, data, model='openai/sora-2'):
+    async def video_async(self, path, data):
         client = openai.OpenAI()
+        model = data.get('model', 'openai/sora-2')
         provider, model_name = model.split('/', 1)
         assert len(data['reference_images']) == 1
         input_reference = Path(data['reference_images'][0])
@@ -335,8 +336,8 @@ class LLM():
                 model=model_name,
                 prompt=data['prompt'],
                 input_reference=input_reference,
-                size="1280x720",
-                seconds=8,
+                size=data.get('size', '1280x720'),
+                seconds=data.get('seconds', 4),
                 )
 
         # async sleep until video ready
