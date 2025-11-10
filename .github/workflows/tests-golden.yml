@@ -28,15 +28,19 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-      - name: fac_test_project1
+      - name: fac_test1_basicproject
         run: |
-          cd tests/fac_test_project1
+          cd tests/fac_test1_basicproject
           ./run_test.sh
-      - name: fac_test_project2
+      - name: fac_test2_dependency_only_variables
         run: |
-          cd tests/fac_test_project2
+          cd tests/fac_test2_dependency_only_variables
           ./run_test.sh
-      - name: fac_test_project3
+      - name: fac_test3_postreqs
         run: |
-          cd tests/fac_test_project3
+          cd tests/fac_test3_postreqs
+          ./run_test.sh
+      - name: fac_test4_dependency_only_variables
+        run: |
+          cd tests/fac_test4_dependency_only_variables
           ./run_test.sh
