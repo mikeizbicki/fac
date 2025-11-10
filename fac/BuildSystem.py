@@ -748,7 +748,15 @@ class BuildSystem:
                         logger.error(f"Exception in context {context_id}: {exception}")
                     raise exceptions[0][1]
 
-            asyncio.run(run_all_contexts())
+            # NOTE:
+            # there seems to be a bug in OpenAI's async library;
+            # it sometimes doesn't properly clean httpx connections,
+            # and that can result in the following warning;
+            # the code below prevents those warnings from displaying
+            import contextlib
+            import io
+            with contextlib.redirect_stderr(io.StringIO()):
+                asyncio.run(run_all_contexts())
 
 
         generated_paths = []

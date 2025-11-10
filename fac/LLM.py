@@ -75,11 +75,13 @@ class ModelUsageSummary():
 
         # Video Generation calls
         if str(result).startswith('Video'):
-            tokens['video/out'] = float(result.seconds)
+            tokens['video/out'] = float(result.seconds) * 1000000
+            # we multiply by a million here because we divide by 1000000 later
 
         # TTS API calls
         elif 'StreamedBinaryAPIResponse' in str(result):
-            logger.warning('TTS API does not support usage information', submessage=True)
+            pass
+            #logger.warning('TTS API does not support usage information', submessage=True)
 
         # image API calls
         elif hasattr(result.usage, 'input_tokens'):
@@ -334,7 +336,7 @@ class LLM():
                 prompt=data['prompt'],
                 input_reference=input_reference,
                 size="1280x720",
-                seconds=4,
+                seconds=8,
                 )
 
         # async sleep until video ready
