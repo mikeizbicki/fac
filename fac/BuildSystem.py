@@ -1,5 +1,5 @@
 # standard lib imports
-from collections import namedtuple, Counter
+from collections import namedtuple, Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 import asyncio
@@ -101,6 +101,101 @@ class DirtyRepo(Exception):
 # main functions
 ################################################################################
 
+
+def load_config(path):
+    '''
+    Loads a config.yaml file and generates a dictionary of its contents.
+    This function handles needed post-processing that gets the configs into a standard format without any missing fields.
+    '''
+    with open(path) as fin:
+        full_config = yaml.safe_load(fin)
+
+    # several of the keys in the config file allow an abbreviated syntax;
+    # first, we need to convert any abbreviated syntax into the full syntax
+    for target in full_config:
+
+        # the dependencies field can be specified as a string, list of strings, or list of dictionaries;
+        # we convert all forms into the list of dictionary form here
+        dependencies1 = []
+        dependencies = full_config[target].get('dependencies', '')
+        if type(dependencies) is str:
+            dependencies = dependencies.split()
+        elif dependencies is None:
+            dependencies = []
+        for dep in dependencies:
+            if type(dep) == str:
+                dep = {'target': dep}
+            assert type(dep) == dict
+            dependencies1.append(dep)
+            for k in dep:
+                if k not in ['target', 'include', 'allow_create']:
+                    logger.warning(f'in target "{target}", in dependency "{dep["target"]}", unknown option "{k}"')
+        full_config[target]['dependencies'] = dependencies1
+
+        # ensure that optional fields are present with a default value
+        full_config[target].setdefault('variables', {})
+        full_config[target]['variables_raw'] = copy.deepcopy(full_config[target]['variables'])
+
+    # construct a full variables list for each target
+    dependents = defaultdict(lambda: [])
+    for target in full_config:
+        for dep in full_config[target]['dependencies']:
+            dependents[dep['target']].append(target)
+    targets_to_process = set(full_config.keys())
+    while len(targets_to_process) > 0:
+        processed_targets = 0
+        for target in list(targets_to_process):
+            target_variables = extract_variables(target)
+            all_defined = True
+            for var in target_variables:
+                if var not in full_config[target]['variables']:
+                    all_defined = False
+            if all_defined:
+                targets_to_process.remove(target)
+                processed_targets += 1
+                for dependent in dependents[target]:
+                    for var in target_variables:
+                        if var in full_config[dependent]['variables']:
+                            assert full_config[dependent]['variables'][var] == full_config[target]['variables'][var]
+                        else:
+                            full_config[dependent]['variables'][var] = full_config[target]['variables'][var]
+        assert processed_targets > 0
+
+    # certain config options result in modifications to the full_config
+    keys0 = list(full_config.keys())
+    for target in keys0:
+        for dep in full_config[target]['dependencies']:
+
+            # add postreqs for creating new dependencies
+            if dep.get('allow_create'):
+                target1_name = target + '--allow_create--' + dep['target'].replace('/', '_').replace('$', '')
+                logger.debug(f'adding postreq: "{target1_name}"')
+                dep_target_with_stars = 'resources/*/about.json'
+
+                # any automatically created dependencies should not have allow_create set
+                dependencies1 = []
+                for dep in full_config[target]['dependencies']:
+                    dep1 = copy.copy(dep)
+                    if type(dep1) == dict:
+                        dep1['allow_create'] = False
+                    dependencies1.append(dep1)
+
+                # create the actual config entry
+                full_config[target1_name] = {
+                    'model': 'openai/gpt-4.1-mini',
+                    'prompt': f'''The main file '{target}' internally references the secondary files '{dep_target_with_stars}'. Unfortunately, the main file may reference secondary files that do not exist. For each secondary file that does not exist, create the appropriate JSON object.''',
+                    'schema_file': full_config[dep['target']].get('schema_file'),
+                    'dependencies': dependencies1,
+                    'variables': copy.copy(full_config[target]['variables']),
+                    'TMP_augment': True,
+                    }
+                if 'postreqs' not in full_config[target]:
+                    full_config[target]['postreqs'] = []
+                full_config[target]['postreqs'].append(target1_name)
+
+    return full_config
+
+
 @dataclass
 class BuildSystem:
     # general settings
@@ -150,62 +245,7 @@ class BuildSystem:
         }
 
         # load config file
-        with open(self.config_file) as fin:
-            self.full_config = yaml.safe_load(fin)
-
-        # several of the keys in the config file allow an abbreviated syntax;
-        # first, we need to convert any abbreviated syntax into the full syntax
-        for target in self.full_config:
-            dependencies1 = []
-            dependencies = self.full_config[target].get('dependencies', '')
-            if type(dependencies) is str:
-                dependencies = dependencies.split()
-            elif dependencies is None:
-                dependencies = []
-            for dep in dependencies:
-                if type(dep) == str:
-                    dep = {'target': dep}
-                assert type(dep) == dict
-                dependencies1.append(dep)
-                for k in dep:
-                    if k not in ['target', 'include', 'allow_create']:
-                        logger.warning(f'in target "{target}", in dependency "{dep["target"]}", unknown option "{k}"')
-            self.full_config[target]['dependencies'] = dependencies1
-
-            # ensure that optional fields are present with a default value
-            self.full_config[target].setdefault('variables', {})
-
-        # certain config options result in modifications to the full_config
-        keys0 = list(self.full_config.keys())
-        for target in keys0:
-            for dep in self.full_config[target]['dependencies']:
-
-                # add postreqs for creating new dependencies
-                if dep.get('allow_create'):
-                    target1_name = target + '--allow_create--' + dep['target'].replace('/', '_').replace('$', '')
-                    logger.debug(f'adding postreq: "{target1_name}"')
-                    dep_target_with_stars = 'resources/*/about.json'
-
-                    # any automatically created dependencies should not have allow_create set
-                    dependencies1 = []
-                    for dep in self.full_config[target]['dependencies']:
-                        dep1 = copy.copy(dep)
-                        if type(dep1) == dict:
-                            dep1['allow_create'] = False
-                        dependencies1.append(dep1)
-
-                    # create the actual config entry
-                    self.full_config[target1_name] = {
-                        'model': 'openai/gpt-4.1-mini',
-                        'prompt': f'''The main file '{target}' internally references the secondary files '{dep_target_with_stars}'. Unfortunately, the main file may reference secondary files that do not exist. For each secondary file that does not exist, create the appropriate JSON object.''',
-                        'schema_file': self.full_config[dep['target']].get('schema_file'),
-                        'dependencies': dependencies1,
-                        'variables': copy.copy(self.full_config[target]['variables']),
-                        'TMP_augment': True,
-                        }
-                    if 'postreqs' not in self.full_config[target]:
-                        self.full_config[target]['postreqs'] = []
-                    self.full_config[target]['postreqs'].append(target1_name)
+        self.full_config = load_config(self.config_file)
 
         # print the config
         if self.print_config:
@@ -579,9 +619,11 @@ class BuildSystem:
 
                     dep_vars = extract_variables(dep_target)
                     unmatched_vars = []
+                    #print(f"dep_vars={dep_vars}")
+                    #print(f"config['variables_raw']={config['variables_raw']}")
                     for dep_var in dep_vars:
                         #if dep_var not in context.variables and dep_var in target_variables:
-                        if dep_var not in context.variables and dep_var in config['variables']:
+                        if dep_var not in context.variables and dep_var in config['variables_raw']:
                         #if dep_var not in context.variables:
                             unmatched_vars.append(dep_var)
                     if len(unmatched_vars) > 0:
@@ -685,6 +727,27 @@ class BuildSystem:
                     context.postreqs,
                     )
                 contexts.append(context1)
+
+        ########################################
+        # Compute dependency_paths
+        ########################################
+
+        contexts0 = contexts
+        contexts = []
+        for context in contexts0:
+            dependency_paths1 = []
+            for dep in config['dependencies']:
+                dep_target = dep['target']
+                if dep.get('include', True):
+                    dep_paths = expand_path(dep_target, context.variables)
+                    dependency_paths1.extend(dep_paths)
+            context1 = BuildContext(
+                context.variables,
+                sorted(dependency_paths1),
+                context.unresolved_dependencies,
+                context.postreqs,
+                )
+            contexts.append(context1)
 
         ########################################
         # Build each context
