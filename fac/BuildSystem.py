@@ -152,6 +152,7 @@ def load_config(path):
         for dep in full_config[target]['dependencies']:
             dependents[dep['target']].append(target)
     targets_to_process = set(full_config.keys())
+    print(f"targets_to_process={targets_to_process}")
     while len(targets_to_process) > 0:
         processed_targets = 0
         for target in list(targets_to_process):
@@ -182,7 +183,8 @@ def load_config(path):
                                         **full_config[dependent]['variables']
                                         }
 
-        assert processed_targets > 0
+        if processed_targets == 0:
+            break
 
     # certain config options result in modifications to the full_config
     keys0 = list(full_config.keys())
