@@ -18,8 +18,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: 'recursive'
           lfs: true
+      - name: Initialize specific submodules
+        run: |
+          git submodule update --init --recursive stories
+          git submodule update --init --recursive tests/fac_test1_basicproject
+          git submodule update --init --recursive tests/fac_test2_dependency_only_variables
+          git submodule update --init --recursive tests/fac_test3_postreqs
+          git submodule update --init --recursive tests/fac_test4_dependency_only_variables
       - name: Set up Python ${{matrix.python}}
         uses: actions/setup-python@v2
         with:
