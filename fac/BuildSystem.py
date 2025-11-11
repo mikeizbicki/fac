@@ -9,6 +9,7 @@ import itertools
 import json
 import os
 import math
+import re
 import string
 import subprocess
 import sys
@@ -114,6 +115,15 @@ def load_config(path):
     # first, we need to convert any abbreviated syntax into the full syntax
     for target in full_config:
 
+        # remove excess whitespace from fields;
+        # this is mostly useful for debugging and getting nice looking configs
+        for option in full_config[target]:
+            if type(full_config[target][option]) == str:
+                full_config[target][option] = full_config[target][option].strip()
+            elif type(full_config[target][option]) == dict:
+                for suboption in full_config[target][option]:
+                    full_config[target][option][suboption] = full_config[target][option][suboption].strip()
+
         # the dependencies field can be specified as a string, list of strings, or list of dictionaries;
         # we convert all forms into the list of dictionary form here
         dependencies1 = []
@@ -154,11 +164,24 @@ def load_config(path):
                 targets_to_process.remove(target)
                 processed_targets += 1
                 for dependent in dependents[target]:
+                    dependent_variables = extract_variables(dependent)
                     for var in target_variables:
-                        if var in full_config[dependent]['variables']:
-                            assert full_config[dependent]['variables'][var] == full_config[target]['variables'][var]
-                        else:
-                            full_config[dependent]['variables'][var] = full_config[target]['variables'][var]
+                        if var in dependent_variables:
+                            if var in full_config[dependent]['variables']:
+                                assert full_config[dependent]['variables'][var] == full_config[target]['variables'][var]
+                            else:
+                                # NOTE:
+                                # this is a somewhat hackish/brittle/clever python trick:
+                                # we are updating the dictionary in a way that ensures
+                                # when we iterate over the dictionary,
+                                # then the newly updated value will be the first to iterate over;
+                                # normally, it would be the last;
+                                # we need to enforce the correct order here so that variables get resolved in the order they are defined
+                                full_config[dependent]['variables'] = {
+                                        var: full_config[target]['variables'][var],
+                                        **full_config[dependent]['variables']
+                                        }
+
         assert processed_targets > 0
 
     # certain config options result in modifications to the full_config
@@ -249,7 +272,9 @@ class BuildSystem:
 
         # print the config
         if self.print_config:
-            print(yaml.dump(self.full_config, default_flow_style=False))
+            yaml_str = yaml.dump(self.full_config, default_flow_style=False)
+            yaml_str = re.sub(r'\n([a-zA-Z])', r'\n\n\1', yaml_str)
+            print(yaml_str)
             sys.exit(0)
 
         # indicate that we are not inside a with block yet
@@ -392,8 +417,18 @@ class BuildSystem:
             overwrite=False,
             build_postreqs=False,
             traversed_paths=None,
-            traversed_deps=None
+            traversed_deps=None,
+            disable_logging=False,
             ):
+        if disable_logging:
+            import logging
+            noop_logger = logging.getLogger('noop')
+            noop_logger.addHandler(logging.NullHandler())
+            noop_logger.setLevel(logging.CRITICAL + 1)  # Above all levels
+            logger = noop_logger
+        else:
+            logger = globals()['logger']
+
         # verify that variables are correctly formatted
         for var in input_env:
             assert '$' not in input_env[var], f'input_env[var]={input_env[var]}'
@@ -404,7 +439,7 @@ class BuildSystem:
         transformed_target, target_env = match_pattern(config_targets, target_to_build)
         if not transformed_target:
             logger.trace(f"target does not exist, not building")
-            raise TargetNotFound
+            raise TargetNotFound(f"target='{target_to_build}'")
         target_variables = extract_variables(transformed_target)
         logger.trace(f"transformed_target={transformed_target}; target_variables={target_variables}, target_env={target_env}")
         assert transformed_target
@@ -619,8 +654,6 @@ class BuildSystem:
 
                     dep_vars = extract_variables(dep_target)
                     unmatched_vars = []
-                    #print(f"dep_vars={dep_vars}")
-                    #print(f"config['variables_raw']={config['variables_raw']}")
                     for dep_var in dep_vars:
                         #if dep_var not in context.variables and dep_var in target_variables:
                         if dep_var not in context.variables and dep_var in config['variables_raw']:
@@ -739,14 +772,28 @@ class BuildSystem:
             for dep in config['dependencies']:
                 dep_target = dep['target']
                 if dep.get('include', True):
-                    dep_paths = expand_path(dep_target, context.variables)
+                    # the ground-truth dependency_paths can always be given by seeing what self._traverse_target returns with the proper variables assigned;
+                    # (this is potentially different than what the recursive call done above returned because variables may not have yet been calculated in the recursive call above);
+                    # this recursive call is a bit expensive and doesn't handle non-target dependencies,
+                    # so we try to do expand_path first
+                    # FIXME:
+                    # it feels very embarrassing / unsafe / janky to have a double recursion here,
+                    # I can't see how to eliminate it though... this needs some real careful thought
+                    try:
+                        dep_paths = expand_path(dep_target, context.variables)
+                    except TemplateProcessingError:
+                        built_paths = self._traverse_target(
+                                dep_target,
+                                {**context.variables},
+                                None,
+                                overwrite=self.from_scratch,
+                                traversed_paths=traversed_paths,
+                                traversed_deps=traversed_deps,
+                                disable_logging=True,
+                                )
+                        dep_paths = list(set(built_paths))
                     dependency_paths1.extend(dep_paths)
-            context1 = BuildContext(
-                context.variables,
-                sorted(dependency_paths1),
-                context.unresolved_dependencies,
-                context.postreqs,
-                )
+            context1 = context._replace(dependency_paths=sorted(dependency_paths1))
             contexts.append(context1)
 
         ########################################
@@ -772,7 +819,7 @@ class BuildSystem:
             contexts = [contexts[0]]
 
         # loop over each context and run the processing code for the context
-        if contexts:
+        if contexts and foreach_context:
             if len(contexts) > 1 and self.jobs != 1:
                 if self.jobs == 0:
                     jobs_str = '∞'
@@ -1398,7 +1445,7 @@ class EmptyVariableError(Exception):
         super().__init__('\n'.join(errorstrs))
 
 
-class TargetNotFound(Exception):
+class TargetNotFound(ValueError):
     pass
 
 
