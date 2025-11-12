@@ -19,3 +19,6 @@
 [submodule "fac_test_depvars"]
 	path = tests/fac_test4_dependency_only_variables
 	url = https://github.com/mikeizbicki/fac_test_depvars
+[submodule "fac_test5_variable_inheritance"]
+	path = tests/fac_test5_variable_inheritance
+	url = https://github.com/mikeizbicki/fac_test5_variable_inheritance

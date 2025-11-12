@@ -1,3 +1,4 @@
+from collections import defaultdict, deque
 import glob
 import os
 import pathlib
@@ -852,3 +853,94 @@ def _match_single_segment(pattern_seg, input_seg):
     
     return variables
 
+
+def reorder_variable_dictionary(var_dict):
+    """
+    Reorders a dictionary of shell variables to respect dependencies.
+    We expect that var_dict has keys that represent shell variable names,
+    and the values are commands that are run to set the value of those variables.
+    Some of the commands may reference other variables in the dictionary,
+    and we reorder the dictionary so that if the commands are run (in the order of the dictionary) there will be no error.
+    That is, if VAR2 depends on VAR1, then VAR2 will appear after VAR1 in the dictionary.
+
+    Raises:
+        ValueError: If circular dependencies are detected
+
+    >>> # Simple dependency chain
+    >>> d1 = {'C': 'echo $B', 'B': 'echo $A', 'A': 'echo hello'}
+    >>> result1 = reorder_variable_dictionary(d1)
+    >>> list(result1.keys())
+    ['A', 'B', 'C']
+
+    >>> # No dependencies
+    >>> d2 = {'X': 'echo x', 'Y': 'echo y', 'Z': 'echo z'}
+    >>> result2 = reorder_variable_dictionary(d2)
+    >>> set(result2.keys()) == {'X', 'Y', 'Z'}
+    True
+
+    >>> # Complex dependencies with ${} syntax
+    >>> d3 = {'PATH': 'echo ${HOME}/bin:$OLDPATH', 'HOME': 'echo /home/user', 'OLDPATH': 'echo $PATH_BACKUP', 'PATH_BACKUP': 'echo /usr/bin'}
+    >>> result3 = reorder_variable_dictionary(d3)
+    >>> keys = list(result3.keys())
+    >>> keys.index('PATH_BACKUP') < keys.index('OLDPATH')
+    True
+    >>> keys.index('HOME') < keys.index('PATH')
+    True
+
+    >>> # Direct circular dependency
+    >>> d4 = {'VAR1': 'echo $VAR1'}
+    >>> reorder_variable_dictionary(d4)
+    Traceback (most recent call last):
+    ...
+    ValueError: Circular dependencies detected: VAR1
+
+    >>> # Indirect circular dependency
+    >>> d5 = {'VAR1': 'echo $VAR2', 'VAR2': 'echo $VAR1'}
+    >>> reorder_variable_dictionary(d5)
+    Traceback (most recent call last):
+    ...
+    ValueError: Circular dependencies detected: VAR1, VAR2
+
+    >>> # 4-variable circular dependency: A->B->C->D->A
+    >>> d6 = {'A': 'echo $D', 'B': 'echo $A', 'C': 'echo $B', 'D': 'echo $C'}
+    >>> reorder_variable_dictionary(d6)
+    Traceback (most recent call last):
+    ...
+    ValueError: Circular dependencies detected: A, B, C, D
+    """
+    # Build dependency graph
+    dependencies = defaultdict(set)
+
+    for var, command in var_dict.items():
+        # Find variable references like $VAR or ${VAR}
+        refs = re.findall(r'\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?', command)
+        for ref in refs:
+            if ref in var_dict:
+                if ref == var:
+                    raise ValueError(f"Circular dependencies detected: {var}")
+                dependencies[var].add(ref)
+
+    # Topological sort using Kahn's algorithm
+    in_degree = {var: 0 for var in var_dict}
+    for var in dependencies:
+        for dep in dependencies[var]:
+            in_degree[var] += 1
+
+    queue = deque([var for var in in_degree if in_degree[var] == 0])
+    result = []
+
+    while queue:
+        var = queue.popleft()
+        result.append(var)
+        for dependent in var_dict:
+            if var in dependencies[dependent]:
+                in_degree[dependent] -= 1
+                if in_degree[dependent] == 0:
+                    queue.append(dependent)
+
+    # Check for circular dependencies
+    if len(result) != len(var_dict):
+        remaining = sorted(set(var_dict.keys()) - set(result))
+        raise ValueError(f"Circular dependencies detected: {', '.join(remaining)}")
+
+    return {var: var_dict[var] for var in result}

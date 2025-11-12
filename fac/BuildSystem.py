@@ -152,7 +152,6 @@ def load_config(path):
         for dep in full_config[target]['dependencies']:
             dependents[dep['target']].append(target)
     targets_to_process = set(full_config.keys())
-    print(f"targets_to_process={targets_to_process}")
     while len(targets_to_process) > 0:
         processed_targets = 0
         for target in list(targets_to_process):
@@ -171,20 +170,14 @@ def load_config(path):
                             if var in full_config[dependent]['variables']:
                                 assert full_config[dependent]['variables'][var] == full_config[target]['variables'][var]
                             else:
-                                # NOTE:
-                                # this is a somewhat hackish/brittle/clever python trick:
-                                # we are updating the dictionary in a way that ensures
-                                # when we iterate over the dictionary,
-                                # then the newly updated value will be the first to iterate over;
-                                # normally, it would be the last;
-                                # we need to enforce the correct order here so that variables get resolved in the order they are defined
-                                full_config[dependent]['variables'] = {
-                                        var: full_config[target]['variables'][var],
-                                        **full_config[dependent]['variables']
-                                        }
+                                full_config[dependent]['variables'][var] = full_config[target]['variables'][var]
 
         if processed_targets == 0:
             break
+
+    # reorder the variable definitions
+    for target in full_config:
+        full_config[target]['variables'] = reorder_variable_dictionary(full_config[target]['variables'])
 
     # certain config options result in modifications to the full_config
     keys0 = list(full_config.keys())
@@ -981,7 +974,11 @@ class BuildSystem:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT, # merge stderr into stdout
                 executable='/bin/bash',
-                env=variable_dictionary_resolve({**os.environ, **context.variables}),
+                env=variable_dictionary_resolve({
+                    **os.environ,
+                    **context.variables,
+                    'FAC_DEPENDENCIES': '\n'.join(context.dependency_paths),
+                    }),
                 )
             if self.print_cmd_stdout:
                 try:
