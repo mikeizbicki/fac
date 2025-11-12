@@ -26,6 +26,7 @@ jobs:
           git submodule update --init --recursive tests/fac_test2_dependency_only_variables
           git submodule update --init --recursive tests/fac_test3_postreqs
           git submodule update --init --recursive tests/fac_test4_dependency_only_variables
+          git submodule update --init --recursive tests/fac_test5_variable_inheritance
       - name: Set up Python ${{matrix.python}}
         uses: actions/setup-python@v2
         with:
@@ -49,4 +50,8 @@ jobs:
       - name: fac_test4_dependency_only_variables
         run: |
           cd tests/fac_test4_dependency_only_variables
+          ./run_test.sh
+      - name: fac_test5_variable_inheritance
+        run: |
+          cd tests/fac_test5_variable_inheritance
           ./run_test.sh
