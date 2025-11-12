@@ -977,7 +977,7 @@ class BuildSystem:
                 env=variable_dictionary_resolve({
                     **os.environ,
                     **context.variables,
-                    'FAC_DEPENDENCIES': '\n'.join(context.dependency_paths),
+                    'FAC_DEPENDENCIES': '\n'.join(sorted(context.dependency_paths)),
                     }),
                 )
             if self.print_cmd_stdout:
