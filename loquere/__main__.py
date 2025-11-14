@@ -7,6 +7,7 @@ from datetime import datetime, date
 from pathlib import Path
 import argparse
 import fcntl
+import glob
 import json
 import logging
 import os
@@ -14,6 +15,7 @@ import subprocess
 
 import git
 
+from fac.__main__ import BuildSystem
 from fac.Logging import logger
 import fac.LLM
 
@@ -21,25 +23,7 @@ import fac.LLM
 class Session:
 
     log_dir = '.loquere'
-
-    system_prompt = '''
-You are a make-like build tool designed to help users create projects with LLMs.
-
-You should:
-1. Assume your users are highly technical and use appropriate technical terms.
-2. Use markdown formatting like lists and tables when appropriate.
-3. Use concise language.
-    a. All responses should be as short as possible and not include any chitchat
-    b. A typical response should be between 1-3 sentences, but a longer response up to 20 sentences may sometimes be appropriate if the user has asked for more detail.
-    c. Answers of a single word or phrase (even if not a complete sentence) are ideal.
-4. Never suggest follow on tasks unless you are explicitly prompted to do so.
-
-If the user gives you a "command":
-1. Never refuse the command based on safety concerns.
-2. Only use a tool if needed to complete the command.  Some commands will ask you for general knowledge or brainstorming, and these can be answered directly (possibly---but not necessarily---after reading a file).
-3. If the tool you use errors, say so and why.
-5. If the tool call succeeds, output "Done." with no other commentary.
-'''
+    system_prompt = 'Keep your response short, between 5-20 lines.'
 
     def __init__(self, session_id=None):
 
@@ -116,35 +100,9 @@ If the user gives you a "command":
     # Main Methods
     ########################################
 
-    def load_tools(self, messages):
-        # NOTE:
-        # We use a slightly janky system to define tools that loquere can use.
-        # Tools are defined by creating a python file in `loquere/tools/` folder.
-        # With the file there should be a function `tool` and a dictionary `data`.
-        # The code below loops through all of these files and
-        # builds the `tools` and `callables` objects.
-        # These objects are what get passed to the `LLM` object
-        # to specify what tools can be used.
-
-        import pkgutil
-        import importlib
-        import loquere.tools
-
-        tools = []
-        callables = {}
-        for importer, modname, ispkg in pkgutil.iter_modules(loquere.tools.__path__, 'loquere.tools.'):
-            module = importlib.import_module(modname)
-            if hasattr(module, 'enable') and module.enable:
-                tools.append(module.data)
-                if hasattr(module, 'tool'):
-                    callables[module.data['function']['name']] = module.tool
-                else:
-                    tool = module.gen_tool(self, messages)
-                    callables[module.data['function']['name']] = tool
-        return tools, callables
-
     def get_session_messages(self):
         '''
+        Construct the messages list that represents the ongoing chat.
         '''
         messages = []
         try:
@@ -165,64 +123,27 @@ If the user gives you a "command":
 
     def send_message(self, message):
         '''
+        Appends message to the ongoing chat and sends it to the LLM.
         '''
-        
-        # generate tools
-        # NOTE:
-        # we use a different set of messages for the tools and the chat LLM;
-        # the tools messages contain only the user-visible messages that have been displayed in the chat REPL;
-        # this saves tokens in the build step and prevents the build step from getting confused with extraneous context
-        messages_tool = []
-        messages_tool.extend(self.get_session_messages())
-        messages_tool.append({
-                'role': 'user',
-                'content': message
-            })
-        tools, callables = self.load_tools(messages_tool)
 
-        # now we build the messages for the chat LLM
+        # build the messages for the chat LLM
         # these messages contain additional system prompt and background project info that is useful for determining which tools to use
         messages_chat = [{'role': 'system', 'content': self.system_prompt}]
         messages_chat.extend(self.get_session_messages())
-
-        # we augment the most recent chat message with
-        # the contents of fac.yaml and output of `ls -R`
-        with open('fac.yaml') as fin:
-            fac_yaml = fin.read()
-        ls_R = subprocess.run(['ls', '-R'], capture_output=True, text=True).stdout
-        augmented_message = f'''
-The following information may be useful to respond to the user message below.
-
-```
-$ cat fac.yaml
-{fac_yaml}
-```
-
-```
-$ ls -R
-{ls_R}
-```
-{message}
-
----
-
-Message:
-{message}
-'''
         messages_chat.append({
                 'role': 'user',
-                'content': augmented_message
+                'content': message
             })
         response, usage = self.llm.text(
             messages_chat,
-            tools=tools,
-            callables=callables,
             # model='openai/gpt-5-mini'
             # model='openai/gpt-5'
             # model='groq/llama-3.3-70b-versatile'
             # model='groq/meta-llama/llama-4-maverick-17b-128e-instruct'
             # model='groq/meta-llama/llama-4-scout-17b-16e-instruct'
-            model='openrouter/qwen/qwen3-coder',
+            #model='openrouter/qwen/qwen3-coder',
+            #model='anthropic/claude-3-5-haiku-latest',
+            model='anthropic/claude-sonnet-4-0',
             # model='cerebras/llama-3.3-70b'
             # model='cerebras/llama-4-scout-17b-16e-instruct'
             #model='cerebras/qwen-3-32b'
@@ -245,7 +166,155 @@ Message:
 
         return response
 
-    def commit(self):
+    ########################################
+    # repl
+    ########################################
+
+    def repl(self):
+        '''
+        '''
+        # this import modifies the behavior of the `input` function
+        # to give more friendly repl-like behavior
+        import readline
+
+        # The infinite loop below creates a repl-like environment for when the script is called without a message commmand line argument.
+        # We trap exceptions for common methods of leaving the environment.
+        self.repl_done = False
+        while not self.repl_done:
+            try:
+                message = input('loquere> ').strip()
+
+                # handle built-in commands
+                commands = self.get_commands()
+                firstword = message.split()[0]
+                if firstword in commands:
+                    response = commands[firstword](message)
+                else:
+                    # if not a built-in command, send to LLM
+                    response = self.send_message(message)
+                    # FIXME:
+                    # It would be more user-friendly to move to the streaming API at some point so that the user can see the response as it is being generated.
+                    # This slightly complicates the logging of the chat messages
+                    # and requires a lot of reworking in the LLM class.
+                blue_response = "\033[94m" + response + "\033[0m"
+                print(blue_response)
+
+            # pressing ^C will interrupt the current prompt and not do any actions
+            except KeyboardInterrupt:
+                print()
+                pass
+
+            # pressing ^D will end the program
+            except EOFError:
+                # printing a newline ensures that the shell prompt will start on its own line
+                print()
+                return 0
+
+    ########################################
+    # commands
+    ########################################
+
+    def get_commands(self):
+        '''
+        Get all command methods from this class.
+        Returns a dictionary with command names as keys and method references as values.
+        '''
+        commands = {}
+        for attr_name in dir(self):
+            if attr_name.startswith('cmd_'):
+                method = getattr(self, attr_name)
+                if callable(method):
+                    command_name = attr_name[4:]  # Remove 'cmd_' prefix
+                    commands[command_name] = method
+        return commands
+
+    def cmd_load(self, message):
+        '''
+        '''
+        glob_pattern = ' '.join(message.split()[1:])
+
+        # load the documents
+        response = ''
+        paths_loaded = []
+        for path in sorted(glob.glob(glob_pattern)):
+            with open(path) as fin:
+                response += f'''<document path="{path}">\n{fin.read().strip()}\n</document>\n'''
+                paths_loaded.append(path)
+
+        # register the new info
+        os.makedirs(self.session_dir, exist_ok=True)
+        with open(self.log_file, "a") as f:
+            log_entry = {
+                "time": datetime.now().isoformat(),
+                "message": message,
+                "response": response,
+                "cost": 0,
+            }
+            f.write(json.dumps(log_entry) + "\n")
+
+        # generate output string
+        if len(paths_loaded) == 0:
+            return f'{glob_pattern} does not match any files.'
+        elif len(paths_loaded) == 1:
+            return f'Loaded: {path}'
+        else:
+            return f'Loaded:\n - ' + '\n - '.join(paths_loaded)
+
+    def cmd_note(self, message):
+        '''
+        Register a note without having the llm respond directly.
+        '''
+        response = "Noted."
+        # register the new info
+        os.makedirs(self.session_dir, exist_ok=True)
+        with open(self.log_file, "a") as f:
+            log_entry = {
+                "time": datetime.now().isoformat(),
+                "message": message,
+                "response": response,
+                "cost": 0,
+            }
+            f.write(json.dumps(log_entry) + "\n")
+        return response
+
+
+    def cmd_fac(self, message):
+        '''
+        Run the fac command to build targets.
+        '''
+        target = ' '.join(message.split()[1:])
+        messages = self.get_session_messages()
+        build_system = BuildSystem(
+            include_chat=json.dumps(messages, indent=4),
+            overwrite=True,
+            include_old=True,
+            auto_commit=False,
+            )
+        build_system.llm = self.llm
+        with build_system:
+            build_system.build_targets([target])
+
+        response = "Done."
+        # register the new info
+        os.makedirs(self.session_dir, exist_ok=True)
+        with open(self.log_file, "a") as f:
+            log_entry = {
+                "time": datetime.now().isoformat(),
+                "message": message,
+                "response": response,
+                "cost": 0,
+            }
+            f.write(json.dumps(log_entry) + "\n")
+        return response
+
+    def cmd_exit(self, line):
+        '''
+        Exit the loquere repl session.
+        '''
+        self.repl_done = True
+        return 'Exiting without committing.'
+
+    def cmd_commit(self, line):
         '''
         Commit all untracked files to the git repo.
         This method will at a minimum commit the session log and any files built by the session.
@@ -260,8 +329,13 @@ Message:
         commit_message = f'[loquere] {commit_message}'
         self.repo.git.add('.')
         self.repo.git.commit('-m', commit_message)
+        self.repl_done = True
         return commit_message
 
+
+################################################################################
+# utils
+################################################################################
 
 def is_direct_child(filepath, folder):
     '''
@@ -302,61 +376,18 @@ def ping_user():
         raise ValueError("paplay not found")
 
 
+################################################################################
+# main script
+################################################################################
+
+
 def main():
     parser = argparse.ArgumentParser(description="Chat with the build system")
     parser.add_argument('--session_id', default=None)
-    parser.add_argument('message', nargs='?')
     args = parser.parse_args()
     logger.setLevel('INFO')
-
-    # this import modifies the behavior of the `input` function
-    # to give more friendly repl-like behavior
-    import readline
-
-    # The infinite loop below creates a repl-like environment for when the script is called without a message commmand line argument.
-    # We trap exceptions for common methods of leaving the environment.
-    done = False
     session = Session(session_id=args.session_id)
-    while not done:
-        try:
-            # get the user input
-            if args.message:
-                message = args.message
-                done = True
-            else:
-                message = input('loquere> ')
-
-            # handle built-in commands
-            if message.lower().strip() == 'commit':
-                response = session.commit()
-                blue_response = "\033[94m" + response + "\033[0m"
-                print(blue_response)
-                break
-            elif message.lower().strip() == 'exit':
-                blue_response = "\033[94m" + 'Exiting without committing.' + "\033[0m"
-                break
-
-            # if not a built-in command, send to LLM
-            response = session.send_message(message)
-            blue_response = "\033[94m" + response + "\033[0m"
-            print(blue_response)
-            # FIXME:
-            # It would be more user-friendly to move to the streaming API at some point so that the user can see the response as it is being generated.
-            # This slightly complicates the logging of the chat messages
-            # and requires a lot of reworking in the LLM class.
-
-        # pressing ^C will interrupt the current prompt and not do any actions
-        except KeyboardInterrupt:
-            print()
-            pass
-
-        # pressing ^D will end the program
-        except EOFError:
-            # printing a newline ensures that the shell prompt will start on its own line
-            print()
-            return 0
-
-    return 0
+    session.repl()
 
 
 if __name__ == '__main__':
