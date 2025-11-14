@@ -778,29 +778,42 @@ class BuildSystem:
             dependency_paths1 = []
             for dep in config['dependencies']:
                 dep_target = dep['target']
-                if dep.get('include', True):
-                    # the ground-truth dependency_paths can always be given by seeing what self._traverse_target returns with the proper variables assigned;
-                    # (this is potentially different than what the recursive call done above returned because variables may not have yet been calculated in the recursive call above);
-                    # this recursive call is a bit expensive and doesn't handle non-target dependencies,
-                    # so we try to do expand_path first
-                    # FIXME:
-                    # it feels very embarrassing / unsafe / janky to have a double recursion here,
-                    # I can't see how to eliminate it though... this needs some real careful thought
-                    try:
-                        dep_paths = expand_path(dep_target, context.variables)
-                    except TemplateProcessingError:
-                        built_paths = self._traverse_target(
-                                dep_target,
-                                {**context.variables},
-                                None,
-                                overwrite=self.from_scratch,
-                                traversed_paths=traversed_paths,
-                                traversed_deps=traversed_deps,
-                                disable_logging=True,
-                                )
-                        dep_paths = list(set(built_paths))
-                    dependency_paths1.extend(dep_paths)
-            context1 = context._replace(dependency_paths=sorted(dependency_paths1))
+                # the ground-truth dependency_paths can always be given by seeing what self._traverse_target returns with the proper variables assigned;
+                # (this is potentially different than what the recursive call done above returned because variables may not have yet been calculated in the recursive call above);
+                # this recursive call is a bit expensive and doesn't handle non-target dependencies,
+                # so we try to do expand_path first
+                # FIXME:
+                # it feels very embarrassing / unsafe / janky to have a double recursion here,
+                # I can't see how to eliminate it though... this needs some real careful thought
+                try:
+                    # NOTE:
+                    # the natural thing to do is
+                    # ```
+                    # dep_paths = expand_path(dep_target, context.variables)
+                    # ```
+                    # but this leads to a bug in the variables that have newlines in them
+                    # (that is, variables that are not part of the target)
+                    # we need to do this more complicated loop to handle these variables;
+                    # there seems to be a lot of weird edge cases between these two types of variables
+                    # and longterm it might make sense to properly split them up and track them differently
+                    split_vars = expand_vars_on_newlines(context.variables)
+                    dep_paths = []
+                    for var_dict in split_vars:
+                        dep_paths.extend(expand_path(dep_target, var_dict))
+                except TemplateProcessingError:
+                    built_paths = self._traverse_target(
+                            dep_target,
+                            {**context.variables},
+                            None,
+                            overwrite=self.from_scratch,
+                            traversed_paths=traversed_paths,
+                            traversed_deps=traversed_deps,
+                            disable_logging=True,
+                            )
+                    dep_paths = list(set(built_paths))
+                dependency_paths1.extend(dep_paths)
+            dependency_paths1 = sorted(list(set(dependency_paths1)))
+            context1 = context._replace(dependency_paths=dependency_paths1)
             contexts.append(context1)
 
         # add manually specified dependencies

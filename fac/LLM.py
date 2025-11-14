@@ -5,12 +5,15 @@ import asyncio
 import base64
 import datetime
 import json
+import mimetypes
 import os
 import sys
 import time
 import uuid
 
+import fal_client
 import openai
+import requests
 
 from fac.Logging import logger
 
@@ -62,6 +65,9 @@ registered_models = {
     # video prices are measured in seconds, not tokens
     'openai/sora-2':                        {'video/out': 0.10},
     'openai/sora-2-pro':                    {'video/out': 0.50},
+
+    # fal-ai prices are measured in seconds, not tokens
+    'fal-ai/nano-banana':                   {'video/out': 0.04},
     }
 
 
@@ -73,8 +79,12 @@ class ModelUsageSummary():
     def register_result(self, model, result):
         tokens = Counter()
 
+        # FAL-AI API calls
+        if model.startswith('fal-ai'):
+            tokens['video/out'] = 1000000.0
+
         # Video Generation calls
-        if str(result).startswith('Video'):
+        elif str(result).startswith('Video'):
             tokens['video/out'] = float(result.seconds) * 1000000
             # we multiply by a million here because we divide by 1000000 later
 
@@ -143,6 +153,7 @@ class LLM():
         #self.default_text_model = 'anthropic/claude-sonnet-4-0'
         #self.default_text_model = 'anthropic/claude-3-5-haiku-latest'
         #self.default_text_model = 'anthropic/claude-3-haiku-20240307'
+        #self.model_image = 'fal-ai/nano-banana/edit'
         self.model_image = 'openai/gpt-image-1'
         self.default_audio_model = 'openai/gpt-4o-mini-tts'
         self.usage_summary = ModelUsageSummary()
@@ -289,40 +300,69 @@ class LLM():
         
         if model is None:
             model = self.model_image
-        model_name = self.model_image.split('/')[-1]
-        quality = data.get('quality', 'low')
+        provider, model_name = model.split('/', 1)
 
-        size = '1536x1024'
-        if data.get('orientation') == 'square':
-            size = '1024x1024'
-        if data.get('orientation') == 'portrait':
-            size = '1024x1536'
+        # openAI models:
+        if provider == 'openai':
+            quality = data.get('quality', 'low')
+            size = '1536x1024'
+            if data.get('orientation') == 'square':
+                size = '1024x1024'
+            if data.get('orientation') == 'portrait':
+                size = '1024x1536'
 
-        # generate a new image
-        if not data.get('reference_images'):
-            result = await client.images.generate(
-                model=model_name,
-                prompt=data['prompt'],
-                size=size,
-                quality=quality,
+            # generate a new image
+            if not data.get('reference_images'):
+                result = await client.images.generate(
+                    model=model_name,
+                    prompt=data['prompt'],
+                    size=size,
+                    quality=quality,
+                )
+            else:
+                result = await client.images.edit(
+                    model=model_name,
+                    prompt=data['prompt'],
+                    size=size,
+                    quality=quality,
+                    image=[open(path, 'rb') for path in data['reference_images']]
+                )
+            local_usage = ModelUsageSummary()
+            local_usage.register_result(model, result)
+            self.usage_summary.register_result(model, result)
+
+            # save the image
+            image_base64 = result.data[0].b64_json
+            image_bytes = base64.b64decode(image_base64)
+            with open(path, mode) as fout:
+                fout.write(image_bytes)
+
+        elif provider == 'fal-ai':
+            base64_urls = [encode_image_to_base64_url(path) for path in data['reference_images']]
+
+            # call the api and await result
+            handler = await fal_client.submit_async(
+                model,
+                arguments={
+                    "prompt": data['prompt'],
+                    "num_images": 1,
+                    "aspect_ratio": "16:9",
+                    "image_urls": base64_urls,
+                },
             )
-        else:
-            result = await client.images.edit(
-                model=model_name,
-                prompt=data['prompt'],
-                size=size,
-                quality=quality,
-                image=[open(path, 'rb') for path in data['reference_images']]
-            )
-        local_usage = ModelUsageSummary()
-        local_usage.register_result(model, result)
-        self.usage_summary.register_result(model, result)
+            async for event in handler.iter_events(with_logs=True):
+                pass
+            result = await handler.get()
 
-        # save the image
-        image_base64 = result.data[0].b64_json
-        image_bytes = base64.b64decode(image_base64)
-        with open(path, mode) as fout:
-            fout.write(image_bytes)
+            # download the image
+            response = requests.get(result['images'][0]['url'])
+            with open(path, 'wb') as fout:
+                fout.write(response.content)
+
+            # update usage info
+            local_usage = ModelUsageSummary()
+            local_usage.register_result(model, result)
+            self.usage_summary.register_result(model, result)
 
         logger.info(f'request_cost: ${local_usage.total_cost():0.4f}  total_cost: ${self.usage_summary.total_cost():0.4f}', submessage=True)
         return local_usage
@@ -443,4 +483,10 @@ def generate_uuid7():
     uuid7 = (timestamp << 64) | random_number
     return uuid7
 
+
+def encode_image_to_base64_url(file_path):
+    with open(file_path, "rb") as image_file:
+        encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
+        mime_type = mimetypes.guess_type(file_path)[0] or 'image/png'
+        return f"data:{mime_type};base64,{encoded_string}"
 
