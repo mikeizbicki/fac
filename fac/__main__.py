@@ -46,7 +46,7 @@ def main():
                 else:
                     parser.add_argument(name, type=str2bool, default=True)
             elif field.type == list[str]:
-                parser.add_argument(name, default=field.default_factory(), type=str, nargs='*')
+                parser.add_argument(name, default=None, type=str, nargs='*')
             else:
                 parser.add_argument(name, default=field.default, type=field.type)
     args = parser.parse_args()

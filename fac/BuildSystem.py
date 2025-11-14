@@ -122,7 +122,8 @@ def load_config(path):
                 full_config[target][option] = full_config[target][option].strip()
             elif type(full_config[target][option]) == dict:
                 for suboption in full_config[target][option]:
-                    full_config[target][option][suboption] = full_config[target][option][suboption].strip()
+                    if type(full_config[target][option][suboption]) == str:
+                        full_config[target][option][suboption] = full_config[target][option][suboption].strip()
 
         # the dependencies field can be specified as a string, list of strings, or list of dictionaries;
         # we convert all forms into the list of dictionary form here
@@ -235,7 +236,9 @@ class BuildSystem:
     print_config: bool = False
     no_validate: bool = False
     include_chat: str = None
-    include_old: str = None
+    include_old: bool = False
+    include_paths: list[str] = None
+    options: list[str] = None
     auto_commit: bool = True
     print_cmd_stdout: bool = False
     freeze: bool = False
@@ -473,6 +476,14 @@ class BuildSystem:
         if not config_variables:
             config_variables = {}
         assert type(config_variables) is dict
+
+        # update config options from command line inputs
+        if root_call and self.options:
+            if 'options' not in config:
+                config['options'] = {}
+            for option in self.options:
+                k, v = option.split('=')
+                config['options'][k] = v
 
         # warn the user if they have defined a variable that is not used
         for var in config_variables:
@@ -760,6 +771,7 @@ class BuildSystem:
         # Compute dependency_paths
         ########################################
 
+        # recompute dependency_paths from scratch here
         contexts0 = contexts
         contexts = []
         for context in contexts0:
@@ -790,6 +802,16 @@ class BuildSystem:
                     dependency_paths1.extend(dep_paths)
             context1 = context._replace(dependency_paths=sorted(dependency_paths1))
             contexts.append(context1)
+
+        # add manually specified dependencies
+        if root_call and self.include_paths:
+            contexts0 = contexts
+            contexts = []
+            for context in contexts0:
+                context1 = context._replace(
+                        dependency_paths=context.dependency_paths + self.include_paths
+                        )
+                contexts.append(context1)
 
         ########################################
         # Build each context
@@ -954,6 +976,10 @@ class BuildSystem:
             logger.info('dependency_paths:', submessage=True)
             for path in context.dependency_paths:
                 logger.info(f' - {path}', submessage=True)
+            if config.get('options'):
+                logger.info('options:', submessage=True)
+                for opt in config['options']:
+                    logger.info(f" - {opt}={config['options'][opt]}", submessage=True)
 
         if not (build_context or overwrite):
             return

@@ -156,15 +156,43 @@ class LLM():
             seed=None,
             max_iter=10,
             ):
-        return asyncio.run(self.text_async(
-            messages,
-            tools=tools,
-            callables=callables,
-            response_format=response_format,
-            model=model,
-            seed=seed,
-            max_iter=max_iter
-        ))
+        #return asyncio.run(self.text_async(
+            #messages,
+            #tools=tools,
+            #callables=callables,
+            #response_format=response_format,
+            #model=model,
+            #seed=seed,
+            #max_iter=max_iter
+        #))
+        try:
+            # Check if we're already in a running event loop
+            loop = asyncio.get_running_loop()
+            # If we are, we need to run in a new thread
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, self.text_async(
+                    messages,
+                    tools=tools,
+                    callables=callables,
+                    response_format=response_format,
+                    model=model,
+                    seed=seed,
+                    max_iter=max_iter
+                ))
+                return future.result()
+        except RuntimeError:
+            # No running event loop, use asyncio.run() normally
+            return asyncio.run(self.text_async(
+                messages,
+                tools=tools,
+                callables=callables,
+                response_format=response_format,
+                model=model,
+                seed=seed,
+                max_iter=max_iter
+            ))
+
 
     async def text_async(self, messages, *,
             tools=None,
