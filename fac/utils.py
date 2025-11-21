@@ -476,18 +476,35 @@ def variable_dictionary_resolve(env_vars):
 
 def match_pattern_withvars(patterns, input_str, vars_dict=None):
     '''
-    >>> patterns = ['recursive/$TEST/$NAME', 'simple/$TEST/$NAME', 'nonrecursive/$TEST/$NAME']
-    >>> match_pattern_withvars(patterns, 'recursive/$TEST/$DEP', {'TEST': 'forward.json', 'NAME': 'c', 'DEP': 'b'})
-    ('recursive/$TEST/$NAME', {'NAME': 'b', 'TEST': 'forward.json'})
+    This function is similar to match_pattern in that it finds the pattern within patterns that input_str matches.
+    It differs, however, in that it also accepts a vars_dict.
+    The function will return a modified version of vars_dict with "transitive assignments" overwritten.
+    For example, if we have that NAME gets assigned to $DEP after doing the pattern match,
+    then we delete DEP from vars_dict and assign DEP's value to NAME.
 
-    >>> match_pattern_withvars(patterns, 'recursive/$DEP1/$DEP2', {'NAME': 'f', 'DEP1': 'b', 'DEP2': 'c'})
-    ('recursive/$TEST/$NAME', {'TEST': 'b', 'NAME': 'c'})
+    Simple examples:
 
-    >>> match_pattern_withvars(patterns, 'recursive/$DEP1/$DEP2', {'NAME': 'f', 'DEP1': 'b', 'DEP2': 'c', 'FOO': 'A'})
-    ('recursive/$TEST/$NAME', {'TEST': 'b', 'NAME': 'c', 'FOO': 'A'})
+        >>> patterns = ['recursive/$TEST/$NAME', 'simple/$TEST/$NAME', 'nonrecursive/$TEST/$NAME']
+        >>> match_pattern_withvars(patterns, 'recursive/$TEST/$DEP', {'TEST': 'forward.json', 'NAME': 'c', 'DEP': 'b'})
+        ('recursive/$TEST/$NAME', {'NAME': 'b', 'TEST': 'forward.json'})
+
+        >>> match_pattern_withvars(patterns, 'recursive/$DEP1/$DEP2', {'NAME': 'f', 'DEP1': 'b', 'DEP2': 'c'})
+        ('recursive/$TEST/$NAME', {'TEST': 'b', 'NAME': 'c'})
+
+        >>> match_pattern_withvars(patterns, 'recursive/$DEP1/$DEP2', {'NAME': 'f', 'DEP1': 'b', 'DEP2': 'c', 'FOO': 'A'})
+        ('recursive/$TEST/$NAME', {'TEST': 'b', 'NAME': 'c', 'FOO': 'A'})
 
 
-    >>> match_pattern_withvars(patterns, 'jsons/$TEST', {'TEST': 'forward.json', 'NAME': 'c'})
+    If no pattern matches, return None as the first argument.
+
+        >>> match_pattern_withvars(patterns, 'jsons/$TEST', {'TEST': 'forward.json', 'NAME': 'c'})
+        (None, {'TEST': 'forward.json', 'NAME': 'c'})
+
+    If a pattern matches, but the variable is not found in vars_dict:
+
+        >>> patterns=['outline.json', 'sub$LEVEL1/outline.json', 'sub$LEVEL1/sub$LEVEL2/outline.json', 'final.txt', 'sub$LEVEL1/summary_NOVAR.md', 'sub$LEVEL1/summary_SAMEVAR.md', 'sub$LEVEL1/summary_VARSUBSET.md', 'sub$LEVEL1/summary_FOO.md', 'sub$LEVEL1/summary_DEP.md', 'deps/$DEP', 'sub$LEVEL1/summary_EMPTY.md']
+        >>> match_pattern_withvars(patterns, 'deps/a', {})
+        ('deps/$DEP', {'DEP': 'a'})
     '''
     vars_dict1 = {}
     target1, target1_vars =  match_pattern(patterns, input_str)
@@ -499,8 +516,10 @@ def match_pattern_withvars(patterns, input_str, vars_dict=None):
                 badvars.append(val[1:])
             else:
                 raise ValueError
-        else:
+        elif var in vars_dict:
             vars_dict1[var] = vars_dict[var]
+        else:
+            vars_dict1[var] = val
     for var in vars_dict:
         if var not in vars_dict1 and var not in badvars:
             vars_dict1[var] = vars_dict[var]
