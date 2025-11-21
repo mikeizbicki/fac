@@ -417,6 +417,7 @@ class BuildSystem:
             traversed_paths=None,
             traversed_deps=None,
             disable_logging=False,
+            janky_recursive_call=False,
             ):
         if disable_logging:
             import logging
@@ -429,15 +430,24 @@ class BuildSystem:
 
         # verify that variables are correctly formatted
         for var in input_env:
-            assert '$' not in input_env[var], f'input_env[var]={input_env[var]}'
-            assert ' ' not in input_env[var], f'input_env[var]={input_env[var]}'
+            # NOTE:
+            # In principle, the values for variables should be able to fail these asserts;
+            # In practice, however, I have found that if these conditions are met,
+            # there has always been a bug in the build system.
+            #assert '$' not in input_env[var], f'input_env["{var}"]="{input_env[var]}"'
+            assert ' ' not in input_env[var], f'input_env["{var}"]="{input_env[var]}"'
+
+            # NOTE:
+            # the following check seems reasonable,
+            # but it breaks the dependency_only_variables
+            # assert len(input_env[var]) > 0, f'input_env["{var}"]="{input_env[var]}"'
 
         # load target config
         config_targets = self.full_config.keys()
         transformed_target, target_env = match_pattern(config_targets, target_to_build)
         if not transformed_target:
             logger.trace(f"target does not exist, not building")
-            raise TargetNotFound(f"target='{target_to_build}'")
+            raise TargetNotFound(f"target='{target_to_build}', transformed_target='{transformed_target}'; target_env={target_env}")
         target_variables = extract_variables(transformed_target)
         logger.trace(f"transformed_target={transformed_target}; target_variables={target_variables}, target_env={target_env}")
         assert transformed_target
@@ -653,20 +663,41 @@ class BuildSystem:
                     # STEP 2A: skip dependencies that have unresolved variables
                     ########################################
 
+                    dep_vars = extract_variables(dep_target)
+
+                    # First we check for any variables that are "empty";
+                    # this means that the dependency should not be built.
+                    # This occurs when we have
+                    #   dependencies:
+                    #     - simple/$DEP
+                    #   variables:
+                    #     DEP: echo ''
+                    # The empty variable indicates that the dependency should expand to nothing.
+                    abort = False
+                    for dep_var in dep_vars:
+                        if dep_var in context.variables and context.variables[dep_var] == '':
+                            abort = True
+                    if abort:
+                        continue
+
+                    # Next we check for variables that are needed but have not been defined yet.
+                    # If we had, for example
+                    #   dependencies:
+                    #     - simple/$DEP
+                    #   variables:
+                    #     DEP: echo 'test'
+                    # then we need the $DEP variable in order to evaluate simple/$DEP
+                    # NOTE:
                     # the outer for-loop guarantees that one variable
                     # will be evaluated in each iteration,
                     # and so we will eventually evaluate this target in a later iteration
                     # (if all the variables are actually defined)
 
-                    dep_vars = extract_variables(dep_target)
                     unmatched_vars = []
                     for dep_var in dep_vars:
-                        #if dep_var not in context.variables and dep_var in target_variables:
                         if dep_var not in context.variables and dep_var in config['variables_raw']:
-                        #if dep_var not in context.variables:
                             unmatched_vars.append(dep_var)
                     if len(unmatched_vars) > 0:
-                        logger.trace(f'unmatched_vars={unmatched_vars}')
                         unresolved_dependencies1.append(dep)
                         continue
 
@@ -708,25 +739,41 @@ class BuildSystem:
                         dependency_paths1.extend(target_deps)
                         continue
                     traversed_deps.add(target_str)
+                    # FIXME:
+                    # the implementation with target_str causes us to rebuild target/variable combos if the variables are specified in different subsets
+                    # (I realize this is confusing and won't make sense to anyone else)
+
+                    # FIXME #
+                    #print(f"context.variables={context.variables}")
 
                     ########################################
                     # STEP 2C: recursively build dependencies
                     ########################################
                     logger.info(f'resolving dependency: {target_str}')
+                    #logger.info(f'resolving dependency: {target_str}; dep_target={dep_target}, context.variables={context.variables}')
+
+                    #print(f"config_targets={config_targets}")
+                    #print(f"dep_target={dep_target}")
+                    #print(f"context.variables={context.variables}")
+                    dep_target1, context_variables1 = match_pattern_withvars(config_targets, dep_target, context.variables)
+                    if dep_target1 is None:
+                        dep_target1 = dep_target
 
                     try:
                         built_paths = self._traverse_target(
-                                dep_target,
-                                {**context.variables},
+                                dep_target1,
+                                context_variables1,
+                                #{**context.variables},
                                 foreach_context,
                                 overwrite=self.from_scratch,
                                 traversed_paths=traversed_paths,
                                 traversed_deps=traversed_deps
                                 )
                         built_paths = list(set(built_paths))
-                        # FIXME:
+                        # XXX:
                         # list(set()) above is used to filter duplicates returned by _traverse_target;
-                        # but why are there duplicates?!
+                        # but I don't understand why/when there are duplicates;
+                        # maybe this isn't needed anymore?
                         dependency_paths1.extend(built_paths)
 
                     except TargetNotFound:
@@ -772,49 +819,58 @@ class BuildSystem:
         ########################################
 
         # recompute dependency_paths from scratch here
-        contexts0 = contexts
-        contexts = []
-        for context in contexts0:
-            dependency_paths1 = []
-            for dep in config['dependencies']:
-                dep_target = dep['target']
-                # the ground-truth dependency_paths can always be given by seeing what self._traverse_target returns with the proper variables assigned;
-                # (this is potentially different than what the recursive call done above returned because variables may not have yet been calculated in the recursive call above);
-                # this recursive call is a bit expensive and doesn't handle non-target dependencies,
-                # so we try to do expand_path first
-                # FIXME:
-                # it feels very embarrassing / unsafe / janky to have a double recursion here,
-                # I can't see how to eliminate it though... this needs some real careful thought
-                try:
-                    # NOTE:
-                    # the natural thing to do is
-                    # ```
-                    # dep_paths = expand_path(dep_target, context.variables)
-                    # ```
-                    # but this leads to a bug in the variables that have newlines in them
-                    # (that is, variables that are not part of the target)
-                    # we need to do this more complicated loop to handle these variables;
-                    # there seems to be a lot of weird edge cases between these two types of variables
-                    # and longterm it might make sense to properly split them up and track them differently
-                    split_vars = expand_vars_on_newlines(context.variables)
-                    dep_paths = []
-                    for var_dict in split_vars:
-                        dep_paths.extend(expand_path(dep_target, var_dict))
-                except TemplateProcessingError:
-                    built_paths = self._traverse_target(
-                            dep_target,
-                            {**context.variables},
-                            None,
-                            overwrite=self.from_scratch,
-                            traversed_paths=traversed_paths,
-                            traversed_deps=traversed_deps,
-                            disable_logging=True,
-                            )
-                    dep_paths = list(set(built_paths))
-                dependency_paths1.extend(dep_paths)
-            dependency_paths1 = sorted(list(set(dependency_paths1)))
-            context1 = context._replace(dependency_paths=dependency_paths1)
-            contexts.append(context1)
+        if not janky_recursive_call:
+            contexts0 = contexts
+            contexts = []
+            for context in contexts0:
+                dependency_paths1 = []
+                for dep in config['dependencies']:
+                    dep_target = dep['target']
+                    # the ground-truth dependency_paths can always be given by seeing what self._traverse_target returns with the proper variables assigned;
+                    # (this is potentially different than what the recursive call done above returned because variables may not have yet been calculated in the recursive call above);
+                    # this recursive call is a bit expensive and doesn't handle non-target dependencies,
+                    # so we try to do expand_path first
+                    # FIXME:
+                    # it feels very embarrassing / unsafe / janky to have a double recursion here,
+                    # I can't see how to eliminate it though... this needs some real careful thought
+                    try:
+                        # NOTE:
+                        # the natural thing to do is
+                        # ```
+                        # dep_paths = expand_path(dep_target, context.variables)
+                        # ```
+                        # but this leads to a bug in the variables that have newlines in them
+                        # (that is, variables that are not part of the target)
+                        # we need to do this more complicated loop to handle these variables;
+                        # there seems to be a lot of weird edge cases between these two types of variables
+                        # and longterm it might make sense to properly split them up and track them differently
+                        split_vars = expand_vars_on_newlines(context.variables)
+                        dep_paths = []
+                        for var_dict in split_vars:
+                            dep_paths.extend(expand_path(dep_target, var_dict))
+                    except TemplateProcessingError:
+                        try:
+                            built_paths = self._traverse_target(
+                                    dep_target,
+                                    {**context.variables},
+                                    None,
+                                    overwrite=self.from_scratch,
+                                    traversed_paths=traversed_paths,
+                                    traversed_deps=traversed_deps,
+                                    disable_logging=True,
+                                    janky_recursive_call=True,
+                                    )
+                            dep_paths = list(set(built_paths))
+                        except (TemplateProcessingError, AssertionError):
+                            # This gets raised when we have a dependency with an empty variable.
+                            # For example: "simple/$DEP" and DEP=''
+                            # This happens when the dependency should not be built
+                            # (because an empty variable corresponds to the empty list)
+                            pass
+                    dependency_paths1.extend(dep_paths)
+                dependency_paths1 = sorted(list(set(dependency_paths1)))
+                context1 = context._replace(dependency_paths=dependency_paths1)
+                contexts.append(context1)
 
         # add manually specified dependencies
         if root_call and self.include_paths:
@@ -884,8 +940,9 @@ class BuildSystem:
 
                 # Handle any exceptions that occurred
                 if exceptions:
-                    for context_id, exception in exceptions:
-                        logger.error(f"Exception in context {context_id}: {exception}")
+                    if len(exceptions) > 1:
+                        for context_id, exception in exceptions:
+                            logger.error(f"Exception in context {context_id}: {exception}")
                     raise exceptions[0][1]
 
             # NOTE:
@@ -1028,8 +1085,11 @@ class BuildSystem:
             await process.wait()
 
             if process.returncode != 0:
-                print(f"context.variables={context.variables}")
                 stdout = await process.stdout.read()
+                logger.error(f"error running the following build script:", submessage=True)
+                for i, line in enumerate(config['cmd'].split('\n')):
+                    logger.error(f"line {i+1}: {line}", submessage=True)
+                logger.error(stdout.decode('ascii'), submessage=True)
                 raise CommandExecutionError(process.returncode, stdout)
 
             return
@@ -1365,6 +1425,9 @@ def eval_var(var, expr, context):
         env=context.variables,
         )
     if cmd.returncode != 0:
+        logger.error(f'Failed to evaluate {var}: {expr}')
+        logger.error(f'context.variables={context.variables}', submessage=True)
+        logger.error(f'{cmd.stderr}', submessage=True)
         raise VariableEvaluationError(var, expr, context, cmd)
     stdout = cmd.stdout.strip()
 

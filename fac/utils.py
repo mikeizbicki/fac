@@ -474,6 +474,38 @@ def variable_dictionary_resolve(env_vars):
 
 ################################################################################
 
+def match_pattern_withvars(patterns, input_str, vars_dict=None):
+    '''
+    >>> patterns = ['recursive/$TEST/$NAME', 'simple/$TEST/$NAME', 'nonrecursive/$TEST/$NAME']
+    >>> match_pattern_withvars(patterns, 'recursive/$TEST/$DEP', {'TEST': 'forward.json', 'NAME': 'c', 'DEP': 'b'})
+    ('recursive/$TEST/$NAME', {'NAME': 'b', 'TEST': 'forward.json'})
+
+    >>> match_pattern_withvars(patterns, 'recursive/$DEP1/$DEP2', {'NAME': 'f', 'DEP1': 'b', 'DEP2': 'c'})
+    ('recursive/$TEST/$NAME', {'TEST': 'b', 'NAME': 'c'})
+
+    >>> match_pattern_withvars(patterns, 'recursive/$DEP1/$DEP2', {'NAME': 'f', 'DEP1': 'b', 'DEP2': 'c', 'FOO': 'A'})
+    ('recursive/$TEST/$NAME', {'TEST': 'b', 'NAME': 'c', 'FOO': 'A'})
+
+
+    >>> match_pattern_withvars(patterns, 'jsons/$TEST', {'TEST': 'forward.json', 'NAME': 'c'})
+    '''
+    vars_dict1 = {}
+    target1, target1_vars =  match_pattern(patterns, input_str)
+    badvars = []
+    for var, val in target1_vars.items():
+        if val[0] == '$':
+            if val[1:] in vars_dict:
+                vars_dict1[var] = vars_dict[val[1:]]
+                badvars.append(val[1:])
+            else:
+                raise ValueError
+        else:
+            vars_dict1[var] = vars_dict[var]
+    for var in vars_dict:
+        if var not in vars_dict1 and var not in badvars:
+            vars_dict1[var] = vars_dict[var]
+    return (target1, vars_dict1)
+
 
 def match_pattern(patterns, input_string):
     """
@@ -667,6 +699,11 @@ def match_pattern_starstar(patterns, input_string):
         [('$PROJECT/$MODULE/config/local.json', {'PROJECT': 'prod'})]
         >>> match_pattern_starstar(["media/$TYPE/$YEAR/$MONTH/$FILE.$EXT", "assets/images/$CATEGORY/$SIZE/$IMAGE.jpg", "content/$SECTION/gallery/$ALBUM/$PHOTO.png"], "media/**/vacation.jpg")
         [('media/$TYPE/$YEAR/$MONTH/$FILE.$EXT', {'FILE': 'vacation', 'EXT': 'jpg'})]
+
+    If a different variable name has been used in the pattern/input_string, we should still match:
+
+        >>> match_pattern_starstar(['recursive/$TEST/$NAME', 'simple/$TEST/$NAME', 'nonrecursive/$TEST/$NAME'], 'recursive/$TEST/$DEP')
+        [('recursive/$TEST/$NAME', {'NAME': '$DEP'})]
     """
     # Check for multiple ** in input_string
     if input_string.count('**') > 1:
@@ -689,6 +726,7 @@ def match_pattern_starstar(patterns, input_string):
             matches.append((norm_pattern, result))
     
     return matches
+
 
 def _match_pattern_with_starstar(pattern_segments, input_segments):
     """Helper to match pattern against input containing **."""

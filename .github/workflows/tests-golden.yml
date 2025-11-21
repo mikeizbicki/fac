@@ -21,12 +21,7 @@ jobs:
           lfs: true
       - name: Initialize specific submodules
         run: |
-          git submodule update --init --recursive stories
-          git submodule update --init --recursive tests/fac_test1_basicproject
-          git submodule update --init --recursive tests/fac_test2_dependency_only_variables
-          git submodule update --init --recursive tests/fac_test3_postreqs
-          git submodule update --init --recursive tests/fac_test4_dependency_only_variables
-          git submodule update --init --recursive tests/fac_test5_variable_inheritance
+          git submodule update --init --recursive tests/fac_test*
       - name: Set up Python ${{matrix.python}}
         uses: actions/setup-python@v2
         with:
@@ -54,4 +49,8 @@ jobs:
       - name: fac_test5_variable_inheritance
         run: |
           cd tests/fac_test5_variable_inheritance
+          ./run_test.sh
+      - name: fac_test6_recursive_dependencies
+        run: |
+          cd tests/fac_test6_recursive_dependencies
           ./run_test.sh

@@ -22,3 +22,6 @@
 [submodule "fac_test5_variable_inheritance"]
 	path = tests/fac_test5_variable_inheritance
 	url = https://github.com/mikeizbicki/fac_test5_variable_inheritance
+[submodule "fac_test6_recursive_dependencies"]
+	path = tests/fac_test6_recursive_dependencies
+	url = https://github.com/mikeizbicki/fac_test6_recursive_dependencies
