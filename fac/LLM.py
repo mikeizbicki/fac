@@ -67,7 +67,7 @@ registered_models = {
     'openai/sora-2-pro':                    {'video/out': 0.50},
 
     # fal-ai prices are measured in seconds, not tokens
-    'fal-ai/nano-banana':                   {'video/out': 0.04},
+    'fal-ai/nano-banana':                   {'image/out': 0.04},
     }
 
 
@@ -81,7 +81,7 @@ class ModelUsageSummary():
 
         # FAL-AI API calls
         if model.startswith('fal-ai'):
-            tokens['video/out'] = 1000000.0
+            tokens['image/out'] = 1000000.0
 
         # Video Generation calls
         elif str(result).startswith('Video'):
@@ -398,38 +398,71 @@ class LLM():
         client = openai.OpenAI()
         model = data.get('model', 'openai/sora-2')
         provider, model_name = model.split('/', 1)
-        assert len(data['reference_images']) == 1
-        input_reference = Path(data['reference_images'][0])
-        video = openai.videos.create(
-                model=model_name,
-                prompt=data['prompt'],
-                input_reference=input_reference,
-                size=data.get('size', '1280x720'),
-                seconds=data.get('seconds', 4),
+
+        if provider == 'openai':
+            assert len(data['reference_images']) == 1
+            input_reference = Path(data['reference_images'][0])
+            video = openai.videos.create(
+                    model=model_name,
+                    prompt=data['prompt'],
+                    input_reference=input_reference,
+                    size=data.get('size', '1280x720'),
+                    seconds=data.get('seconds', 4),
+                    )
+
+            # async sleep until video ready
+            while video.status in ("in_progress", "queued"):
+                await asyncio.sleep(2)
+                video = openai.videos.retrieve(video.id)
+            local_usage = ModelUsageSummary()
+
+            # check for errors
+            if video.status == "failed":
+                message = getattr(
+                    getattr(video, "error", None), "message", "Video generation failed"
                 )
+                logger.error(message)
+                return local_usage
 
-        # async sleep until video ready
-        while video.status in ("in_progress", "queued"):
-            await asyncio.sleep(2)
-            video = openai.videos.retrieve(video.id)
-        local_usage = ModelUsageSummary()
+            # write video to file
+            content = openai.videos.download_content(video.id, variant="video")
+            content.write_to_file(path)
 
-        # check for errors
-        if video.status == "failed":
-            message = getattr(
-                getattr(video, "error", None), "message", "Video generation failed"
+            # calculate usage info
+            local_usage.register_result(model, video)
+            self.usage_summary.register_result(model, video)
+            logger.info(f'request_cost: ${local_usage.total_cost():0.4f}  total_cost: ${self.usage_summary.total_cost():0.4f}', submessage=True)
+
+
+        elif model == 'fal-ai/veo3.1/fast/first-last-frame-to-video':
+            # call the api and await result
+            handler = await fal_client.submit_async(
+                model,
+                arguments={
+                    "prompt": data['prompt'],
+                    "first_frame_url": encode_image_to_base64_url(data['first_frame']),
+                    "last_frame_url": encode_image_to_base64_url(data['last_frame']),
+                    "duration": data.get('seconds', '4') + 's',
+                    "aspect_ratio": data.get('aspect_ratio', '16:9'),
+                    'resolution': data.get('resolution', '720p'),
+                    'generate_audio': data.get('generate_audio', False),
+                },
             )
-            logger.error(message)
-            return local_usage
+            async for event in handler.iter_events(with_logs=True):
+                pass
+            result = await handler.get()
 
-        # write video to file
-        content = openai.videos.download_content(video.id, variant="video")
-        content.write_to_file(path)
+            # download the video
+            response = requests.get(result['video']['url'])
+            with open(path, 'wb') as fout:
+                fout.write(response.content)
 
-        # calculate usage info
-        local_usage.register_result(model, video)
-        self.usage_summary.register_result(model, video)
-        logger.info(f'request_cost: ${local_usage.total_cost():0.4f}  total_cost: ${self.usage_summary.total_cost():0.4f}', submessage=True)
+            # calculate usage info
+            local_usage = ModelUsageSummary()
+            local_usage.register_result(model, response)
+            self.usage_summary.register_result(model, response)
+            logger.info(f'request_cost: ${local_usage.total_cost():0.4f}  total_cost: ${self.usage_summary.total_cost():0.4f}', submessage=True)
+
 
         return local_usage
 

@@ -135,12 +135,32 @@ def with_buffered_logs(logger_obj):
 
 handler = logging.StreamHandler()
 class CustomFormatter(logging.Formatter):
+    # ANSI color codes
+    COLORS = {
+        #'DEBUG': '\033[36m',      # Cyan
+        #'INFO': '\033[32m',       # Green
+        #'WARNING': '\033[33m',    # Yellow/Orange
+        'WARNING': '\033[38;5;208m',    # Yellow/Orange
+        'ERROR': '\033[31m',      # Red
+        #'ERROR': '\033[91m',      # Red
+        #'ERROR': '\033[38;2;178;34;34m',      # Red
+        'CRITICAL': '\033[35m',   # Magenta
+    }
+    RESET = '\033[0m'
+
     def format(self, record):
+        if record.levelname in self.COLORS:
+            startcolor = self.COLORS[record.levelname]
+            stopcolor = self.RESET
+        else:
+            startcolor = ''
+            stopcolor = ''
         if record.levelno == logging.INFO:
             self._style._fmt = '%(tree_prefix)s%(message)s'
         else:
-            self._style._fmt = '%(tree_prefix)s[%(levelname)s] %(message)s'
-        return super().format(record)
+            self._style._fmt = f'%(tree_prefix)s{startcolor}[%(levelname)s] %(message)s{stopcolor}'
+        message = super().format(record)
+        return message
 handler.setFormatter(CustomFormatter(datefmt='%Y-%m-%d %H:%M:%S'))
 logger = RecursiveLogger(__name__)
 logger.addHandler(handler)

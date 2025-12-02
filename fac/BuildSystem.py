@@ -1040,16 +1040,31 @@ class BuildSystem:
             else:
                 file_status.append('out-of-date')
 
+        # process options
+        # NOTE:
+        # options can be specified as either a string or dictionary;
+        # if specified as a string, any shell commands must be run and then it should be converted into a dictionary
+        if type(config.get('options')) == dict:
+            context_options = copy.deepcopy(config['options'])
+            for option in context_options:
+                context_options[option] = process_template(context_options[option], env_vars=context.variables)
+        elif type(config.get('options')) == str:
+            options_str = process_template(config['options'], env_vars=context.variables)
+            context_options = yaml.safe_load(options_str)
+            assert type(context_options) == dict
+        elif config.get('options') is None:
+            context_options = {}
+
         # print logging info
         logger.info(f'file {context_id}/{num_contexts} [{", ".join(file_status)}] "{path_to_generate}"')
         if self.print_dependencies and (build_context or overwrite):
             logger.info('dependency_paths:', submessage=True)
             for path in context.dependency_paths:
                 logger.info(f' - {path}', submessage=True)
-            if config.get('options'):
+            if context_options:
                 logger.info('options:', submessage=True)
-                for opt in config['options']:
-                    logger.info(f" - {opt}={config['options'][opt]}", submessage=True)
+                for opt in context_options:
+                    logger.info(f" - {opt}: {context_options[opt]}", submessage=True)
 
         if not (build_context or overwrite):
             return
@@ -1201,9 +1216,9 @@ except for the changes requested by the user.
             # we need a copy of the config here
             # because we will be modifying the contents with the process_template function;
             # without a copy, we get a bug where building multiple files results in the same config for all files
-            data = copy.deepcopy(config.get('options', {}))
-            for option in data:
-                data[option] = process_template(data[option], env_vars=context.variables)
+            data = copy.deepcopy(context_options)
+            #for option in data:
+                #data[option] = process_template(data[option], env_vars=context.variables)
 
         elif extension == '.mp4':
             filetype = 'video'
@@ -1211,7 +1226,7 @@ except for the changes requested by the user.
             data = {}
             data['prompt'] = prompt_instructions + prompt_description + files_prompt + chat_prompt
             data['reference_images'] = binary_files
-            options = copy.deepcopy(config.get('options', {}))
+            options = copy.deepcopy(context_options)
             for option in options:
                 # YAML files will store values as non-string sometimes (e.g. for ints);
                 # we convert them to string here,
@@ -1228,7 +1243,7 @@ except for the changes requested by the user.
             data = {}
             data['prompt'] = prompt_instructions + prompt_description + files_prompt + chat_prompt
             data['reference_images'] = binary_files
-            options = copy.deepcopy(config.get('options', {}))
+            options = copy.deepcopy(context_options)
             for option in options:
                 data[option] = process_template(options[option], env_vars=context.variables)
 
@@ -1352,12 +1367,14 @@ except for the changes requested by the user.
 
         # stop processing if printing the prompt
         if self.print_prompt:
-            import pprint
-            #pprint.pprint(data)
-            print(data[-1]['content'])
-            # FIXME:
-            # this words for printing the text prompts nicely,
-            # but not other formats
+            try:
+                print(data[-1]['content'])
+            except KeyError:
+                try:
+                    print(data['prompt'])
+                except KeyError:
+                    import pprint
+                    pprint.pprint(data)
 
         # write prompt to the output file
         if self.print_prompt_to_file:
