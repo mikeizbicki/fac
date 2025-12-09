@@ -12,6 +12,7 @@ import time
 import uuid
 
 import fal_client
+import ffmpeg
 import openai
 import requests
 
@@ -65,9 +66,14 @@ registered_models = {
     # video prices are measured in seconds, not tokens
     'openai/sora-2':                        {'video/out': 0.10},
     'openai/sora-2-pro':                    {'video/out': 0.50},
+    'fal-ai/kling-video/v2.5-turbo/standard/image-to-video': {'video/out': 0.042},
+    'fal-ai/kling-video/o1/image-to-video': {'video/out': 0.112},
 
-    # fal-ai prices are measured in seconds, not tokens
+    # fal-ai prices
     'fal-ai/nano-banana':                   {'image/out': 0.04},
+    'fal-ai/nano-banana-pro':               {'image/out': 0.15},
+    'fal-ai/nano-banana/edit':              {'image/out': 0.04},
+    'fal-ai/nano-banana-pro/edit':          {'image/out': 0.15},
     }
 
 
@@ -79,14 +85,16 @@ class ModelUsageSummary():
     def register_result(self, model, result):
         tokens = Counter()
 
-        # FAL-AI API calls
-        if model.startswith('fal-ai'):
-            tokens['image/out'] = 1000000.0
-
         # Video Generation calls
-        elif str(result).startswith('Video'):
+        if str(result).startswith('Video'): # openAI
             tokens['video/out'] = float(result.seconds) * 1000000
             # we multiply by a million here because we divide by 1000000 later
+        elif model.startswith('fal-ai') and 'video' in model: # FAL-AI
+            tokens['video/out'] = float(result['seconds']) * 1000000
+
+        # FAL-AI API image calls
+        elif model.startswith('fal-ai'):
+            tokens['image/out'] = 1000000.0
 
         # TTS API calls
         elif 'StreamedBinaryAPIResponse' in str(result):
@@ -159,6 +167,7 @@ class LLM():
         self.usage_summary = ModelUsageSummary()
         self.build_id = generate_uuid7()
 
+    '''
     def text(self, messages, *,
             tools=None,
             callables=None,
@@ -203,7 +212,7 @@ class LLM():
                 seed=seed,
                 max_iter=max_iter
             ))
-
+    '''
 
     async def text_async(self, messages, *,
             tools=None,
@@ -291,13 +300,14 @@ class LLM():
         return content, local_usage
 
 
-    def image(self, path, mode, data, *, model=None, seed=None):
-        return asyncio.run(self.image_async(path, mode, data, model=model, seed=seed))
+    #def image(self, path, mode, data, *, model=None, seed=None):
+        #return asyncio.run(self.image_async(path, mode, data, model=model, seed=seed))
 
-    async def image_async(self, path, mode, data, *, model=None, seed=None):
+    async def image_async(self, path, mode, data, *, seed=None):
         logger.trace(f'llm.image; data.keys()={list(data.keys())}')
         client = openai.AsyncOpenAI()
         
+        model = data.get('model')
         if model is None:
             model = self.model_image
         provider, model_name = model.split('/', 1)
@@ -338,7 +348,9 @@ class LLM():
                 fout.write(image_bytes)
 
         elif provider == 'fal-ai':
-            base64_urls = [encode_image_to_base64_url(path) for path in data['reference_images']]
+            #base64_urls = [encode_image_to_base64_url(path) for path in data['reference_images']]
+            elements = [path for path in data['reference_images']]
+            elements_urls = [fal_client.upload_file(element) for element in elements]
 
             # call the api and await result
             handler = await fal_client.submit_async(
@@ -347,7 +359,7 @@ class LLM():
                     "prompt": data['prompt'],
                     "num_images": 1,
                     "aspect_ratio": "16:9",
-                    "image_urls": base64_urls,
+                    "image_urls": elements_urls,
                 },
             )
             async for event in handler.iter_events(with_logs=True):
@@ -402,7 +414,7 @@ class LLM():
         if provider == 'openai':
             assert len(data['reference_images']) == 1
             input_reference = Path(data['reference_images'][0])
-            video = openai.videos.create(
+            response = openai.videos.create(
                     model=model_name,
                     prompt=data['prompt'],
                     input_reference=input_reference,
@@ -411,10 +423,9 @@ class LLM():
                     )
 
             # async sleep until video ready
-            while video.status in ("in_progress", "queued"):
+            while response.status in ("in_progress", "queued"):
                 await asyncio.sleep(2)
                 video = openai.videos.retrieve(video.id)
-            local_usage = ModelUsageSummary()
 
             # check for errors
             if video.status == "failed":
@@ -422,47 +433,82 @@ class LLM():
                     getattr(video, "error", None), "message", "Video generation failed"
                 )
                 logger.error(message)
-                return local_usage
+                return ModelUsageSummary()
 
             # write video to file
             content = openai.videos.download_content(video.id, variant="video")
             content.write_to_file(path)
 
-            # calculate usage info
-            local_usage.register_result(model, video)
-            self.usage_summary.register_result(model, video)
-            logger.info(f'request_cost: ${local_usage.total_cost():0.4f}  total_cost: ${self.usage_summary.total_cost():0.4f}', submessage=True)
+        elif provider == 'fal-ai':
 
-
-        elif model == 'fal-ai/veo3.1/fast/first-last-frame-to-video':
-            # call the api and await result
-            handler = await fal_client.submit_async(
-                model,
-                arguments={
+            # fal-ai models have many different argument configurations
+            # and they must all be implemented separately here
+            if model == 'fal-ai/veo3.1/fast/first-last-frame-to-video':
+                seconds = int(data.get('seconds', 4))
+                arguments = {
                     "prompt": data['prompt'],
                     "first_frame_url": encode_image_to_base64_url(data['first_frame']),
                     "last_frame_url": encode_image_to_base64_url(data['last_frame']),
-                    "duration": data.get('seconds', '4') + 's',
+                    "duration": str(seconds) + 's',
                     "aspect_ratio": data.get('aspect_ratio', '16:9'),
                     'resolution': data.get('resolution', '720p'),
                     'generate_audio': data.get('generate_audio', False),
-                },
-            )
+                }
+            elif model in [
+                    'fal-ai/kling-video/v2.5-turbo/pro/image-to-video',
+                    'fal-ai/kling-video/v2.5-turbo/standard/image-to-video',
+                    ]:
+                seconds = int(data.get('seconds', 5))
+                arguments = {
+                    "prompt": data['prompt'],
+                    "image_url": encode_image_to_base64_url(data['first_frame']),
+                    "duration": str(seconds),
+                }
+            elif model in [
+                    'fal-ai/kling-video/o1/image-to-video',
+                    ]:
+                seconds = int(data.get('seconds', 5))
+                arguments = {
+                    "prompt": data['prompt'],
+                    "start_image_url": encode_image_to_base64_url(data['first_frame']),
+                    "end_image_url": encode_image_to_base64_url(data['last_frame']),
+                    "duration": str(seconds),
+                }
+            elif model == 'fal-ai/kling-video/o1/reference-to-video':
+                elements = [path for path in data['reference_images'] if path != data['start_frame']]
+                elements_urls = [fal_client.upload_file(element) for element in elements]
+                start_frame_url = fal_client.upload_file(data['start_frame'])
+                seconds = int(data.get('seconds', 5))
+                arguments = {
+                    "prompt": "The start frame must match @Image1 exactly. " + data['prompt'],
+                    "duration": str(seconds),
+                    "aspect_ratio": data.get('aspect_ratio', '16:9'),
+                    "image_urls": [start_frame_url],
+                    "elements": [{"frontal_image_url": url, "reference_image_urls": [url]} for url in elements_urls],
+                }
+            else:
+                raise ValueError(f'model="{model}" not supported')
+
+            # call the api and await result
+            handler = await fal_client.submit_async(model, arguments)
             async for event in handler.iter_events(with_logs=True):
                 pass
             result = await handler.get()
 
             # download the video
-            response = requests.get(result['video']['url'])
+            video = requests.get(result['video']['url'])
             with open(path, 'wb') as fout:
-                fout.write(response.content)
+                fout.write(video.content)
 
-            # calculate usage info
-            local_usage = ModelUsageSummary()
-            local_usage.register_result(model, response)
-            self.usage_summary.register_result(model, response)
-            logger.info(f'request_cost: ${local_usage.total_cost():0.4f}  total_cost: ${self.usage_summary.total_cost():0.4f}', submessage=True)
+            # get video length for recording costs
+            probe = ffmpeg.probe(path)
+            result['seconds'] = float(probe['streams'][0]['duration'])
 
+        # calculate usage info
+        local_usage = ModelUsageSummary()
+        local_usage.register_result(model, result)
+        self.usage_summary.register_result(model, result)
+        logger.info(f'request_cost: ${local_usage.total_cost():0.4f}  total_cost: ${self.usage_summary.total_cost():0.4f}', submessage=True)
 
         return local_usage
 

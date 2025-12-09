@@ -13,6 +13,7 @@ import re
 import string
 import subprocess
 import sys
+import traceback
 import typing
 
 # external lib imports
@@ -21,6 +22,10 @@ import jsonschema
 import llm
 import mdformat
 import yaml
+
+# fix asyncio with this external library
+import nest_asyncio
+nest_asyncio.apply()
 
 # project imports
 from fac.LLM import LLM
@@ -61,7 +66,6 @@ def validate_file(path, schema_file=None, fix=False):
 
         # verify that the JSON matches the schema
         if schema_file:
-            logger.trace(f'verifying that "{path}" satisfies schema "{schema_file}"')
             with open(path) as fin:
                 data = json.load(fin)
             try:
@@ -70,7 +74,7 @@ def validate_file(path, schema_file=None, fix=False):
                     jsonschema.validate(instance=data, schema=schema)
             except jsonschema.exceptions.ValidationError as e:
                 log_message = str(e).split('\n')[0]
-                logger.warning(f'JSON schema validation error: {log_message}')
+                logger.warning(f'{path}: JSON schema validation error: {log_message}')
 
         # reformat with pretty indentation
         if fix:
@@ -139,7 +143,7 @@ def load_config(path):
             assert type(dep) == dict
             dependencies1.append(dep)
             for k in dep:
-                if k not in ['target', 'include', 'allow_create']:
+                if k not in ['target', 'include', 'allow_create', 'is_prompt']:
                     logger.warning(f'in target "{target}", in dependency "{dep["target"]}", unknown option "{k}"')
         full_config[target]['dependencies'] = dependencies1
 
@@ -188,7 +192,6 @@ def load_config(path):
             # add postreqs for creating new dependencies
             if dep.get('allow_create'):
                 target1_name = target + '--allow_create--' + dep['target'].replace('/', '_').replace('$', '')
-                logger.debug(f'adding postreq: "{target1_name}"')
                 dep_target_with_stars = 'resources/*/about.json'
 
                 # any automatically created dependencies should not have allow_create set
@@ -240,6 +243,7 @@ class BuildSystem:
     include_paths: list[str] = None
     options: list[str] = None
     auto_commit: bool = True
+    allow_dirty: bool = False
     print_cmd_stdout: bool = False
     freeze: bool = False
     thaw: bool = False
@@ -290,8 +294,8 @@ class BuildSystem:
         Fails if the git repo is dirty.
         '''
         self.repo = git.Repo('.')
-        if self.auto_commit and self.repo.is_dirty(untracked_files=True):
-            logger.error('git repo is dirty; clean repo or set --auto_commit=False')
+        if not self.allow_dirty and self.auto_commit and self.repo.is_dirty(untracked_files=True):
+            logger.error('git repo is dirty; clean repo or set --auto_commit=False or --allow_dirty')
             raise DirtyRepo()
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -390,7 +394,7 @@ class BuildSystem:
                 logger.error(err_message)
                 raise NoTargetsMatched(err_message)
             flattened_targets.extend(matches)
-        flattened_targets.sort()
+        #flattened_targets.sort()
 
         for target, target_vars in flattened_targets:
             logger.info(f'target="{target}"')
@@ -419,14 +423,17 @@ class BuildSystem:
             disable_logging=False,
             janky_recursive_call=False,
             ):
+        logger = globals()['logger']
+        logger.trace(f'_traverse_target: target_to_build={target_to_build}')
+        logger.trace('input_env:', submessage=True)
+        for var, val in input_env.items():
+            logger.trace(f' - {var}: {str(val)}', submessage=True)
         if disable_logging:
             import logging
             noop_logger = logging.getLogger('noop')
             noop_logger.addHandler(logging.NullHandler())
             noop_logger.setLevel(logging.CRITICAL + 1)  # Above all levels
             logger = noop_logger
-        else:
-            logger = globals()['logger']
 
         # verify that variables are correctly formatted
         for var in input_env:
@@ -446,10 +453,8 @@ class BuildSystem:
         config_targets = self.full_config.keys()
         transformed_target, target_env = match_pattern(config_targets, target_to_build)
         if not transformed_target:
-            logger.trace(f"target does not exist, not building")
             raise TargetNotFound(f"target='{target_to_build}', transformed_target='{transformed_target}'; target_env={target_env}")
         target_variables = extract_variables(transformed_target)
-        logger.trace(f"transformed_target={transformed_target}; target_variables={target_variables}, target_env={target_env}")
         assert transformed_target
         assert transformed_target in self.full_config
         config = self.full_config[transformed_target]
@@ -457,7 +462,6 @@ class BuildSystem:
         # parse the dependencies entry in the yaml into unresolved_dependencies list;
         # each entry in the list is a dictionary with a target and flags key
         unresolved_dependencies = config.get('dependencies', [])
-        logger.debug(f"unresolved_dependencies={unresolved_dependencies}")
         dependency_variables = set()
         for dep in unresolved_dependencies:
             dependency_variables |= set(extract_variables(dep['target']))
@@ -496,9 +500,15 @@ class BuildSystem:
                 config['options'][k] = v
 
         # warn the user if they have defined a variable that is not used
-        for var in config_variables:
-            if var not in (target_variables + list(dependency_variables)):
-                logger.warning(f'variable {var} defined in config but not used in target or dependencies; this currently has no effect on the build')
+        # FIXME:
+        # there are lots of places where variables can be used now,
+        # so this warning gives too many false positives;
+        # I'm not sure the best way to compute unused variables now
+        # in order to re-add this warning.
+        if False:
+            for var in config_variables:
+                if var not in (target_variables + list(dependency_variables)):
+                    logger.warning(f'variable {var} defined in config but not used in target or dependencies; this currently has no effect on the build')
 
         ########################################
         # Compute the contexts list
@@ -549,7 +559,6 @@ class BuildSystem:
             if var not in input_env and var not in target_env:
                 variables_to_search.append(var)
         for var in variables_to_search:
-            logger.trace(f'resolving var={var}')
 
             ########################################
             # STEP 1: resolve var
@@ -561,7 +570,6 @@ class BuildSystem:
             contexts0 = contexts # old contexts
             contexts = [] # new contexts
             for context in contexts0:
-                logger.trace(f'STEP1: evaluating var="{var}"; context={context}')
 
                 ########################################
                 # STEP 1A: compute the value of var in this context
@@ -639,7 +647,7 @@ class BuildSystem:
 
             # log the success
             if var != DUMMY_VAR: # and len(contexts) > 1:
-                logger.info(f'resolved variable {var}; len(contexts)={len(contexts)}')
+                logger.debug(f'resolved variable {var}; len(contexts)={len(contexts)}')
 
             ########################################
             # STEP 2: resolve any new dependencies
@@ -650,14 +658,12 @@ class BuildSystem:
             contexts0 = contexts
             contexts = []
             for context in contexts0:
-                logger.trace(f'STEP2: context={context}')
 
                 # compute the dependencies
                 dependency_paths1 = []
                 unresolved_dependencies1 = []
                 for dep in context.unresolved_dependencies:
                     dep_target = dep['target']
-                    logger.trace(f'dep_target="{dep_target}"')
 
                     ########################################
                     # STEP 2A: skip dependencies that have unresolved variables
@@ -726,7 +732,6 @@ class BuildSystem:
                         if dep_path not in traversed_paths:
                             all_resolved = False
                     if all_resolved and len(dep_paths) > 0:
-                        logger.debug(f'already resolved {dep_paths}')
                         dependency_paths1.extend(dep_paths)
                         continue
 
@@ -734,7 +739,7 @@ class BuildSystem:
                     expanded_target, expanded_vars = substitute_vars_with_multiline(dep_target, context.variables)
                     var_str = ''.join([f', {k}={v}' for k, v in expanded_vars.items()])
                     target_str = expanded_target + var_str
-                    if target_str in traversed_deps:
+                    if target_str in traversed_deps or expanded_target in traversed_deps:
                         target_deps = substitute_vars_list(dep_target, context.variables)
                         dependency_paths1.extend(target_deps)
                         continue
@@ -750,12 +755,21 @@ class BuildSystem:
                     # STEP 2C: recursively build dependencies
                     ########################################
                     logger.info(f'resolving dependency: {target_str}')
-                    #logger.info(f'resolving dependency: {target_str}; dep_target={dep_target}, context.variables={context.variables}')
+                    logger.debug('context.variables:', submessage=True)
+                    for var in context.variables:
+                        logger.debug(f' - {var}: {str(context.variables[var])}', submessage=True)
 
-                    #print(f"config_targets={config_targets}")
-                    #print(f"dep_target={dep_target}")
-                    #print(f"context.variables={context.variables}")
-                    dep_target1, context_variables1 = match_pattern_withvars(config_targets, dep_target, context.variables)
+                    try:
+                        dep_target1, context_variables1 = match_pattern_withvars(config_targets, dep_target, context.variables)
+                    except ValueError:
+                        logger.error(f'unable to match pattern dep_target={dep_target}')
+                        logger.error('config_targets:', submessage=True)
+                        for target in config_targets:
+                            logger.error(f' - {target}', submessage=True)
+                        logger.error('context.variables:', submessage=True)
+                        for var in context.variables:
+                            logger.error(f' - {var}: "{context.variables[var].replace("\n", "\\n")}"', submessage=True)
+                        raise FACError()
                     if dep_target1 is None:
                         dep_target1 = dep_target
 
@@ -790,7 +804,6 @@ class BuildSystem:
                         if not valid_paths:
                             unresolved_dependencies1.append(dep)
                             continue
-                    logger.trace(f'resolved dependency: "{dep_target}"')
 
                     ########################################
                     # STEP 2D: validate dependencies
@@ -800,12 +813,9 @@ class BuildSystem:
                     ########################################
                     if dep_paths is not None:
                         for dep_path in dep_paths:
-                            logger.trace(f'validating dep_path={dep_path}')
                             if not validate_file(dep_path, fix=False):
                                 logger.warning(f'failed to validate dep_path={dep_path}')
 
-                logger.trace(f"dependency_paths1={dependency_paths1}")
-                logger.trace(f"unresolved_dependencies1={unresolved_dependencies1}")
                 context1 = BuildContext(
                     context.variables,
                     sorted(context.dependency_paths + dependency_paths1),
@@ -850,16 +860,26 @@ class BuildSystem:
                             dep_paths.extend(expand_path(dep_target, var_dict))
                     except TemplateProcessingError:
                         try:
-                            built_paths = self._traverse_target(
-                                    dep_target,
-                                    {**context.variables},
-                                    None,
-                                    overwrite=self.from_scratch,
-                                    traversed_paths=traversed_paths,
-                                    traversed_deps=traversed_deps,
-                                    disable_logging=True,
-                                    janky_recursive_call=True,
-                                    )
+                            # For some reason, we get to this stage with empty variables in the target.
+                            # This results in weird errors trying to build targets that don't exist.
+                            # We check for this edge case, and do not build the target if there are empty vars.
+                            has_empty_var = False
+                            for var in extract_variables(dep_target):
+                                if not context.variables.get(var):
+                                    has_empty_var = True
+                            if not has_empty_var:
+                                built_paths = self._traverse_target(
+                                        dep_target,
+                                        {**context.variables},
+                                        None,
+                                        overwrite=self.from_scratch,
+                                        traversed_paths=traversed_paths,
+                                        traversed_deps=traversed_deps,
+                                        disable_logging=True,
+                                        janky_recursive_call=True,
+                                        )
+                            else:
+                                built_paths = []
                             dep_paths = list(set(built_paths))
                         except (TemplateProcessingError, AssertionError):
                             # This gets raised when we have a dependency with an empty variable.
@@ -940,10 +960,16 @@ class BuildSystem:
 
                 # Handle any exceptions that occurred
                 if exceptions:
-                    if len(exceptions) > 1:
-                        for context_id, exception in exceptions:
-                            logger.error(f"Exception in context {context_id}: {exception}")
-                    raise exceptions[0][1]
+                    #if len(exceptions) > 1:
+                    for context_id, exception in exceptions:
+                        logger.error(f"Exception in context {context_id}: {exception}")
+                        logger.error("Full traceback:", submessage=True)
+                        for line in traceback.format_tb(exception.__traceback__):
+                            for sub_line in line.rstrip().split('\n'):
+                                if sub_line.strip():
+                                    logger.error(sub_line, submessage=True)
+                    #raise exceptions[0][1]
+                    raise FACError
 
             # NOTE:
             # there seems to be a bug in OpenAI's async library;
@@ -960,7 +986,6 @@ class BuildSystem:
         for i, context in enumerate(contexts):
             path_to_generate = process_template(target_to_build, context.variables)
             generated_paths.append(path_to_generate)
-            logger.debug(f'context={context}')
             traversed_paths.add(path_to_generate)
 
             # validate file
@@ -999,7 +1024,6 @@ class BuildSystem:
         Build a file given the specified information.
         '''
         path_to_generate = process_template(target_to_build, context.variables)
-        logger.debug(f'context={context}')
 
         # ensure no unresolved dependencies
         if context.unresolved_dependencies:
@@ -1065,12 +1089,14 @@ class BuildSystem:
                 logger.info('options:', submessage=True)
                 for opt in context_options:
                     logger.info(f" - {opt}: {context_options[opt]}", submessage=True)
+            logger.debug('variables:', submessage=True)
+            for var in sorted(context.variables):
+                logger.debug(f' - {var}: {context.variables[var].replace("\n","\\n")}', submessage=True)
 
         if not (build_context or overwrite):
             return
 
         ################################################################################
-        # FIXME:original function below
 
         # create output directory if needed
         dirname = os.path.dirname(path_to_generate)
@@ -1079,33 +1105,41 @@ class BuildSystem:
 
         # build with a custom shell command
         if config.get('cmd'):
-            logger.info('building with bash...', submessage=True)
-            process = await asyncio.create_subprocess_shell(
-                config['cmd'],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT, # merge stderr into stdout
-                executable='/bin/bash',
-                env=variable_dictionary_resolve({
-                    **os.environ,
-                    **context.variables,
-                    'FAC_DEPENDENCIES': '\n'.join(sorted(context.dependency_paths)),
-                    }),
-                )
-            if self.print_cmd_stdout:
-                try:
-                    for line in iter(process.stdout.readline, ''):
-                        print(line.rstrip())
-                except UnicodeDecodeError:
-                    print('<<INVALID UNICODE>>')
-            await process.wait()
+            if self.no_build:
+                logger.warning('build required, but skipping...', submessage=True)
+            else:
+                logger.info('building with bash...', submessage=True)
+                process = await asyncio.create_subprocess_shell(
+                    config['cmd'],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT, # merge stderr into stdout
+                    executable='/bin/bash',
+                    env=variable_dictionary_resolve({
+                        **os.environ,
+                        **context.variables,
+                        'FAC_DEPENDENCIES': '\n'.join(sorted(context.dependency_paths)),
+                        }),
+                    )
+                if self.print_cmd_stdout:
+                    try:
+                        #for line in iter(process.stdout.readline, ''):
+                            #print(line.rstrip())
+                        while True:
+                            line = await process.stdout.readline()
+                            if not line:
+                                break
+                            print(line.decode().rstrip())
+                    except UnicodeDecodeError:
+                        print('<<INVALID UNICODE>>')
+                await process.wait()
 
-            if process.returncode != 0:
-                stdout = await process.stdout.read()
-                logger.error(f"error running the following build script:", submessage=True)
-                for i, line in enumerate(config['cmd'].split('\n')):
-                    logger.error(f"line {i+1}: {line}", submessage=True)
-                logger.error(stdout.decode('ascii'), submessage=True)
-                raise CommandExecutionError(process.returncode, stdout)
+                if process.returncode != 0:
+                    stdout = await process.stdout.read()
+                    logger.error(f"error running the following build script:", submessage=True)
+                    for i, line in enumerate(config['cmd'].split('\n')):
+                        logger.error(f"line {i+1}: {line}", submessage=True)
+                    logger.error(stdout.decode('ascii'), submessage=True)
+                    raise CommandExecutionError(process.returncode, stdout)
 
             return
 
@@ -1127,6 +1161,7 @@ Generate the file "{path_to_generate}" based on the information below.
         # text documents are processed to form part of the prompt
         # and binary files are stored in a list for later processing
         binary_files = []
+        truncated_prompt = None
         if len(context.dependency_paths) == 0:
             files_prompt = ''
         else:
@@ -1135,6 +1170,7 @@ Generate the file "{path_to_generate}" based on the information below.
 
                 # skip paths that are annotated with "include: False"
                 include_dep = True
+                truncate_prompt = False
                 for dep in config['dependencies']:
                     if dep.get('include', True) == False:
                         # NOTE:
@@ -1144,6 +1180,12 @@ Generate the file "{path_to_generate}" based on the information below.
                         target, env = match_pattern([dep['target']], path)
                         if target is not None:
                             include_dep = False
+
+                    if dep.get('is_prompt', False):
+                        target, env = match_pattern([dep['target']], path)
+                        if target is not None:
+                            truncate_prompt = True
+
                 if not include_dep:
                     continue
 
@@ -1160,11 +1202,13 @@ Generate the file "{path_to_generate}" based on the information below.
                 # we catch the error and do not add the file to the context
                 try:
                     with open(path) as fin:
-                        files_prompt += f'''<document path="{path}">\n{fin.read().strip()}\n</document>\n'''
+                        text = fin.read().strip()
+                        if truncate_prompt:
+                            truncated_prompt = text
+                        files_prompt += f'''<document path="{path}">\n{text}\n</document>\n'''
                 except UnicodeDecodeError:
                     binary_files.append(path)
             files_prompt += '</reference_documents>'
-            logger.trace(f'files_prompt generated; len(context.dependency_paths)={len(context.dependency_paths)}')
 
         # include a chat history if provided
         # and the previous version of the file if available
@@ -1204,6 +1248,11 @@ except for the changes requested by the user.
 </chat>
 '''
 
+        # construct the final prompt
+        prompt = prompt_instructions + prompt_description + files_prompt + chat_prompt
+        if truncated_prompt:
+            prompt = truncated_prompt
+
         # now we do filetype specific processing
         filename = os.path.basename(path_to_generate)
         _, extension = os.path.splitext(filename)
@@ -1211,7 +1260,6 @@ except for the changes requested by the user.
 
         if extension == '.wav':
             filetype = 'audio'
-            logger.trace(f'filetype={filetype}')
             # NOTE:
             # we need a copy of the config here
             # because we will be modifying the contents with the process_template function;
@@ -1222,9 +1270,8 @@ except for the changes requested by the user.
 
         elif extension == '.mp4':
             filetype = 'video'
-            logger.trace(f'filetype={filetype}')
             data = {}
-            data['prompt'] = prompt_instructions + prompt_description + files_prompt + chat_prompt
+            data['prompt'] = prompt
             data['reference_images'] = binary_files
             options = copy.deepcopy(context_options)
             for option in options:
@@ -1239,9 +1286,8 @@ except for the changes requested by the user.
 
         elif extension == '.png':
             filetype = 'image'
-            logger.trace(f'filetype={filetype}')
             data = {}
-            data['prompt'] = prompt_instructions + prompt_description + files_prompt + chat_prompt
+            data['prompt'] = prompt
             data['reference_images'] = binary_files
             options = copy.deepcopy(context_options)
             for option in options:
@@ -1250,7 +1296,6 @@ except for the changes requested by the user.
         # process text output by default
         else:
             filetype = 'text'
-            logger.trace(f'filetype={filetype}')
 
             # the messages list will contain the full set of instructions passed to the llm;
             # it always starts with a system prompt
@@ -1299,7 +1344,6 @@ except for the changes requested by the user.
                     logger.error(e)
                     sys.exit(1)
                 jsonschema.Draft7Validator.check_schema(schema)
-                logger.trace('schema validated')
                 # FIXME
                 if config.get('TMP_augment'):
                     schema = {
@@ -1324,12 +1368,12 @@ except for the changes requested by the user.
                         },
                     }
 
-            format_cmd = '<formatting>\n' + format_cmd + '\n</formatting>\n'
+            format_cmd = '\n<formatting>\n' + format_cmd + '\n</formatting>'
 
             # add the user role + message
             message = {
                 'role': 'user',
-                'content': [{ 'type': 'text', 'text': prompt_instructions + prompt_description + format_cmd + files_prompt + chat_prompt}]
+                'content': [{ 'type': 'text', 'text': prompt + format_cmd}]
                 }
             for binary_file in binary_files:
                 base64_image = encode_image(binary_file)
@@ -1366,15 +1410,24 @@ except for the changes requested by the user.
                     })
 
         # stop processing if printing the prompt
+        # FIXME:
+        # This is all a pretty janky set of hacks for printing the "meaningful" part of the prompt,
+        # and could probably be made a lot more robust.
         if self.print_prompt:
             try:
-                print(data[-1]['content'])
+                if type(data[-1]['content']) == list:
+                    print_str = data[-1]['content'][0]['text']
+                else:
+                    print_str = data[-1]['content']
             except KeyError:
                 try:
-                    print(data['prompt'])
+                    print_str = data['prompt']
                 except KeyError:
                     import pprint
-                    pprint.pprint(data)
+                    print_str = pprint.pformat(data)
+            #print(f"type(print_str)={type(print_str)}")
+            #print(f"len(print_str)={len(print_str)}")
+            print(print_str[:10000])
 
         # write prompt to the output file
         if self.print_prompt_to_file:
@@ -1402,7 +1455,7 @@ except for the changes requested by the user.
             logger.info('content/prompts match, building not needed', submessage=True)
 
         elif self.no_build:
-            logger.info('build required, but skipping...', submessage=True)
+            logger.warning('build required, but skipping...', submessage=True)
 
         # actually build the file
         else:
@@ -1442,9 +1495,13 @@ def eval_var(var, expr, context):
         env=context.variables,
         )
     if cmd.returncode != 0:
-        logger.error(f'Failed to evaluate {var}: {expr}')
-        logger.error(f'context.variables={context.variables}', submessage=True)
-        logger.error(f'{cmd.stderr}', submessage=True)
+        logger.error(f'Failed to evaluate variable {var}')
+        logger.error(f'build command: {expr}', submessage=True)
+        for line in (cmd.stderr.strip() + '\n' + cmd.stdout).strip().split('\n'):
+            logger.error(line, submessage=True)
+        logger.error('context.variables:', submessage=True)
+        for var in context.variables:
+            logger.error(f' - {var}: "{context.variables[var].replace("\n", "\\n")}"', submessage=True)
         raise VariableEvaluationError(var, expr, context, cmd)
     stdout = cmd.stdout.strip()
 
@@ -1533,6 +1590,9 @@ class FacJSON:
         new_filename = f".{filename}.facjson"
         return os.path.join(directory, new_filename)
 
+
+class FACError(Exception):
+    pass
 
 class CommandExecutionError(Exception):
     def __init__(self, returncode, stdout):

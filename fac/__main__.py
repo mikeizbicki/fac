@@ -58,7 +58,7 @@ def main():
     try:
         with build_system:
             build_system.build_targets(args.targets)
-    except (DirtyRepo, NoTargetsMatched, VariableEvaluationError, CommandExecutionError):
+    except (FACError, DirtyRepo, NoTargetsMatched, VariableEvaluationError, CommandExecutionError):
         return 1
 
 
