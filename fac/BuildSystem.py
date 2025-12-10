@@ -447,7 +447,7 @@ class BuildSystem:
             # NOTE:
             # the following check seems reasonable,
             # but it breaks the dependency_only_variables
-            # assert len(input_env[var]) > 0, f'input_env["{var}"]="{input_env[var]}"'
+            #assert len(input_env[var]) > 0, f'input_env["{var}"]="{input_env[var]}"'
 
         # load target config
         config_targets = self.full_config.keys()
@@ -648,6 +648,9 @@ class BuildSystem:
             # log the success
             if var != DUMMY_VAR: # and len(contexts) > 1:
                 logger.debug(f'resolved variable {var}; len(contexts)={len(contexts)}')
+                logger.debug('contexts:', submessage=True)
+                for context in contexts:
+                    logger.debug(f' - {context.variables}', submessage=True)
 
             ########################################
             # STEP 2: resolve any new dependencies
@@ -860,12 +863,17 @@ class BuildSystem:
                             dep_paths.extend(expand_path(dep_target, var_dict))
                     except TemplateProcessingError:
                         try:
+                            # XXX:
                             # For some reason, we get to this stage with empty variables in the target.
                             # This results in weird errors trying to build targets that don't exist.
                             # We check for this edge case, and do not build the target if there are empty vars.
                             has_empty_var = False
                             for var in extract_variables(dep_target):
-                                if not context.variables.get(var):
+                                # XXX:
+                                # Sometimes the variable will be assigned a value of None.
+                                # We still need to recursively run _traverse_target in this case,
+                                # and I don't fully understand why.
+                                if context.variables.get(var) == '':
                                     has_empty_var = True
                             if not has_empty_var:
                                 built_paths = self._traverse_target(
@@ -882,6 +890,11 @@ class BuildSystem:
                                 built_paths = []
                             dep_paths = list(set(built_paths))
                         except (TemplateProcessingError, AssertionError):
+                            # XXX:
+                            # I'm not sure if this is needed anymore?!
+                            # I've commented out the relevant AssertionError (the if statements above take care of that case),
+                            # but don't remember where TemplateProcessingError comes from.
+                            # ---
                             # This gets raised when we have a dependency with an empty variable.
                             # For example: "simple/$DEP" and DEP=''
                             # This happens when the dependency should not be built
