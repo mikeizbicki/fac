@@ -144,7 +144,7 @@ def substitute_vars_with_multiline(template_str, vars_dict=None):
     return result_str, multiline_vars
 
 
-def process_template(template_content, env_vars=None):
+def process_template(template_content, env_vars=None, print_function=None, template_name=None):
     """
     Process a template string by evaluating shell expressions within it.
 
@@ -224,15 +224,17 @@ def process_template(template_content, env_vars=None):
 
         # Write to the file using a regular file handle
         with open(script_path, 'w') as script:
-            # Write a shell script that will output the processed template
-            script.write('#!/bin/bash\n')
-            script.write('set -e\n')  # Exit immediately if a command exits with non-zero status
-            script.write('set -u\n')  # Treat unset variables as an error
-
-            # Use cat with a heredoc to process the template
-            script.write('cat << __EOF_DELIMITER_END\n')
-            script.write(template_content)
-            script.write('\n__EOF_DELIMITER_END\n')
+            # The shell script wraps the template_content inside a heredoc
+            # and adds set -eu to help prevent errors
+            script_content = f'''
+#!/bin/bash
+set -e
+set -u
+cat << __EOF_DELIMITER_END__
+{template_content}
+__EOF_DELIMITER_END__
+'''.strip()
+            script.write(script_content)
 
         # Make the script executable
         os.chmod(script_path, 0o755)
@@ -240,7 +242,20 @@ def process_template(template_content, env_vars=None):
         # Execute the script and capture output
         result = subprocess.run([script_path], capture_output=True, text=True, env={**os.environ, **env_vars})
         if result.returncode != 0 or len(result.stderr.strip()) > 0:
-            raise TemplateProcessingError(result.returncode, result.stdout, result.stderr, env_vars)
+            error = TemplateProcessingError(
+                    result.returncode,
+                    result.stdout,
+                    result.stderr,
+                    env_vars,
+                    script_content,
+                    )
+            if print_function and template_name:
+                print_function(f'error processing template {template_name}: {error.get_bash_error()}')
+                error.print_template(print_function=print_function)
+                print_function('bound variables:', submessage=True)
+                for var in env_vars:
+                    print_function(f' - {var}: {repr(env_vars[var])}', submessage=True)
+            raise error
         return result.stdout.strip()
 
     finally:
@@ -252,12 +267,48 @@ def process_template(template_content, env_vars=None):
 class TemplateProcessingError(Exception):
     """Exception raised when template processing fails."""
 
-    def __init__(self, returncode, stdout, stderr, env_vars):
+    def __init__(self, returncode, stdout, stderr, env_vars, script_content):
         self.returncode = returncode
         self.stdout = stdout
         self.stderr = stderr
         self.env_vars = env_vars
+        self.script_content = script_content
         super().__init__(stderr)
+
+    def get_bash_error(self):
+
+        # unbound variables
+        pattern = r':\s*([^:]+)\s*:\s*unbound variable'
+        match = re.search(pattern, self.stderr)
+        if match:
+            return f'unbound variable: {match.group(1).strip()}'
+
+        # syntax errors
+        if 'syntax' in self.stderr:
+            return 'syntax error'
+
+        # unknown
+        return 'unknown error -- ' + self.stderr
+
+    def print_template(self, print_function=print, window_size=20):
+        pattern = r':\s*line\s+(\d+):'
+        match = re.search(pattern, self.stderr)
+        if match:
+            print_function('template:', submessage=True)
+            error_line_number = int(match.group(1))
+            lines = self.script_content.split('\n')
+            lines = lines [4:-1] # MAGIC NUMBERS that extract the heredoc from the script
+            start_line = max(0, error_line_number - window_size)
+            stop_line = min(error_line_number + window_size, len(lines))
+            num_digits = len(str(stop_line))
+            for line_number in range(start_line, stop_line):
+                if line_number == error_line_number - 3: # MAGIC NUMBER that correctly adjusts line number FIXME: doesn't actually always work
+                    pointer = '-->'
+                else:
+                    pointer = '   '
+                print_function(f' {pointer} {line_number + 1:>{num_digits}}: {lines[line_number]}')
+        else:
+            print_function(f'bash error did not contain line number information :(', submessage=True)
 
 
 def expand_path(path, env_vars=None):
@@ -336,8 +387,9 @@ def expand_vars_on_newlines(env_vars, filter_variables=None):
     a list of dictionaries representing all possible combinations where each
     newline-separated value is treated as an alternative.
 
-    If filter_variables is provided, variables in that list will cause the
-    function to return [] if they have no valid values.
+    If filter_variables is provided:
+    - variables in that list will cause the function to return [] if they have no valid values.
+    - variables will be split on newlines only for variables in the list.
 
     Basic cases:
     >>> expand_vars_on_newlines({})
@@ -387,18 +439,25 @@ def expand_vars_on_newlines(env_vars, filter_variables=None):
     >>> expand_vars_on_newlines({'a': '  \n  ', 'b': 'valid'}, filter_variables=['a'])
     []
 
-    Real-world example:
-    >>> expand_vars_on_newlines({'PATH': '/bin\n/usr/bin', 'HOME': '/root'})
-    [{'PATH': '/bin', 'HOME': '/root'}, {'PATH': '/usr/bin', 'HOME': '/root'}]
+    Filter variables (do not split on newlines for these variables):
+    >>> expand_vars_on_newlines({'FRAME_ID': 'sad_panda_sits', 'LEVEL': 'levelA', 'BOOK': 'panda_and_book', 'CHARACTER': 'Panda\nDidaskalos'}, filter_variables=['LEVEL', 'BOOK', 'FRAME_ID'])
+    [{'FRAME_ID': 'sad_panda_sits', 'LEVEL': 'levelA', 'BOOK': 'panda_and_book', 'CHARACTER': 'Panda\nDidaskalos'}]
+    >>> expand_vars_on_newlines({'FRAME_ID': 'sad_panda_sits\nhappy_panda_sits', 'LEVEL': 'levelA', 'BOOK': 'panda_and_book', 'CHARACTER': 'Panda\nDidaskalos'}, filter_variables=['LEVEL', 'BOOK', 'FRAME_ID'])
+    [{'FRAME_ID': 'sad_panda_sits', 'LEVEL': 'levelA', 'BOOK': 'panda_and_book', 'CHARACTER': 'Panda\nDidaskalos'}, {'FRAME_ID': 'happy_panda_sits', 'LEVEL': 'levelA', 'BOOK': 'panda_and_book', 'CHARACTER': 'Panda\nDidaskalos'}]
     '''
+    provided_filter_variables = True
     if filter_variables is None:
         filter_variables = []
+        provided_filter_variables = False
 
     # Split values on newlines and create lists, filtering out empty/whitespace entries
     split_vars = {}
     for k, v in env_vars.items():
         if isinstance(v, str):
-            values = [val.strip() for val in v.split('\n') if val.strip()]
+            if not provided_filter_variables or (provided_filter_variables and k in filter_variables):
+                values = [val.strip() for val in v.split('\n') if val.strip()]
+            else:
+                values = [v.strip()] if v.strip() else []
         else:
             values = [str(v).strip()] if str(v).strip() else []
 

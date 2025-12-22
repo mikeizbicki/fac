@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}{{ level }} - {{ book }}{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" type="text/css" href="/pages/book/static/style.css">
+<link rel="stylesheet" type="text/css" href="/pages/book/static/audio-controls.css">
+<script src="/pages/book/static/script.js"></script>
+<script src="/pages/book/static/audio-controls.js"></script>
+<!--
+<link rel="stylesheet" type="text/css" href="/pages/book/static/media-switcher.css">
+<script src="/pages/book/static/media-switcher.js"></script>
+-->
+{% endblock %}
+
+{% block content %}
+
+<!--
+DEVELOPERS NOTE:
+The book-container below is intended to have the look and feel of a printed-on-paper movie script.
+All changes must preserve this look and feel.
+-->
+
+<div id="book-container" data-level="{{ level }}" data-book="{{ book }}">
+<div class="script-holes"></div>
+<h1>{{ level }} - {{ book }}</h1>
+
+{% if error %}
+    <p class="error">Error: {{ error }}</p>
+{% elif frames %}
+    {% for frame in frames %}
+        <div class="frame" id="{{ frame.id }}" data-frame-id="{{ frame.id }}" data-raw-content="{{ frame.content | e }}" data-reference-frame="{{ frame.reference_frame or '' }}">
+            <div class="frame-content">{{ frame.html | safe }}</div>
+            <div class="frame-margin">
+                <div>
+                    frame_id: {{frame.id}}
+                </div>
+                <div class="frame-type-container">
+                    <span class="frame-type-text">frame type: </span>
+                    <span class="frame-type-value" data-frame-id="{{ frame.id }}" data-reference-frame="{{ frame.reference_frame or '' }}">
+                        <!-- Will be set by JavaScript -->
+                    </span>
+                </div>
+                <div class="reference-frame-container" style="display: none;">
+                    <span class="reference-frame-text">reference_frame: </span>
+                    <span class="reference-frame-value" data-frame-id="{{ frame.id }}" data-reference-frame="{{ frame.reference_frame or '' }}">
+                        {{ frame.reference_frame or 'none' }}
+                    </span>
+                    <select class="reference-frame-dropdown" style="display: none;" size="1">
+                        <option value="">none</option>
+                    </select>
+                </div>
+                <div class="img-container" style="display: none;">
+                    <div class="art-image-wrapper">
+                        <img src="/api/get_target/books/{{level}}/{{book}}/frames/{{frame.id}}/art.png"
+                             class="frame-image auto-updater fac-build"
+                             data-fac-target="books/{{ level }}/{{ book }}/frames/{{ frame.id }}/art.png"
+                             onerror="this.style.display='none'">
+                        <div class="art-image-label">initial frame</div>
+                    </div>
+                </div>
+                <div class="video-container">
+                    <video class="frame-video auto-updater fac-build"
+                           data-fac-target="books/{{ level }}/{{ book }}/frames/{{ frame.id }}/processed.mp4"
+                           controls
+                           preload="metadata"
+                           onerror="this.style.display='none'">
+                        <source src="/api/get_target/books/{{ level }}/{{ book }}/frames/{{ frame.id }}/processed.mp4" type="video/mp4">
+                        Your browser does not support the video tag.
+                    </video>
+                </div>
+            </div>
+            <div class="frame-edit" style="display: none;">
+                <div class="edit-tabs">
+                    <button class="tab-button active" data-tab="fountain">Fountain</button>
+                    <button class="tab-button" data-tab="json">JSON</button>
+                </div>
+                <div class="tab-content" id="fountain-tab">
+                    <textarea class="frame-textarea"></textarea>
+                </div>
+                <div class="tab-content" id="json-tab" style="display: none;">
+                    <textarea class="frame-json-textarea"></textarea>
+                </div>
+                <button class="run-button">▶ Save</button>
+                <button class="cancel-button">Cancel</button>
+            </div>
+            <div class="frame-controls">
+                <button class="control-btn edit-btn" title="Edit">✏️</button>
+                <button class="control-btn delete-btn" title="Delete">🗑️</button>
+                <button class="control-btn add-btn" title="Add Frame">➕</button>
+                <!--
+                <button class="control-btn merge-btn" title="Merge with Next">🔗</button>
+                -->
+            </div>
+        </div>
+    {% endfor %}
+{% else %}
+    <p>No content to display.</p>
+{% endif %}
+
+</div>
+{% endblock %}

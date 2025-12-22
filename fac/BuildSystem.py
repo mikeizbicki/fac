@@ -28,7 +28,7 @@ import nest_asyncio
 nest_asyncio.apply()
 
 # project imports
-from fac.LLM import LLM
+from fac.LLM import LLM, LLMError
 from fac.Logging import *
 from fac.utils import *
 
@@ -168,14 +168,26 @@ def load_config(path):
             if all_defined:
                 targets_to_process.remove(target)
                 processed_targets += 1
+                inconsistent_variables = False
                 for dependent in dependents[target]:
                     dependent_variables = extract_variables(dependent)
                     for var in target_variables:
                         if var in dependent_variables:
                             if var in full_config[dependent]['variables']:
-                                assert full_config[dependent]['variables'][var] == full_config[target]['variables'][var]
+                                if not full_config[dependent]['variables'][var] == full_config[target]['variables'][var]:
+                                    logger.error('Inconsistent variables in dependent and target')
+                                    logger.error(f" - (dependent) {dependent}", submessage=True)
+                                    logger.error(f"   {var}: {full_config[dependent]['variables'][var]}", submessage=True)
+                                    logger.error(f" - (target) {target}", submessage=True)
+                                    logger.error(f"   {var}: {full_config[target]['variables'][var]}", submessage=True)
+                                    inconsistent_variables = True
+                                #assert full_config[dependent]['variables'][var] == full_config[target]['variables'][var]
                             else:
                                 full_config[dependent]['variables'][var] = full_config[target]['variables'][var]
+                if inconsistent_variables:
+                    # FIXME: this is only temporary!!!
+                    #raise FACError
+                    pass
 
         if processed_targets == 0:
             break
@@ -183,6 +195,8 @@ def load_config(path):
     # reorder the variable definitions
     for target in full_config:
         full_config[target]['variables'] = reorder_variable_dictionary(full_config[target]['variables'])
+        #for var in full_config[target]['variables']:
+            #logger.trace(f' - var={var}')
 
     # certain config options result in modifications to the full_config
     keys0 = list(full_config.keys())
@@ -410,6 +424,8 @@ class BuildSystem:
             # to the equivalent command line executable with all the flags
             self.commit_messages.append(f"fac '{target}'")
 
+        self.llm.log_usage()
+
     @with_subtree(logger)
     def _traverse_target(
             self,
@@ -529,13 +545,16 @@ class BuildSystem:
             ])
         contexts = []
         filtered_input_env = {k: v for k, v in {**input_env, **target_env}.items()}
+        logger.trace('initial contexts:')
         for context_vars in expand_vars_on_newlines(filtered_input_env, filter_variables=target_variables):
-            contexts.append(BuildContext(
+            context = BuildContext(
                 context_vars,
                 [],
                 unresolved_dependencies,
                 postreqs,
-                ))
+                )
+            contexts.append(context)
+            logger.trace(f' - {context}')
 
         # Perform the main traversal
         # NOTE:
@@ -646,7 +665,7 @@ class BuildSystem:
                     contexts.append(context1)
 
             # log the success
-            if var != DUMMY_VAR: # and len(contexts) > 1:
+            if True: #var != DUMMY_VAR: # and len(contexts) > 1:
                 logger.debug(f'resolved variable {var}; len(contexts)={len(contexts)}')
                 logger.debug('contexts:', submessage=True)
                 for context in contexts:
@@ -762,6 +781,7 @@ class BuildSystem:
                     for var in context.variables:
                         logger.debug(f' - {var}: {str(context.variables[var])}', submessage=True)
 
+                    # compute the new target that we will build
                     try:
                         dep_target1, context_variables1 = match_pattern_withvars(config_targets, dep_target, context.variables)
                     except ValueError:
@@ -776,10 +796,15 @@ class BuildSystem:
                     if dep_target1 is None:
                         dep_target1 = dep_target
 
+                    # we only pass variables to the target that are included in the target definition
+                    dep_target1_variables = extract_variables(dep_target1)
+                    context_variables2 = {k:v for k, v in context_variables1.items() if k in dep_target1_variables}
+
+                    # actually build the dependency
                     try:
                         built_paths = self._traverse_target(
                                 dep_target1,
-                                context_variables1,
+                                context_variables2,
                                 #{**context.variables},
                                 foreach_context,
                                 overwrite=self.from_scratch,
@@ -929,7 +954,8 @@ class BuildSystem:
         # if there are no contexts to build,
         # let the user know
         if len(contexts) == 0:
-            logger.info('this target resolves to nothing')
+            logger.error('This target resolves to nothing.')
+            logger.error('Perhaps you need to wrap the target in \'single\' quotes?', submessage=True)
 
         # if we are only allowed to run once,
         # then we truncate the contexts to force us to run only once
@@ -975,12 +1001,13 @@ class BuildSystem:
                 if exceptions:
                     #if len(exceptions) > 1:
                     for context_id, exception in exceptions:
-                        logger.error(f"Exception in context {context_id}: {exception}")
-                        logger.error("Full traceback:", submessage=True)
-                        for line in traceback.format_tb(exception.__traceback__):
-                            for sub_line in line.rstrip().split('\n'):
-                                if sub_line.strip():
-                                    logger.error(sub_line, submessage=True)
+                        if not isinstance(exception, FACError) and not isinstance(exception, LLMError):
+                            logger.error(f"Exception in context {context_id}: {repr(exception)}")
+                            logger.error("Full traceback:", submessage=True)
+                            for line in traceback.format_tb(exception.__traceback__):
+                                for sub_line in line.rstrip().split('\n'):
+                                    if sub_line.strip():
+                                        logger.error(sub_line, submessage=True)
                     #raise exceptions[0][1]
                     raise FACError
 
@@ -1036,7 +1063,12 @@ class BuildSystem:
         '''
         Build a file given the specified information.
         '''
-        path_to_generate = process_template(target_to_build, context.variables)
+        path_to_generate = process_template(
+                target_to_build,
+                context.variables,
+                print_function=logger.error,
+                template_name='target',
+                )
 
         # ensure no unresolved dependencies
         if context.unresolved_dependencies:
@@ -1049,12 +1081,18 @@ class BuildSystem:
         # by default, we will build the given context;
         # but we may not rebuild if the path already exists
         file_status = []
+        updated_deps = []
         build_context = True
-        if os.path.exists(path_to_generate):
+        if not os.path.exists(path_to_generate):
+            file_status = ['new']
+        else:
 
             # do not rebuild if file is frozen
             if FacJSON(path_to_generate).get('frozen', False):
                 file_status.append('frozen')
+                build_context = False
+            if config.get('build_options', {}).get('freeze'):
+                file_status.append('config-frozen')
                 build_context = False
 
             # do not rebuild the file if auto_rebuild is disabled
@@ -1065,7 +1103,6 @@ class BuildSystem:
             # if the file is up-to-date (i.e. all dependencies are older),
             # then we will not rebuild it
             path_to_generate_committed_date = self._committed_date(path_to_generate)
-            updated_deps = []
             for path in context.dependency_paths:
                 path_committed_date = self._committed_date(path)
                 time_diff = path_to_generate_committed_date - path_committed_date
@@ -1074,6 +1111,8 @@ class BuildSystem:
             if updated_deps == []:
                 file_status.append('up-to-date')
                 build_context = False
+                if overwrite:
+                    file_status.append('overwrite')
             else:
                 file_status.append('out-of-date')
 
@@ -1084,9 +1123,19 @@ class BuildSystem:
         if type(config.get('options')) == dict:
             context_options = copy.deepcopy(config['options'])
             for option in context_options:
-                context_options[option] = process_template(context_options[option], env_vars=context.variables)
+                context_options[option] = process_template(
+                        context_options[option],
+                        env_vars=context.variables,
+                        print_function=logger.error,
+                        template_name=f'options.{option}',
+                        )
         elif type(config.get('options')) == str:
-            options_str = process_template(config['options'], env_vars=context.variables)
+            options_str = process_template(
+                    config['options'],
+                    env_vars=context.variables,
+                    print_function=logger.error,
+                    template_name='options',
+                    )
             context_options = yaml.safe_load(options_str)
             assert type(context_options) == dict
         elif config.get('options') is None:
@@ -1097,7 +1146,11 @@ class BuildSystem:
         if self.print_dependencies and (build_context or overwrite):
             logger.info('dependency_paths:', submessage=True)
             for path in context.dependency_paths:
-                logger.info(f' - {path}', submessage=True)
+                if path in updated_deps:
+                    print_updated = '[updated] '
+                else:
+                    print_updated = ''
+                logger.info(f' - {print_updated}{path}', submessage=True)
             if context_options:
                 logger.info('options:', submessage=True)
                 for opt in context_options:
@@ -1164,8 +1217,18 @@ Generate the file "{path_to_generate}" based on the information below.
 '''
 
         if 'description' in config:
-            prompt_description = f'<file_description>\n{config.get("description")}\n</file_description>'
-            prompt_description = process_template(prompt_description, env_vars=context.variables)
+            try:
+                prompt_description = '<file_description>\n'
+                prompt_description += process_template(
+                        config['description'],
+                        env_vars=context.variables,
+                        print_function=logger.error,
+                        template_name='description',
+                        )
+                prompt_description += '\n</file_description>'
+            except TemplateProcessingError as e:
+                raise FACError()
+
             prompt_description += '\n'
         else:
             prompt_description = ''
@@ -1509,7 +1572,13 @@ def eval_var(var, expr, context):
         )
     if cmd.returncode != 0:
         logger.error(f'Failed to evaluate variable {var}')
-        logger.error(f'build command: {expr}', submessage=True)
+        lines = expr.split('\n')
+        if len(lines) == 1:
+            logger.error(f'build command: {expr}', submessage=True)
+        else:
+            logger.error(f'build command:', submessage=True)
+            for line in lines:
+                logger.error(line, submessage=True)
         for line in (cmd.stderr.strip() + '\n' + cmd.stdout).strip().split('\n'):
             logger.error(line, submessage=True)
         logger.error('context.variables:', submessage=True)

@@ -66,6 +66,8 @@ registered_models = {
     # video prices are measured in seconds, not tokens
     'openai/sora-2':                        {'video/out': 0.10},
     'openai/sora-2-pro':                    {'video/out': 0.50},
+    'fal-ai/veo3.1/first-last-frame-to-video': {'video/out': 0.20},
+    'fal-ai/veo3.1/fast/first-last-frame-to-video': {'video/out': 0.10},
     'fal-ai/kling-video/v2.5-turbo/standard/image-to-video': {'video/out': 0.042},
     'fal-ai/kling-video/o1/image-to-video': {'video/out': 0.112},
 
@@ -166,6 +168,10 @@ class LLM():
         self.default_audio_model = 'openai/gpt-4o-mini-tts'
         self.usage_summary = ModelUsageSummary()
         self.build_id = generate_uuid7()
+
+    def log_usage(self):
+        logger.info(f'total_cost: ${self.usage_summary.total_cost():0.4f}')
+
 
     '''
     def text(self, messages, *,
@@ -362,9 +368,19 @@ class LLM():
                     "image_urls": elements_urls,
                 },
             )
-            async for event in handler.iter_events(with_logs=True):
-                pass
-            result = await handler.get()
+            try:
+                async for event in handler.iter_events(with_logs=True):
+                    pass
+                result = await handler.get()
+            except fal_client.client.FalClientHTTPError as e:
+                try:
+                    logger.error(f"FalClientHTTPError: {e.message[0]['type']}: {e.message[0]['loc']}")
+                    logger.error(e.message[0]['msg'], submessage=True)
+                except TypeError:
+                    # Sometimes e.message is a string instead of a dict.
+                    # I don't know why, and I don't see this behavior documented.
+                    logger.error(e.message)
+                raise LLMError
 
             # download the image
             response = requests.get(result['images'][0]['url'])
@@ -443,8 +459,11 @@ class LLM():
 
             # fal-ai models have many different argument configurations
             # and they must all be implemented separately here
-            if model == 'fal-ai/veo3.1/fast/first-last-frame-to-video':
-                seconds = int(data.get('seconds', 4))
+            if model in [
+                    'fal-ai/veo3.1/fast/first-last-frame-to-video',
+                    'fal-ai/veo3.1/first-last-frame-to-video',
+                    ]:
+                seconds = int(data.get('duration', 8))
                 arguments = {
                     "prompt": data['prompt'],
                     "first_frame_url": encode_image_to_base64_url(data['first_frame']),
@@ -490,10 +509,20 @@ class LLM():
                 raise ValueError(f'model="{model}" not supported')
 
             # call the api and await result
-            handler = await fal_client.submit_async(model, arguments)
-            async for event in handler.iter_events(with_logs=True):
-                pass
-            result = await handler.get()
+            try:
+                handler = await fal_client.submit_async(model, arguments)
+                async for event in handler.iter_events(with_logs=True):
+                    pass
+                result = await handler.get()
+            except fal_client.client.FalClientHTTPError as e:
+                try:
+                    logger.error(f"FalClientHTTPError: {e.message[0]['type']}: {e.message[0]['loc']}")
+                    logger.error(e.message[0]['msg'], submessage=True)
+                except TypeError:
+                    # Sometimes e.message is a string instead of a dict.
+                    # I don't know why, and I don't see this behavior documented.
+                    logger.error(e.message)
+                raise LLMError
 
             # download the video
             video = requests.get(result['video']['url'])
@@ -569,3 +598,5 @@ def encode_image_to_base64_url(file_path):
         mime_type = mimetypes.guess_type(file_path)[0] or 'image/png'
         return f"data:{mime_type};base64,{encoded_string}"
 
+class LLMError(Exception):
+    pass

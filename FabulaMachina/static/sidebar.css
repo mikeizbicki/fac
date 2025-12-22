@@ -1,0 +1,360 @@
+/* Full-width app container */
+#app-container {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+    margin: 0;
+    padding: 0;
+    font-family: 'Courier New', monospace;
+}
+
+/* Sidebar - fixed to left edge */
+.sidebar {
+    width: 320px; /* ~40 chars at 12px monospace */
+    min-width: 200px;
+    max-width: 50vw;
+    background: #f8f9fa;
+    border-right: 1px solid #dee2e6;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: margin-left 0.3s ease;
+    position: fixed;
+    left: 0;
+    top: 0;
+    height: 100vh;
+    z-index: 1000;
+}
+
+.sidebar.collapsed {
+    margin-left: -320px;
+}
+
+/* Resize handle */
+.sidebar-resize-handle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 4px;
+    height: 100%;
+    background: transparent;
+    cursor: ew-resize;
+    z-index: 1001;
+}
+
+.sidebar-resize-handle:hover {
+    background: #007bff;
+}
+
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    padding: 8px;
+    border-bottom: 1px solid #dee2e6;
+    background: #e9ecef;
+    flex-shrink: 0;
+}
+
+.sidebar-tabs {
+    flex: 1;
+    display: flex;
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 6px 12px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: 'Courier New', monospace;
+}
+
+.tab-btn.active {
+    background: #007bff;
+    color: white;
+}
+
+.sidebar-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 4px;
+}
+
+.sidebar-toggle:hover {
+    background: rgba(0,0,0,0.1);
+}
+
+/* Tab content */
+.tab-content {
+    flex: 1;
+    display: none;
+    overflow: hidden;
+    flex-direction: column;
+}
+
+.tab-content.active {
+    display: flex;
+}
+
+/* History tab - IDE feel */
+.history-container {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.history-list {
+    flex: 1;
+    overflow-y: auto;
+    font-size: 11px;
+    line-height: 1.2;
+    padding: 4px;
+}
+
+.history-item {
+    padding: 2px 4px;
+    cursor: pointer;
+    white-space: nowrap;
+    border-left: 3px solid transparent;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.history-item:hover {
+    background: #e3f2fd;
+    border-left-color: #2196F3;
+}
+
+.history-item.current-commit {
+    font-weight: bold;
+    background-color: #e8f4fd;
+}
+
+.history-item.current-commit .commit-time {
+    font-weight: bold;
+}
+
+.history-item.current-commit .commit-message {
+    font-weight: bold;
+}
+
+/* Loading state styling */
+.history-item[style*="italic"] {
+    opacity: 0.7;
+}
+
+.history-item[style*="italic"] .commit-message {
+    color: #666;
+}
+
+
+.history-item.current {
+    background: #fff3cd;
+    border-left-color: #ffc107;
+}
+
+.commit-time {
+    color: #f57c00;
+    font-weight: bold;
+    min-width: 40px;
+    display: inline-block;
+}
+
+.commit-message {
+    color: #333;
+    margin-left: 8px;
+}
+
+.commit-author {
+    color: #666;
+    font-size: 10px;
+}
+
+.commit-date {
+    color: #999;
+    font-size: 10px;
+    float: right;
+}
+
+/* Console tab - terminal feel */
+.console-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #000;
+    min-height: 0;
+}
+
+.console-output {
+    flex: 1;
+    background: #000;
+    color: #0f0;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    line-height: 1.2;
+    padding: 8px;
+    overflow-y: auto;
+    white-space: pre;
+    min-height: 0;
+}
+
+.console-footer {
+    padding: 4px 8px;
+    border-top: 1px solid #333;
+    background: #1a1a1a;
+    flex-shrink: 0;
+}
+
+.clear-btn {
+    background: #333;
+    color: #fff;
+    border: 1px solid #555;
+    padding: 2px 8px;
+    font-size: 10px;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+}
+
+.clear-btn:hover {
+    background: #444;
+}
+
+.console-line {
+    white-space: nowrap;
+}
+
+.console-line.error {
+    color: #ff6b6b;
+}
+
+.console-line.warning {
+    color: #ffd93d;
+}
+
+.console-line.info {
+    color: #74c0fc;
+}
+
+/* Main content - exactly like it used to be, but with left margin for sidebar */
+.main-content {
+    flex: 1;
+    margin-left: 320px; /* Space for sidebar */
+    transition: margin-left 0.3s ease;
+    /* Remove any constraints that were added */
+    width: auto;
+    max-width: none;
+    overflow: visible;
+    padding: 0;
+}
+
+.main-content.sidebar-collapsed {
+    margin-left: 0;
+}
+
+/* When sidebar is collapsed, show toggle button */
+.sidebar-toggle.collapsed {
+    position: fixed;
+    top: 8px;
+    left: 8px;
+    z-index: 1001;
+    background: #007bff;
+    color: white;
+    border-radius: 3px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .sidebar {
+        position: fixed;
+        height: 100vh;
+        z-index: 1000;
+    }
+
+    .main-content {
+        margin-left: 0;
+    }
+
+    .sidebar:not(.collapsed) ~ .main-content {
+        margin-left: 320px;
+    }
+}
+
+/* ANSI color classes for console output */
+.ansi-red { color: #ff6b6b; }
+.ansi-bright-red { color: #ff5555; }
+.ansi-green { color: #0f0; }
+.ansi-yellow { color: #ffd93d; }
+.ansi-orange { color: #ffa500; }
+.ansi-cyan { color: #74c0fc; }
+.ansi-magenta { color: #ff79c6; }
+
+/* History controls */
+.history-controls {
+    padding: 8px;
+    border-bottom: 1px solid #dee2e6;
+    background: #f8f9fa;
+    flex-shrink: 0;
+}
+
+.branch-controls {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+}
+
+.branch-select {
+    flex: 1;
+    padding: 2px 4px;
+    font-size: 11px;
+    font-family: 'Courier New', monospace;
+    border: 1px solid #ccc;
+    background: white;
+}
+
+.new-branch-btn {
+    width: 24px;
+    height: 20px;
+    padding: 0;
+    font-size: 12px;
+    font-weight: bold;
+    border: 1px solid #ccc;
+    background: white;
+    cursor: pointer;
+}
+
+.new-branch-btn:hover {
+    background: #f0f0f0;
+}
+
+.time-controls {
+    display: flex;
+    align-items: center;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    font-size: 10px;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+}
+
+.checkbox-label input[type="checkbox"] {
+    margin-right: 4px;
+}
+
+.checkbox-text {
+    user-select: none;
+}
+
+/* Update history container to account for controls */
+.history-container {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+

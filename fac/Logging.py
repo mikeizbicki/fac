@@ -133,7 +133,6 @@ def with_buffered_logs(logger_obj):
     return decorator
 
 
-handler = logging.StreamHandler()
 class CustomFormatter(logging.Formatter):
     # ANSI color codes
     COLORS = {
@@ -161,9 +160,14 @@ class CustomFormatter(logging.Formatter):
             self._style._fmt = f'%(tree_prefix)s{startcolor}[%(levelname)s] %(message)s{stopcolor}'
         message = super().format(record)
         return message
-handler.setFormatter(CustomFormatter(datefmt='%Y-%m-%d %H:%M:%S'))
+
+stream_handler = logging.StreamHandler()
+stream_handler.setFormatter(CustomFormatter(datefmt='%Y-%m-%d %H:%M:%S'))
+file_handler = logging.FileHandler('.fac.log')
+file_handler.setFormatter(CustomFormatter(datefmt='%Y-%m-%d %H:%M:%S'))
 logger = RecursiveLogger(__name__)
-logger.addHandler(handler)
+logger.addHandler(stream_handler)
+logger.addHandler(file_handler)
 logger.propagate = False
 logger.setLevel(logging.INFO)
 
@@ -174,5 +178,4 @@ def trace(self, message, *args, **kwargs):
     if self.isEnabledFor(TRACE_LEVEL):
         self._log(TRACE_LEVEL, message, args, **kwargs)
 logging.Logger.trace = trace
-
-
+file_handler.setLevel('TRACE')

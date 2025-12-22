@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}FabulaMachina{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" type="text/css" href="/static/index.css">
+<script src="/static/index.js"></script>
+{% endblock %}
+
+{% block content %}
+<h1>FabulaMachina</h1>
+
+<div class="collapsible-section">
+    <h2 class="section-header" data-target="books-section">
+        <span class="triangle">▶</span> Books ({{ books|length }})
+    </h2>
+    <div id="books-section" class="section-content">
+        {% if books %}
+            <ul class="item-list">
+            {% for book in books %}
+                <li>
+                    <a href="/books/{{ book.level }}/{{ book.book }}">
+                        {{ book.title }}
+                    </a>
+                </li>
+            {% endfor %}
+            </ul>
+        {% else %}
+            <p class="empty-message">No books found.</p>
+        {% endif %}
+    </div>
+</div>
+
+{% for collection_name, collection_data in collections.items() %}
+<div class="collapsible-section">
+    <h2 class="section-header" data-target="{{ collection_name }}-section">
+        <span class="triangle">▶</span> {{ collection_name.title() }} ({{ collection_data.collection_items|length }})
+    </h2>
+    <div id="{{ collection_name }}-section" class="section-content">
+        {% if collection_data.collection_items %}
+            {% if collection_data.display_mode == 'thumbnail' %}
+                <div class="thumbnail-grid">
+                {% for item in collection_data.collection_items %}
+                    <div class="thumbnail-item">
+                        <a href="/{{ collection_name }}/{{ item.name }}" class="thumbnail-link">
+                            {% if item.thumbnail_url %}
+                                <img src="{{ item.thumbnail_url }}" class="thumbnail-image" alt="{{ item.title }}">
+                            {% else %}
+                                <div class="thumbnail-placeholder">
+                                    <span>No Image</span>
+                                </div>
+                            {% endif %}
+                            <div class="thumbnail-title">{{ item.title }}</div>
+                        </a>
+                    </div>
+                {% endfor %}
+                </div>
+            {% else %}
+                <ul class="item-list">
+                {% for item in collection_data.collection_items %}
+                    <li>
+                        <a href="/{{ collection_name }}/{{ item.name }}">
+                            {{ item.title }}
+                        </a>
+                    </li>
+                {% endfor %}
+                </ul>
+            {% endif %}
+        {% else %}
+            <p class="empty-message">No {{ collection_name }} found.</p>
+        {% endif %}
+    </div>
+</div>
+{% endfor %}
+{% endblock %}
+

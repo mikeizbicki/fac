@@ -8,6 +8,7 @@ from dataclasses import fields
 import typing
 
 from fac.BuildSystem import *
+from fac.LLM import *
 
 
 def str2bool(v):
@@ -58,7 +59,7 @@ def main():
     try:
         with build_system:
             build_system.build_targets(args.targets)
-    except (FACError, DirtyRepo, NoTargetsMatched, VariableEvaluationError, CommandExecutionError):
+    except (FACError, LLMError, DirtyRepo, NoTargetsMatched, VariableEvaluationError, CommandExecutionError):
         return 1
 
 
