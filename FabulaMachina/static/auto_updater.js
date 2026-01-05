@@ -317,6 +317,9 @@ class AutoUpdater {
     }
 
     showDeletedState(element, mediaType) {
+        // First, aggressively remove any existing overlays for this element
+        this.removeOverlay(element);
+        
         const overlay = document.createElement('div');
         overlay.className = 'auto-updater-overlay deleted video-deleted';
         overlay.innerHTML = `
@@ -324,20 +327,49 @@ class AutoUpdater {
             <div class="substatus">File deleted</div>
         `;
         
-        // Position overlay directly over the element, not the container
+        // Find the best container for positioning
+        let container = element.parentElement;
+        
+        // For videos, try to find a container that's already relatively positioned
+        if (element.tagName === 'VIDEO') {
+            let current = element.parentElement;
+            let depth = 0;
+            while (current && depth < 3) {
+                const style = window.getComputedStyle(current);
+                if (style.position === 'relative' || current.classList.contains('video-container')) {
+                    container = current;
+                    break;
+                }
+                current = current.parentElement;
+                depth++;
+            }
+        }
+        
+        // Position overlay directly over the element
         overlay.style.position = 'absolute';
         overlay.style.top = '0';
         overlay.style.left = '0';
-        overlay.style.width = element.offsetWidth + 'px';
-        overlay.style.height = element.offsetHeight + 'px';
-        overlay.style.zIndex = '999'; // Lower than controls
+        overlay.style.width = '100%';
+        overlay.style.height = '100%';
+        overlay.style.zIndex = '999';
         
-        const container = element.parentElement;
-        if (!container.style.position || container.style.position === 'static') {
+        // Ensure container is relatively positioned
+        const containerStyle = window.getComputedStyle(container);
+        if (containerStyle.position === 'static') {
             container.style.position = 'relative';
         }
+        
+        // Add a unique identifier to help with cleanup
+        overlay.dataset.elementPath = this.normalizePath(
+            element.tagName === 'VIDEO' ? 
+                (element.querySelector('source')?.src || element.src) : 
+                element.src
+        );
+        
         container.appendChild(overlay);
+        debugLog(`AutoUpdater: Added ${mediaType} deleted overlay for ${overlay.dataset.elementPath}`);
     }
+
 
     handleFileUpdating(elements) {
         debugLog(`AutoUpdater: Showing updating state for ${elements.size} elements`);
@@ -368,19 +400,45 @@ class AutoUpdater {
         img.style.opacity = '0.5';
     }
 
-    removeOverlay(img) {
-        img.style.opacity = '';
-        const container = img.parentElement;
-        const overlays = container.querySelectorAll('.auto-updater-overlay');
-        overlays.forEach(overlay => overlay.remove());
+    removeOverlay(element) {
+        element.style.opacity = '';
+        
+        // More aggressive overlay cleanup - search in parent containers too
+        let container = element.parentElement;
+        let searchDepth = 0;
+        const maxSearchDepth = 3; // Limit how far we search up the DOM
+        
+        while (container && searchDepth < maxSearchDepth) {
+            const overlays = container.querySelectorAll('.auto-updater-overlay');
+            overlays.forEach(overlay => {
+                // Check if this overlay is positioned over our element
+                const overlayRect = overlay.getBoundingClientRect();
+                const elementRect = element.getBoundingClientRect();
+                
+                // If overlay roughly matches element position, remove it
+                const isPositionedOverElement = 
+                    Math.abs(overlayRect.left - elementRect.left) < 10 &&
+                    Math.abs(overlayRect.top - elementRect.top) < 10 &&
+                    Math.abs(overlayRect.width - elementRect.width) < 20 &&
+                    Math.abs(overlayRect.height - elementRect.height) < 20;
+                    
+                if (isPositionedOverElement || overlay.classList.contains('video-deleted')) {
+                    overlay.remove();
+                    debugLog(`AutoUpdater: Removed overlay from container at depth ${searchDepth}`);
+                }
+            });
+            
+            container = container.parentElement;
+            searchDepth++;
+        }
     }
+
 
     addImage(img) {
         const src = img.getAttribute('src') || (img.tagName === 'VIDEO' ? (img.querySelector('source')?.src || img.src) : null);
         debugLog(`AutoUpdater: Adding ${img.tagName.toLowerCase()} with src: ${src}`);
         if (!src) return;
 
-        // Use normalized path for tracking
         const path = this.normalizePath(src);
         if (!path) return;
 
@@ -391,8 +449,19 @@ class AutoUpdater {
             debugLog(`AutoUpdater: Created new element set for path: ${path}`);
         }
 
-        this.imageElements.get(path).add(img);
-        debugLog(`AutoUpdater: Added element, total for path ${path}: ${this.imageElements.get(path).size}`);
+        const elementSet = this.imageElements.get(path);
+        
+        // Check if we already have this exact element (avoid duplicates)
+        if (elementSet.has(img)) {
+            debugLog(`AutoUpdater: Element already tracked for path: ${path}`);
+            return;
+        }
+
+        elementSet.add(img);
+        debugLog(`AutoUpdater: Added element, total for path ${path}: ${elementSet.size}`);
+
+        // Clean up any existing overlays on this element before checking file existence
+        this.removeOverlay(img);
 
         // Check if the file exists
         if (img.tagName === 'VIDEO') {
@@ -403,6 +472,7 @@ class AutoUpdater {
 
         this.subscribePath(path);
     }
+
 
     async checkImageExists(img, src) {
         try {

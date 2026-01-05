@@ -421,7 +421,7 @@ border-radius: 3px;
 }
 
 /* Book container - paper effect */
-#book-container {
+#story-container {
     max-width: 800px;
     margin: 40px auto;
     background-color: #fefefe; /* Pure white paper */
@@ -439,7 +439,7 @@ border-radius: 3px;
 }
 
 /* Optional: Add a subtle fold/crease effect */
-#book-container::before {
+#story-container::before {
     content: '';
     position: absolute;
     top: 0;
@@ -457,7 +457,7 @@ border-radius: 3px;
 }
 
 /* Enhance the script typography to match real scripts */
-#book-container h1 {
+#story-container h1 {
     text-align: center;
     text-transform: uppercase;
     letter-spacing: 2px;
@@ -468,7 +468,7 @@ border-radius: 3px;
 }
 
 /* Add some depth with a second shadow layer */
-#book-container::after {
+#story-container::after {
     content: '';
     position: absolute;
     top: 8px;
@@ -513,7 +513,7 @@ border-radius: 3px;
     min-height: 100vh;
 }
 
-#book-container {
+#story-container {
     max-width: 800px;
     margin: 40px 0 40px 40px; /* Left margin creates space from sidebar */
     background-color: #fefefe; /* Pure white paper */
@@ -546,7 +546,7 @@ border-radius: 3px;
     user-select: none;
 }
 
-#book-container::before {
+#story-container::before {
     content: '';
     position: absolute;
     top: 0;
@@ -563,7 +563,7 @@ border-radius: 3px;
     pointer-events: none;
 }
 
-#book-container h1 {
+#story-container h1 {
     text-align: center;
     text-transform: uppercase;
     letter-spacing: 2px;
@@ -573,7 +573,7 @@ border-radius: 3px;
     padding-bottom: 10px;
 }
 
-#book-container::after {
+#story-container::after {
     content: '';
     position: absolute;
     top: 8px;

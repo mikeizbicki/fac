@@ -20,8 +20,8 @@ app.register_blueprint(routes.api.bp)
 import routes.auto_updater
 app.register_blueprint(routes.auto_updater.bp)
 
-import pages.book.routes
-app.register_blueprint(pages.book.routes.bp)
+import pages.story.routes
+app.register_blueprint(pages.story.routes.bp)
 
 import routes.fac
 app.register_blueprint(routes.fac.bp)

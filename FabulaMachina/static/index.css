@@ -36,12 +36,16 @@
 }
 
 .section-content {
-    display: none;
+    display: block;
     padding: 20px;
 }
 
 .section-content.expanded {
     display: block;
+}
+
+.section-content.collapsed {
+    display: none;
 }
 
 .item-list {

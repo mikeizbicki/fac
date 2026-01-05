@@ -2,16 +2,16 @@
 class DialogAudioControls {
     constructor() {
         this.level = null;
-        this.book = null;
+        this.story = null;
         this.init();
     }
 
     init() {
-        // Get level and book from container
-        const container = document.getElementById('book-container');
+        // Get level and story from container
+        const container = document.getElementById('story-container');
         if (container) {
             this.level = container.dataset.level;
-            this.book = container.dataset.book;
+            this.story = container.dataset.story;
         }
     }
 
@@ -20,7 +20,7 @@ class DialogAudioControls {
 
         frames.forEach(frame => {
             const frameId = frame.dataset.frameId;
-            const audioPath = `/api/get_target/books/${this.level}/${this.book}/frames/${frameId}/page.wav`;
+            const audioPath = `/api/get_target/stories/${this.level}/${this.story}/frames/${frameId}/page.wav`;
 
             // Find all dialog divs in this frame
             const dialogDivs = frame.querySelectorAll('.frame-content div.dialog');
@@ -73,7 +73,7 @@ class DialogAudioControls {
         notesBtn.title = 'Rebuild audio with additional context';
 
         // Add click handlers for FAC buttons
-        const facTarget = `books/${this.level}/${this.book}/frames/${frameId}/page.wav`;
+        const facTarget = `stories/${this.level}/${this.story}/frames/${frameId}/page.wav`;
 
         buildBtn.addEventListener('click', (e) => {
             e.stopPropagation();

@@ -1,7 +1,7 @@
 """
 Flask app for viewing framed fountain scripts.
 
-Serves framed fountain files from books/$LEVEL/$BOOK/script.fountain.framed
+Serves framed fountain files from stories/$SERIES/$STORY/script.fountain.framed
 and renders them using screenplain with frame organization.
 
 ====
@@ -64,14 +64,14 @@ from screenplain.parsers import fountain
 from screenplain.export.html import convert
 from routes.git_history import commit_changes_to_git
 
-bp = Blueprint('books', __name__, template_folder='.')
+bp = Blueprint('stories', __name__, template_folder='.')
 
 
-@bp.route('/books/<level>/<book>/update_reference_frame', methods=['POST'])
-def update_reference_frame(level, book):
+@bp.route('/stories/<level>/<story>/update_reference_frame', methods=['POST'])
+def update_reference_frame(level, story):
     """Update the reference_frame for a specific frame."""
-    script_path = os.path.join('books', level, book, 'script.fountain.framed')
-    content_path = os.path.join('books', level, book, 'content.json')
+    script_path = os.path.join('stories', level, story, 'script.fountain.framed')
+    content_path = os.path.join('stories', level, story, 'content.json')
 
     data = request.get_json()
     frame_id = data.get('frame_id')
@@ -141,10 +141,10 @@ def update_reference_frame(level, book):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@bp.route('/books/<level>/<book>/delete_frame', methods=['POST'])
-def delete_frame(level, book):
+@bp.route('/stories/<level>/<story>/delete_frame', methods=['POST'])
+def delete_frame(level, story):
     """Delete a frame from both fountain and JSON files."""
-    script_path = os.path.join('books', level, book, 'script.fountain.framed')
+    script_path = os.path.join('stories', level, story, 'script.fountain.framed')
 
     if not os.path.exists(script_path):
         abort(404)
@@ -174,7 +174,7 @@ def delete_frame(level, book):
         files_modified.append(script_path)
 
         # Delete from JSON file if it exists
-        content_path = os.path.join('books', level, book, 'content.json')
+        content_path = os.path.join('stories', level, story, 'content.json')
         if os.path.exists(content_path):
             with open(content_path, 'r', encoding='utf-8') as f:
                 json_data = json.load(f)
@@ -190,7 +190,7 @@ def delete_frame(level, book):
             files_modified.append(content_path)
 
         # Delete frame assets directory if it exists
-        frame_dir = os.path.join('books', level, book, 'frames', frame_id)
+        frame_dir = os.path.join('stories', level, story, 'frames', frame_id)
         if os.path.exists(frame_dir):
             shutil.rmtree(frame_dir)
 
@@ -204,10 +204,10 @@ def delete_frame(level, book):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@bp.route('/books/<level>/<book>/add_frame', methods=['POST'])
-def add_frame(level, book):
+@bp.route('/stories/<level>/<story>/add_frame', methods=['POST'])
+def add_frame(level, story):
     """Add a new empty frame after the specified frame."""
-    script_path = os.path.join('books', level, book, 'script.fountain.framed')
+    script_path = os.path.join('stories', level, story, 'script.fountain.framed')
 
     if not os.path.exists(script_path):
         abort(404)
@@ -241,7 +241,7 @@ def add_frame(level, book):
         files_modified.append(script_path)
 
         # Add to JSON file if it exists
-        content_path = os.path.join('books', level, book, 'content.json')
+        content_path = os.path.join('stories', level, story, 'content.json')
         if os.path.exists(content_path):
             with open(content_path, 'r', encoding='utf-8') as f:
                 json_data = json.load(f)
@@ -273,7 +273,7 @@ def add_frame(level, book):
             files_modified.append(content_path)
 
         # Create frame assets directory
-        frame_dir = os.path.join('books', level, book, 'frames', new_frame_id)
+        frame_dir = os.path.join('stories', level, story, 'frames', new_frame_id)
         os.makedirs(frame_dir, exist_ok=True)
 
         # Commit changes to git
@@ -288,10 +288,10 @@ def add_frame(level, book):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@bp.route('/books/<level>/<book>/get_frame_json/<frame_id>')
-def get_frame_json(level, book, frame_id):
+@bp.route('/stories/<level>/<story>/get_frame_json/<frame_id>')
+def get_frame_json(level, story, frame_id):
     """Get JSON data for a specific frame."""
-    content_path = os.path.join('books', level, book, 'content.json')
+    content_path = os.path.join('stories', level, story, 'content.json')
 
     try:
         with open(content_path, 'r', encoding='utf-8') as f:
@@ -305,10 +305,10 @@ def get_frame_json(level, book, frame_id):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
-@bp.route('/books/<level>/<book>/save_frame', methods=['POST'])
-def save_frame(level, book):
+@bp.route('/stories/<level>/<story>/save_frame', methods=['POST'])
+def save_frame(level, story):
     """Save both fountain and JSON content atomically."""
-    script_path = os.path.join('books', level, book, 'script.fountain.framed')
+    script_path = os.path.join('stories', level, story, 'script.fountain.framed')
 
     if not os.path.exists(script_path):
         abort(404)
@@ -339,7 +339,7 @@ def save_frame(level, book):
 
         # Save JSON file if provided
         if json_content:
-            content_path = os.path.join('books', level, book, 'content.json')
+            content_path = os.path.join('stories', level, story, 'content.json')
             if os.path.exists(content_path):
                 with open(content_path, 'r', encoding='utf-8') as f:
                     json_data = json.load(f)
@@ -463,11 +463,11 @@ def render_frame_html(frame_content):
     return html_content
 
 
-@bp.route('/books/<level>/<book>')
-def view_script(level, book):
+@bp.route('/stories/<level>/<story>')
+def view_script(level, story):
     """View a framed fountain script."""
-    script_path = os.path.join('books', level, book, 'script.fountain.framed')
-    content_path = os.path.join('books', level, book, 'content.json')
+    script_path = os.path.join('stories', level, story, 'script.fountain.framed')
+    content_path = os.path.join('stories', level, story, 'content.json')
 
     if not os.path.exists(script_path):
         abort(404)
@@ -480,7 +480,7 @@ def view_script(level, book):
     if not frames:
         return render_template('template.html',
                              level=level,
-                             book=book,
+                             story=story,
                              frames=[],
                              error="No frames found in script")
 
@@ -511,5 +511,5 @@ def view_script(level, book):
 
     return render_template('template.html',
                          level=level,
-                         book=book,
+                         story=story,
                          frames=rendered_frames)

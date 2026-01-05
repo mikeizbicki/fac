@@ -51,23 +51,23 @@ def discover_items(base_dir, required_files=None):
 
 @bp.route('/')
 def index():
-    """List all available books, characters, and locations."""
-    # Discover books (existing logic)
-    books = []
-    books_dir = 'books'
+    """List all available stories, characters, and locations."""
+    # Discover stories (existing logic)
+    stories = []
+    stories_dir = 'stories'
 
-    if os.path.exists(books_dir):
-        for level in os.listdir(books_dir):
-            level_path = os.path.join(books_dir, level)
+    if os.path.exists(stories_dir):
+        for level in os.listdir(stories_dir):
+            level_path = os.path.join(stories_dir, level)
             if os.path.isdir(level_path):
-                for book in os.listdir(level_path):
-                    book_path = os.path.join(level_path, book)
-                    script_path = os.path.join(book_path, 'script.fountain.framed')
-                    if os.path.isdir(book_path) and os.path.exists(script_path):
-                        books.append({
+                for story in os.listdir(level_path):
+                    story_path = os.path.join(level_path, story)
+                    script_path = os.path.join(story_path, 'script.fountain.framed')
+                    if os.path.isdir(story_path) and os.path.exists(script_path):
+                        stories.append({
                             'level': level,
-                            'book': book,
-                            'title': f"{level} - {book}"
+                            'story': story,
+                            'title': f"{level} - {story}"
                         })
 
     # Discover collections with their display modes
@@ -108,7 +108,7 @@ def index():
                 }
 
     return render_template('index.html',
-                         books=books,
+                         stories=stories,
                          collections=collections)
 
 @bp.route('/api/collections')

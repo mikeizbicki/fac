@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 
-{% block title %}{{ level }} - {{ book }}{% endblock %}
+{% block title %}{{ level }} - {{ story }}{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" type="text/css" href="/pages/book/static/style.css">
-<link rel="stylesheet" type="text/css" href="/pages/book/static/audio-controls.css">
-<script src="/pages/book/static/script.js"></script>
-<script src="/pages/book/static/audio-controls.js"></script>
+<link rel="stylesheet" type="text/css" href="/pages/story/static/style.css">
+<link rel="stylesheet" type="text/css" href="/pages/story/static/audio-controls.css">
+<script src="/pages/story/static/script.js"></script>
+<script src="/pages/story/static/audio-controls.js"></script>
 <!--
-<link rel="stylesheet" type="text/css" href="/pages/book/static/media-switcher.css">
-<script src="/pages/book/static/media-switcher.js"></script>
+<link rel="stylesheet" type="text/css" href="/pages/story/static/media-switcher.css">
+<script src="/pages/story/static/media-switcher.js"></script>
 -->
 {% endblock %}
 
@@ -17,13 +17,13 @@
 
 <!--
 DEVELOPERS NOTE:
-The book-container below is intended to have the look and feel of a printed-on-paper movie script.
+The story-container below is intended to have the look and feel of a printed-on-paper movie script.
 All changes must preserve this look and feel.
 -->
 
-<div id="book-container" data-level="{{ level }}" data-book="{{ book }}">
+<div id="story-container" data-level="{{ level }}" data-story="{{ story }}">
 <div class="script-holes"></div>
-<h1>{{ level }} - {{ book }}</h1>
+<h1>{{ level }} - {{ story }}</h1>
 
 {% if error %}
     <p class="error">Error: {{ error }}</p>
@@ -52,20 +52,20 @@ All changes must preserve this look and feel.
                 </div>
                 <div class="img-container" style="display: none;">
                     <div class="art-image-wrapper">
-                        <img src="/api/get_target/books/{{level}}/{{book}}/frames/{{frame.id}}/art.png"
+                        <img src="/api/get_target/stories/{{level}}/{{story}}/frames/{{frame.id}}/art.png"
                              class="frame-image auto-updater fac-build"
-                             data-fac-target="books/{{ level }}/{{ book }}/frames/{{ frame.id }}/art.png"
+                             data-fac-target="stories/{{ level }}/{{ story }}/frames/{{ frame.id }}/art.png"
                              onerror="this.style.display='none'">
                         <div class="art-image-label">initial frame</div>
                     </div>
                 </div>
                 <div class="video-container">
                     <video class="frame-video auto-updater fac-build"
-                           data-fac-target="books/{{ level }}/{{ book }}/frames/{{ frame.id }}/processed.mp4"
+                           data-fac-target="stories/{{ level }}/{{ story }}/frames/{{ frame.id }}/processed.mp4"
                            controls
                            preload="metadata"
                            onerror="this.style.display='none'">
-                        <source src="/api/get_target/books/{{ level }}/{{ book }}/frames/{{ frame.id }}/processed.mp4" type="video/mp4">
+                        <source src="/api/get_target/stories/{{ level }}/{{ story }}/frames/{{ frame.id }}/processed.mp4" type="video/mp4">
                         Your browser does not support the video tag.
                     </video>
                 </div>
@@ -98,5 +98,16 @@ All changes must preserve this look and feel.
     <p>No content to display.</p>
 {% endif %}
 
+
+<div class="video-container">
+    <video class="frame-video auto-updater fac-build"
+           data-fac-target="stories/{{ level }}/{{ story }}/video.mp4"
+           controls
+           preload="metadata"
+           onerror="this.style.display='none'">
+        <source src="/api/get_target/stories/{{ level }}/{{ story }}/video.mp4" type="video/mp4">
+        Your browser does not support the video tag.
+    </video>
+</div>
 </div>
 {% endblock %}

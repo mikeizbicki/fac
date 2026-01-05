@@ -1,8 +1,8 @@
 document.addEventListener('DOMContentLoaded', function() {
     const frames = document.querySelectorAll('.frame');
-    const container = document.getElementById('book-container');
+    const container = document.getElementById('story-container');
     const level = container.dataset.level;
-    const book = container.dataset.book;
+    const story = container.dataset.story;
 
     assignFrameColors();
     setTimeout(drawReferenceArrows, 100); // Small delay to ensure layout is complete
@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function loadFrameJson(frame, textarea) {
         const frameId = frame.dataset.frameId;
-        fetch(`/books/${level}/${book}/get_frame_json/${frameId}`)
+        fetch(`/stories/${level}/${story}/get_frame_json/${frameId}`)
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
@@ -33,7 +33,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function deleteFrame(frameId, frameElement) {
-        fetch(`/books/${level}/${book}/delete_frame`, {
+        fetch(`/stories/${level}/${story}/delete_frame`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ frame_id: frameId })
@@ -47,7 +47,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function addNewFrame(afterFrame) {
         const newId = 'frame_' + Date.now();
-        fetch(`/books/${level}/${book}/add_frame`, {
+        fetch(`/stories/${level}/${story}/add_frame`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ frame_id: newId, after_frame: afterFrame.dataset.frameId })
@@ -67,7 +67,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         if (confirm('Merge this frame with the next one?')) {
-            fetch(`/books/${level}/${book}/merge_frames`, {
+            fetch(`/stories/${level}/${story}/merge_frames`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -379,7 +379,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Function to update server with new reference frame
         function updateReferenceFrameOnServer(frameId, newRefFrame) {
-            fetch(`/books/${level}/${book}/update_reference_frame`, {
+            fetch(`/stories/${level}/${story}/update_reference_frame`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -500,7 +500,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const fountainContent = textarea.value;
             const jsonContent = jsonTextarea.value || null;
 
-            fetch(`/books/${level}/${book}/save_frame`, {
+            fetch(`/stories/${level}/${story}/save_frame`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -614,13 +614,13 @@ function drawReferenceArrows() {
     const existingSvg = document.getElementById('arrow-svg');
     if (existingSvg) existingSvg.remove();
 
-    const bookContainer = document.getElementById('book-container');
-    if (!bookContainer) return;
+    const storyContainer = document.getElementById('story-container');
+    if (!storyContainer) return;
 
-    // Create new SVG positioned relative to book container
+    // Create new SVG positioned relative to story container
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.id = 'arrow-svg';
-    bookContainer.appendChild(svg);
+    storyContainer.appendChild(svg);
 
     // Add definitions for drop shadow and arrow markers
     const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
@@ -647,9 +647,9 @@ function drawReferenceArrows() {
     const frames = document.querySelectorAll('.frame');
     const framePositions = new Map();
     const frameColors = new Map();
-    const containerRect = bookContainer.getBoundingClientRect();
+    const containerRect = storyContainer.getBoundingClientRect();
 
-    // Get frame positions and colors relative to book container
+    // Get frame positions and colors relative to story container
     frames.forEach(frame => {
         const frameId = frame.dataset.frameId;
         const frameRect = frame.getBoundingClientRect();
@@ -659,7 +659,7 @@ function drawReferenceArrows() {
         const backgroundColor = frameMargin ?
             window.getComputedStyle(frameMargin).backgroundColor : '#fff740';
 
-        // Calculate position relative to book container
+        // Calculate position relative to story container
         const relativeX = frameRect.left - containerRect.left;
         const relativeY = frameRect.top - containerRect.top;
 

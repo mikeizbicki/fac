@@ -11,22 +11,22 @@
 <h1>FabulaMachina</h1>
 
 <div class="collapsible-section">
-    <h2 class="section-header" data-target="books-section">
-        <span class="triangle">▶</span> Books ({{ books|length }})
+    <h2 class="section-header" data-target="stories-section">
+        <span class="triangle">▶</span> Books ({{ stories|length }})
     </h2>
-    <div id="books-section" class="section-content">
-        {% if books %}
+    <div id="stories-section" class="section-content">
+        {% if stories %}
             <ul class="item-list">
-            {% for book in books %}
+            {% for story in stories %}
                 <li>
-                    <a href="/books/{{ book.level }}/{{ book.book }}">
-                        {{ book.title }}
+                    <a href="/stories/{{ story.level }}/{{ story.story }}">
+                        {{ story.title }}
                     </a>
                 </li>
             {% endfor %}
             </ul>
         {% else %}
-            <p class="empty-message">No books found.</p>
+            <p class="empty-message">No stories found.</p>
         {% endif %}
     </div>
 </div>

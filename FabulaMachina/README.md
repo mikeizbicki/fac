@@ -16,7 +16,7 @@ For example, the targets `characters/$CHARACTER/about.json` and `characters/$CHA
 
 ## About FabulaMachina
 
-The FabulaMachina system contains generic code for displaying any collection in a fac.yaml file and the "book" page that is specific to the file `../fac.yaml` which is a fac project for generating books/movies.
+The FabulaMachina system contains generic code for displaying any collection in a fac.yaml file and the "story" page that is specific to the file `../fac.yaml` which is a fac project for generating stories/movies.
 
 ## Conventions
 
@@ -30,7 +30,7 @@ When creating new files:
 - Functions should have appropriate documentation.
 - Whenever possible, functions should be factored out into non-IO based functions that have extensive doctests and small IO-based functions that call the non-IO functions. This practice ensures that functions can be easily tested.
 
-Code that can be generic to any fac-based system should go in the standard flask-project file locations (e.g. `routes`, `templates`, and `static`). Code that is specific to the `../fac.yaml` project should go in a `pages` subfolder (like `pages/book`).
+Code that can be generic to any fac-based system should go in the standard flask-project file locations (e.g. `routes`, `templates`, and `static`). Code that is specific to the `../fac.yaml` project should go in a `pages` subfolder (like `pages/story`).
 
 ### User Interface
 

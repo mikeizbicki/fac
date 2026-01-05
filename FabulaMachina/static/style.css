@@ -20,27 +20,27 @@ body {
     width: 100%;
 }
 
-/* Add back the original book container styling */
-#book-container {
+/* Add back the original story container styling */
+#story-container {
     max-width: 800px;
     margin: 0 auto;
 }
 
-.book-list {
+.story-list {
     list-style-type: none;
     padding: 0;
 }
-.book-list li {
+.story-list li {
     margin: 10px 0;
     padding: 10px;
     background-color: #f0f0f0;
     border-radius: 3px;
 }
-.book-list a {
+.story-list a {
     text-decoration: none;
     color: #333;
 }
-.book-list a:hover {
+.story-list a:hover {
     color: #666;
 }
 .error {

@@ -16,7 +16,7 @@
  * - Works alongside existing auto-updater system for file change notifications
  * - Uses same overlay system as auto-updater for consistent UI feedback
  * - Elements must have both "fac-build" and "auto-updater" classes to work properly
- * - Build targets are specified via data-fac-target attribute (e.g., "books/level1/book1/frames/frame1/art.png")
+ * - Build targets are specified via data-fac-target attribute (e.g., "stories/level1/story1/frames/frame1/art.png")
  * 
  * EVENT FLOW:
  * 1. User clicks build button → sends POST to /api/fac/build
@@ -190,7 +190,7 @@ class FacBuildSystem {
 
     /**
      * Triggers a build request to the Flask backend
-     * @param {string} target - The fac target to build (e.g., "books/level1/book1/frames/frame1/art.png")
+     * @param {string} target - The fac target to build (e.g., "stories/level1/story1/frames/frame1/art.png")
      * @param {boolean} overwrite - Whether to force rebuild even if file is up to date
      * @param {string|null} notes - Additional notes to include in the build context
      */

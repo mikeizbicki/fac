@@ -1,4 +1,14 @@
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize all sections as expanded
+    document.querySelectorAll('.section-content').forEach(content => {
+        const targetId = content.id;
+        const header = document.querySelector(`[data-target="${targetId}"]`);
+        if (header) {
+            const triangle = header.querySelector('.triangle');
+            triangle.classList.add('expanded'); // Start with triangle rotated
+        }
+    });
+
     // Handle collapsible sections
     document.querySelectorAll('.section-header').forEach(header => {
         header.addEventListener('click', function() {
