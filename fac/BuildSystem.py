@@ -251,7 +251,7 @@ class BuildSystem:
     print_prompt_to_file: str = False
     print_contexts: bool = False
     print_config: bool = False
-    no_validate: bool = False
+    validate_all: bool = False
     include_chat: str = None
     include_old: bool = False
     include_paths: list[str] = None
@@ -269,7 +269,6 @@ class BuildSystem:
             logger.setLevel('DEBUG')
         if self.trace:
             logger.setLevel('TRACE')
-        self.validate_output = not (self.print_prompt or self.print_contexts) and not self.no_validate
 
         # freeze/thaw
         assert not (self.freeze and self.thaw)
@@ -839,10 +838,11 @@ class BuildSystem:
                     # not required for correctness of dependency evaluation;
                     # just warns users of likely bugs due to malformed input
                     ########################################
-                    if dep_paths is not None:
-                        for dep_path in dep_paths:
-                            if not validate_file(dep_path, fix=False):
-                                logger.warning(f'failed to validate dep_path={dep_path}')
+                    if self.validate_all:
+                        if dep_paths is not None:
+                            for dep_path in dep_paths:
+                                if not validate_file(dep_path, fix=False):
+                                    logger.warning(f'failed to validate dep_path={dep_path}')
 
                 context1 = BuildContext(
                     context.variables,
@@ -999,15 +999,15 @@ class BuildSystem:
 
                 # Handle any exceptions that occurred
                 if exceptions:
-                    #if len(exceptions) > 1:
-                    for context_id, exception in exceptions:
-                        if not isinstance(exception, FACError) and not isinstance(exception, LLMError):
-                            logger.error(f"Exception in context {context_id}: {repr(exception)}")
-                            logger.error("Full traceback:", submessage=True)
-                            for line in traceback.format_tb(exception.__traceback__):
-                                for sub_line in line.rstrip().split('\n'):
-                                    if sub_line.strip():
-                                        logger.error(sub_line, submessage=True)
+                    if self.debug:
+                        for context_id, exception in exceptions:
+                            if not isinstance(exception, FACError) and not isinstance(exception, LLMError):
+                                logger.error(f"Exception in context {context_id}: {repr(exception)}")
+                                logger.error("Full traceback:", submessage=True)
+                                for line in traceback.format_tb(exception.__traceback__):
+                                    for sub_line in line.rstrip().split('\n'):
+                                        if sub_line.strip():
+                                            logger.error(sub_line, submessage=True)
                     #raise exceptions[0][1]
                     raise FACError
 
@@ -1027,10 +1027,6 @@ class BuildSystem:
             path_to_generate = process_template(target_to_build, context.variables)
             generated_paths.append(path_to_generate)
             traversed_paths.add(path_to_generate)
-
-            # validate file
-            if self.validate_output:
-                validate_file(path_to_generate, config.get('schema_file'))
 
             # freeze/thaw file
             if root_call:
@@ -1072,10 +1068,10 @@ class BuildSystem:
 
         # ensure no unresolved dependencies
         if context.unresolved_dependencies:
+            logger.error('unresolved dependencies:')
             for dep in context.unresolved_dependencies:
-                message = f'unresolved dependency: dep["target"]="{dep["target"]}", vars={context.variables}'
-                logger.error(message)
-            raise UnresolvedDependencies(message)
+                logger.error(f" - {dep['target']}", submessage=True)
+            raise UnresolvedDependencies(context.unresolved_dependencies)
 
         # NOTE:
         # by default, we will build the given context;
@@ -1083,8 +1079,20 @@ class BuildSystem:
         file_status = []
         updated_deps = []
         build_context = True
+
+        # use build_if to determine if we should build
+        build_if = config.get('build_options', {}).get('build_if', 'True')
+        build_if = process_template(build_if, context.variables)
+        if build_if.lower() == 'false':
+            build_context = False
+            file_status.append('build_if:False')
+
+        # annotate newly generated files
         if not os.path.exists(path_to_generate):
-            file_status = ['new']
+            if build_context:
+                file_status.append('new')
+
+        # The annotations/changes below should only happen for existing files
         else:
 
             # do not rebuild if file is frozen
@@ -1557,6 +1565,9 @@ except for the changes requested by the user.
                 facjson.set('hash_contents', hash_contents)
             facjson.set('hash_prompt', hash_prompt_new)
             facjson.save()
+
+        # validate file
+        validate_file(path_to_generate, config.get('schema_file'))
 
 
 def eval_var(var, expr, context):
