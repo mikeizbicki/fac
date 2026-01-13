@@ -1,3 +1,11 @@
+'''
+This file contains "purely functional" utility functions.
+That means that none of the these functions are allowed to do IO (pure) or modify any of their inputs (functional).
+These constraints make the functions easy to test via doctest.
+Basically all of these functions were written by LLMs,
+and I have high confidence the work correctly because of the doctests.
+'''
+
 from collections import defaultdict, deque
 import glob
 import os

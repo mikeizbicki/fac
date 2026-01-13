@@ -1,4 +1,8 @@
+'''
+This file defines a generic interface for working with LLMs from any provider and any modality.
+'''
 
+# stdlib imports
 from collections import defaultdict, Counter
 from pathlib import Path
 import asyncio
@@ -11,12 +15,17 @@ import sys
 import time
 import uuid
 
+# external imports
 import fal_client
 import ffmpeg
 import openai
 import requests
 
+# project imports
+from fac.Errors import *
 from fac.Logging import logger
+from fac.io_utils import *
+
 
 registered_providers = {
     'anthropic': {
@@ -354,7 +363,7 @@ class LLM():
                 fout.write(image_bytes)
 
         elif provider == 'fal-ai':
-            #base64_urls = [encode_image_to_base64_url(path) for path in data['reference_images']]
+            #base64_urls = [binary_file_to_base64_url(path) for path in data['reference_images']]
             elements = [path for path in data['reference_images']]
             elements_urls = [fal_client.upload_file(element) for element in elements]
 
@@ -466,8 +475,8 @@ class LLM():
                 seconds = int(data.get('duration', 8))
                 arguments = {
                     "prompt": data['prompt'],
-                    "first_frame_url": encode_image_to_base64_url(data['first_frame']),
-                    "last_frame_url": encode_image_to_base64_url(data['last_frame']),
+                    "first_frame_url": binary_file_to_base64_url(data['first_frame']),
+                    "last_frame_url": binary_file_to_base64_url(data['last_frame']),
                     "duration": str(seconds) + 's',
                     "aspect_ratio": data.get('aspect_ratio', '16:9'),
                     'resolution': data.get('resolution', '720p'),
@@ -480,7 +489,7 @@ class LLM():
                 seconds = int(data.get('seconds', 5))
                 arguments = {
                     "prompt": data['prompt'],
-                    "image_url": encode_image_to_base64_url(data['first_frame']),
+                    "image_url": binary_file_to_base64_url(data['first_frame']),
                     "duration": str(seconds),
                 }
             elif model in [
@@ -489,8 +498,8 @@ class LLM():
                 seconds = int(data.get('seconds', 5))
                 arguments = {
                     "prompt": data['prompt'],
-                    "start_image_url": encode_image_to_base64_url(data['first_frame']),
-                    "end_image_url": encode_image_to_base64_url(data['last_frame']),
+                    "start_image_url": binary_file_to_base64_url(data['first_frame']),
+                    "end_image_url": binary_file_to_base64_url(data['last_frame']),
                     "duration": str(seconds),
                 }
             elif model == 'fal-ai/kling-video/o1/reference-to-video':
@@ -591,12 +600,5 @@ def generate_uuid7():
     uuid7 = (timestamp << 64) | random_number
     return uuid7
 
-
-def encode_image_to_base64_url(file_path):
-    with open(file_path, "rb") as image_file:
-        encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
-        mime_type = mimetypes.guess_type(file_path)[0] or 'image/png'
-        return f"data:{mime_type};base64,{encoded_string}"
-
-class LLMError(Exception):
+class LLMError(FACError):
     pass

@@ -28,78 +28,11 @@ import nest_asyncio
 nest_asyncio.apply()
 
 # project imports
+from fac.Errors import *
 from fac.LLM import LLM, LLMError
 from fac.Logging import *
+from fac.io_utils import *
 from fac.utils import *
-
-
-def validate_file(path, schema_file=None, fix=False):
-    _, extension = os.path.splitext(path)
-
-    # ensure the input path exists
-    if not os.path.exists(path):
-        logger.warning(f'path="{path}" does not exist, cannot validate', submessage=True)
-        return False
-
-    # ensure the file is non-empty
-    elif not path.startswith('/dev/') and os.path.getsize(path) == 0:
-        logger.warning(f'os.path.getsize("{path}")=0')
-
-    # validate JSON files
-    elif extension == '.json':
-
-        # ensure that the JSON can be parsed
-        with open(path) as fin:
-            text = fin.read()
-        try:
-            json.loads(text)
-        except json.JSONDecodeError as e:
-            logger.warning(f'JSONDecodeError: path={path} schema_file={schema_file}')
-            if fix:
-                logger.info(f'fixing JSONDecodeError in path={path}')
-                import json_repair
-                with open(path, 'wt') as fout:
-                    obj = json_repair.loads(text, skip_json_loads=True)
-                    json.dump(obj, fout)
-            else:
-                raise e
-
-        # verify that the JSON matches the schema
-        if schema_file:
-            with open(path) as fin:
-                data = json.load(fin)
-            try:
-                with open(schema_file) as fin:
-                    schema = json.load(fin)
-                    jsonschema.validate(instance=data, schema=schema)
-            except jsonschema.exceptions.ValidationError as e:
-                log_message = str(e).split('\n')[0]
-                logger.warning(f'{path}: JSON schema validation error: {log_message}')
-
-        # reformat with pretty indentation
-        if fix:
-            logger.info('fixing JSON indentation')
-            with open(path, 'r') as fin:
-                data = json.load(fin)
-            with open(path, 'w', encoding='utf-8') as fout:
-                json.dump(data, fout, indent=4, ensure_ascii=False)
-
-    # fix markdown files
-    elif fix and extension in ['.md' or '.markdown']:
-        logger.info(f'fixing markdown formatting in path={path}')
-        with open(path, "r+") as fout:
-            markdown_text = fout.read()
-            formatted_text = mdformat.text(markdown_text)
-            fout.seek(0)
-            fout.write(formatted_text)
-            fout.truncate()
-
-    # no errors, return True
-    return True
-
-
-class DirtyRepo(Exception):
-    pass
 
 
 ################################################################################
@@ -1465,11 +1398,10 @@ except for the changes requested by the user.
                 'content': [{ 'type': 'text', 'text': prompt + format_cmd}]
                 }
             for binary_file in binary_files:
-                base64_image = encode_image(binary_file)
                 message['content'].append({
                     "type": "image_url",
                     "image_url": {
-                        "url": f"data:image/jpeg;base64,{base64_image}",
+                        "url": binary_file_to_base64_url(binary_file),
                     }
                 })
             messages.append(message)
@@ -1620,79 +1552,12 @@ def eval_var(var, expr, context):
     return result
 
 
-class FacJSON:
-    """
-    A JSON-backed dictionary-like class that persists data to disk.
-    Used for storing settings for targets.
-
-    >>> # tests need to create a temporary file
-    >>> import tempfile, os
-    >>> with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
-    ...     temp_path = f.name
-    >>>
-    >>> # test getting/setting
-    >>> fac = FacJSON(temp_path)
-    >>> fac.set('name', 'John')
-    >>> fac.get('name')
-    'John'
-    >>> fac.set('age', 30)
-    >>> fac.get('age', 0)
-    30
-    >>> fac.get('missing', 'default')
-    'default'
-    >>>
-    >>> # test persistence
-    >>> fac2 = FacJSON(temp_path)
-    >>> fac2.get('name')
-    'John'
-    >>> fac2.get('age')
-    30
-    >>> # cleanup tests
-    >>> os.unlink(temp_path)
-    """
-    def __init__(self, path):
-        self._path = path
-        self._fac_path = self.convert_path(path)
-        try:
-            with open(self._fac_path) as fin:
-                self._data = json.load(fin)
-        except FileNotFoundError:
-            self._data = {}
-
-    def get(self, key, default=None):
-        return self._data.get(key, default)
-
-    def set(self, key, value):
-        self._data[key] = value
-        self.save()
-
-    def save(self):
-        """Save the current dict contents to disk."""
-        with open(self._fac_path, 'w') as fout:
-            json.dump(self._data, fout)
-
-    @staticmethod
-    def convert_path(path):
-        """
-        Prefix the filename with '.' and suffix with '.facjson'.
-
-        >>> FacJSON.convert_path("/home/user/document.txt")
-        '/home/user/.document.txt.facjson'
-        >>> FacJSON.convert_path("document.txt")
-        '.document.txt.facjson'
-        >>> FacJSON.convert_path("/path/to/file")
-        '/path/to/.file.facjson'
-        """
-        directory = os.path.dirname(path)
-        filename = os.path.basename(path)
-        new_filename = f".{filename}.facjson"
-        return os.path.join(directory, new_filename)
+################################################################################
+# Errors
+################################################################################
 
 
-class FACError(Exception):
-    pass
-
-class CommandExecutionError(Exception):
+class CommandExecutionError(FACError):
     def __init__(self, returncode, stdout):
         errorstrs = [
             f"result.returncode={returncode}",
@@ -1701,7 +1566,7 @@ class CommandExecutionError(Exception):
         super().__init__('\n'.join(errorstrs))
 
 
-class VariableEvaluationError(Exception):
+class VariableEvaluationError(FACError):
     def __init__(self, var, expr, context, result):
         errorstrs = [
             f'error evaluating {var}=$({expr})',
@@ -1713,7 +1578,7 @@ class VariableEvaluationError(Exception):
         super().__init__('\n'.join(errorstrs))
 
 
-class EmptyVariableError(Exception):
+class EmptyVariableError(FACError):
     def __init__(self, var, expr):
         errorstrs = [
             f'{var}=$({expr})',
@@ -1721,19 +1586,16 @@ class EmptyVariableError(Exception):
         super().__init__('\n'.join(errorstrs))
 
 
-class TargetNotFound(ValueError):
+class TargetNotFound(FACError):
     pass
 
 
-class NoTargetsMatched(ValueError):
+class NoTargetsMatched(FACError):
     pass
 
 
-class UnresolvedDependencies(ValueError):
+class UnresolvedDependencies(FACError):
     pass
 
-
-def encode_image(image_path):
-    import base64
-    with open(image_path, "rb") as image_file:
-        return base64.b64encode(image_file.read()).decode('utf-8')
+class DirtyRepo(FACError):
+    pass

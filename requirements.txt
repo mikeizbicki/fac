@@ -9,3 +9,4 @@ files-to-prompt >= 0.6
 requests >= 2.32.3
 nest-asyncio==1.6.0
 ffmpeg-python==0.2.0
+json_repair >= 0.46.2
