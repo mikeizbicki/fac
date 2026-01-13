@@ -791,6 +791,8 @@ class BuildSystem:
                         logger.error('context.variables:', submessage=True)
                         for var in context.variables:
                             logger.error(f' - {var}: "{context.variables[var].replace("\n", "\\n")}"', submessage=True)
+                        logger.error(f'config_targets={config_targets}')
+                        logger.error(f'context.variables={context.variables}')
                         raise FACError()
                     if dep_target1 is None:
                         dep_target1 = dep_target
@@ -999,15 +1001,14 @@ class BuildSystem:
 
                 # Handle any exceptions that occurred
                 if exceptions:
-                    if self.debug:
-                        for context_id, exception in exceptions:
-                            if not isinstance(exception, FACError) and not isinstance(exception, LLMError):
-                                logger.error(f"Exception in context {context_id}: {repr(exception)}")
-                                logger.error("Full traceback:", submessage=True)
-                                for line in traceback.format_tb(exception.__traceback__):
-                                    for sub_line in line.rstrip().split('\n'):
-                                        if sub_line.strip():
-                                            logger.error(sub_line, submessage=True)
+                    for context_id, exception in exceptions:
+                        if not isinstance(exception, FACError) and not isinstance(exception, LLMError):
+                            logger.error(f"Exception in context {context_id}: {repr(exception)}")
+                            logger.error("Full traceback:", submessage=True)
+                            for line in traceback.format_tb(exception.__traceback__):
+                                for sub_line in line.rstrip().split('\n'):
+                                    if sub_line.strip():
+                                        logger.error(sub_line, submessage=True)
                     #raise exceptions[0][1]
                     raise FACError
 
@@ -1071,6 +1072,10 @@ class BuildSystem:
             logger.error('unresolved dependencies:')
             for dep in context.unresolved_dependencies:
                 logger.error(f" - {dep['target']}", submessage=True)
+            logger.error('variables:', submessage=True)
+            for var in sorted(context.variables):
+                logger.error(f' - {var}: {context.variables[var].replace("\n","\\n")}', submessage=True)
+            logger.error(f'context.variables={context.variables}')
             raise UnresolvedDependencies(context.unresolved_dependencies)
 
         # NOTE:
