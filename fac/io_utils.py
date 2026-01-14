@@ -4,14 +4,18 @@ These functions are much more difficult to test properly than the pure functions
 '''
 
 # stdlib imports
-import os
+import base64
 import json
+import mimetypes
+import os
 
 # external lib imports
 import json_repair
+import jsonschema
 
 # project imports
 from fac.Logging import *
+from fac.Errors import *
 
 
 def validate_file(path, schema_file=None, fix=False):

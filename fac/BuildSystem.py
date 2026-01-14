@@ -191,7 +191,6 @@ class BuildSystem:
     options: list[str] = None
     auto_commit: bool = True
     allow_dirty: bool = False
-    print_cmd_stdout: bool = False
     freeze: bool = False
     thaw: bool = False
     no_build: bool = False
@@ -724,8 +723,9 @@ class BuildSystem:
                         logger.error('context.variables:', submessage=True)
                         for var in context.variables:
                             logger.error(f' - {var}: "{context.variables[var].replace("\n", "\\n")}"', submessage=True)
-                        logger.error(f'config_targets={config_targets}')
-                        logger.error(f'context.variables={context.variables}')
+
+                        logger.error('if this is an error in the match_pattern_withvars function, an appropriate test case for debugging is:')
+                        logger.error(f'>>> match_pattern_withvars({list(config_targets)}, "{dep_target}", {context.variables})', submessage=True)
                         raise FACError()
                     if dep_target1 is None:
                         dep_target1 = dep_target
@@ -1132,17 +1132,18 @@ class BuildSystem:
                         'FAC_DEPENDENCIES': '\n'.join(sorted(context.dependency_paths)),
                         }),
                     )
-                if self.print_cmd_stdout:
-                    try:
-                        #for line in iter(process.stdout.readline, ''):
-                            #print(line.rstrip())
-                        while True:
-                            line = await process.stdout.readline()
-                            if not line:
-                                break
-                            print(line.decode().rstrip())
-                    except UnicodeDecodeError:
-                        print('<<INVALID UNICODE>>')
+                try:
+                    first_line = True
+                    while True:
+                        line = await process.stdout.readline()
+                        if not line:
+                            break
+                        if first_line:
+                            logger.warning('build command output:', submessage=True)
+                            first_line = False
+                        logger.warning(line.decode().rstrip(), submessage=True)
+                except UnicodeDecodeError:
+                    logger.warning('cannot decode stdout: UnicodeDecodeError')
                 await process.wait()
 
                 if process.returncode != 0:

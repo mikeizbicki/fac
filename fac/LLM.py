@@ -9,7 +9,6 @@ import asyncio
 import base64
 import datetime
 import json
-import mimetypes
 import os
 import sys
 import time
