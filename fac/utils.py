@@ -577,10 +577,41 @@ def match_pattern_withvars(patterns, input_str, vars_dict=None):
 
         >>> patterns = ['stories/$SERIES/$STORY/shots/$SHOT_ID/shot_type=standard/raw.mp4']
         >>> match_pattern_withvars(patterns, 'stories/$SERIES/$STORY/shots/$SHOT_ID/shot_type=$SHOT_TYPE/raw.mp4', {'SERIES': 'levelC', 'STORY': 'save_from_lukos', 'SHOT_ID': 'fade_in_establish_tree', 'SHOT_TYPE': 'standard'})
-        ('stories/$SERIES/$STORY/shots/$SHOT_ID/shot_type=standard/raw.mp4', {'SERIES': 'levelC', 'STORY': 'save_from_lukos', 'SHOT_ID': 'fade_in_establish_tree', 'SHOT_TYPE': 'standard'})
+        ('stories/$SERIES/$STORY/shots/$SHOT_ID/shot_type=standard/raw.mp4', {'SHOT_TYPE': 'standard', 'SERIES': 'levelC', 'STORY': 'save_from_lukos', 'SHOT_ID': 'fade_in_establish_tree'})
 
         >>> match_pattern(patterns, 'stories/$SERIES/$STORY/shots/$SHOT_ID/shot_type=$SHOT_TYPE/raw.mp4')
         ('stories/$SERIES/$STORY/shots/$SHOT_ID/shot_type=standard/raw.mp4', {'SHOT_TYPE': 'standard'})
+
+        >>> match_pattern_withvars(['builds/$PLATFORM/debug/output.bin', 'builds/$PLATFORM/release/output.bin'], 'builds/$PLATFORM/$BUILD_TYPE/output.bin', {'PLATFORM': 'linux', 'BUILD_TYPE': 'release'})
+        ('builds/$PLATFORM/release/output.bin', {'BUILD_TYPE': 'release', 'PLATFORM': 'linux'})
+
+        >>> match_pattern_withvars(['builds/$PLATFORM/debug/output.bin', 'builds/$PLATFORM/release/output.bin'], 'builds/$PLATFORM/$BUILD_TYPE/output.bin', {'PLATFORM': 'linux', 'BUILD_TYPE': 'debug'})
+        ('builds/$PLATFORM/debug/output.bin', {'BUILD_TYPE': 'debug', 'PLATFORM': 'linux'})
+
+    Multiple variables needing disambiguation:
+
+        >>> match_pattern_withvars(['api/v1/$RESOURCE/get.py', 'api/v2/$RESOURCE/get.py', 'api/v1/$RESOURCE/post.py', 'api/v2/$RESOURCE/post.py'], 'api/$VERSION/$RESOURCE/$METHOD.py', {'VERSION': 'v2', 'RESOURCE': 'users', 'METHOD': 'post'})
+        ('api/v2/$RESOURCE/post.py', {'VERSION': 'v2', 'METHOD': 'post', 'RESOURCE': 'users'})
+
+    Variable renaming without disambiguation needed:
+
+        >>> match_pattern_withvars(['data/$YEAR/$MONTH/report.csv'], 'data/$Y/$M/report.csv', {'Y': '2024', 'M': '03'})
+        ('data/$YEAR/$MONTH/report.csv', {'YEAR': '2024', 'MONTH': '03'})
+
+    Mixed literal and variable segments:
+
+        >>> match_pattern_withvars(['logs/app-$INSTANCE/error.log', 'logs/app-$INSTANCE/access.log'], 'logs/app-$INSTANCE/$LOG_TYPE.log', {'INSTANCE': 'web01', 'LOG_TYPE': 'error'})
+        ('logs/app-$INSTANCE/error.log', {'LOG_TYPE': 'error', 'INSTANCE': 'web01'})
+
+    No match when vars_dict value doesn't match any pattern:
+
+        >>> match_pattern_withvars(['mode=fast/run.sh', 'mode=slow/run.sh'], 'mode=$MODE/run.sh', {'MODE': 'turbo'})
+        (None, {'MODE': 'turbo'})
+
+    Preserving unrelated variables in vars_dict:
+
+        >>> match_pattern_withvars(['$PROJECT/src/$FILE.py'], '$PROJ/src/$F.py', {'PROJ': 'myapp', 'F': 'main', 'UNRELATED': 'keep_me', 'ANOTHER': '123'})
+        ('$PROJECT/src/$FILE.py', {'PROJECT': 'myapp', 'FILE': 'main', 'UNRELATED': 'keep_me', 'ANOTHER': '123'})
 
     Realworld tests:
 
@@ -589,30 +620,116 @@ def match_pattern_withvars(patterns, input_str, vars_dict=None):
         ('characters/$CHARACTER/voice.json', {'CHARACTER': 'Panda', 'SERIES': 'levelC', 'STORY': 'save_from_lukos', 'SHOT_ID': 'panda_tosses_ball', 'DIALOG_INDEX': '0000'})
 
         >>> match_pattern_withvars(['stories/$SERIES/$STORY/shots/$SHOT_ID/shot_type=standard/raw.mp4', 'stories/$SERIES/$STORY/shots/$SHOT_ID/shot_type=target_frame/raw.mp4'], "stories/$SERIES/$STORY/shots/$SHOT_ID/shot_type=$SHOT_TYPE/raw.mp4", {'SHOT_ID': 'fade_in_establish_tree', 'SERIES': 'levelC', 'STORY': 'save_from_lukos', 'SHOT_TYPE': 'standard'})
-        ('stories/$SERIES/$STORY/shots/$SHOT_ID/shot_type=standard/raw.mp4', {'SERIES': 'levelC', 'STORY': 'save_from_lukos', 'SHOT_ID': 'fade_in_establish_tree', 'SHOT_TYPE': 'standard'})
+        ('stories/$SERIES/$STORY/shots/$SHOT_ID/shot_type=standard/raw.mp4', {'SHOT_TYPE': 'standard', 'SHOT_ID': 'fade_in_establish_tree', 'SERIES': 'levelC', 'STORY': 'save_from_lukos'})
 
         >>> match_pattern_withvars(['common/about.md', 'common/art.md', 'common/writing.md', 'characters/$CHARACTER/about.json', 'characters/$CHARACTER/voice.json', 'characters/$CHARACTER/character_sheet.png', 'locations/$LOCATION/about.json', 'locations/$LOCATION/reference.png', 'stories/$SERIES/themes.md', 'stories/$SERIES/$STORY/characters', 'stories/$SERIES/$STORY/locations', 'stories/$SERIES/$STORY/script.fountain', 'stories/$SERIES/$STORY/shooting-script.xml', 'stories/$SERIES/$STORY/shots/$SHOT_ID/shot-details.json', 'stories/$SERIES/$STORY/shots/$SHOT_ID/dialog/$DIALOG_INDEX/voice_instructions.txt', 'stories/$SERIES/$STORY/shots/$SHOT_ID/dialog/$DIALOG_INDEX/audio.wav', 'stories/$SERIES/$STORY/shots/$SHOT_ID/dialog.wav', 'stories/$SERIES/$STORY/shots/$SHOT_ID/shot_type', 'stories/$SERIES/$STORY/shots/$SHOT_ID/length_seconds', 'stories/$SERIES/$STORY/shots/$SHOT_ID/shot_type=standard/startframe.png', 'stories/$SERIES/$STORY/shots/$SHOT_ID/shot_type=standard/startframe_llm.png', 'stories/$SERIES/$STORY/shots/$SHOT_ID/shot_type=standard/animation_instructions.txt', 'stories/$SERIES/$STORY/shots/$SHOT_ID/shot_type=standard/raw.mp4', 'stories/$SERIES/$STORY/shots/$SHOT_ID/shot_type=target_frame/target_frame.png', 'stories/$SERIES/$STORY/shots/$SHOT_ID/shot_type=target_frame/raw.mp4', 'stories/$SERIES/$STORY/shots/$SHOT_ID/raw.mp4', 'stories/$SERIES/$STORY/shots/$SHOT_ID/processed.mp4', 'stories/$SERIES/$STORY/shots/$SHOT_ID/last_frame.png', 'stories/$SERIES/$STORY/shots/$SHOT_ID/debug.mp4', 'stories/$SERIES/$STORY/frames/$FRAME_ID/animation_instructions.json', 'stories/$SERIES/$STORY/frames/$FRAME_ID/last_frame.png', 'stories/$SERIES/$STORY/frames/$FRAME_ID/character_transition.png', 'stories/$SERIES/$STORY/frames/$FRAME_ID/warmstart.png', 'stories/$SERIES/$STORY/frames/$FRAME_ID/animation_instructions.txt', 'stories/$SERIES/$STORY/frames/$FRAME_ID/video.mp4', 'stories/$SERIES/$STORY/frames/$FRAME_ID/video_old.mp4', 'stories/$SERIES/$STORY/frames/$FRAME_ID/processed.mp4', 'stories/$SERIES/$STORY/video.mp4', 'videos/$SERIES-$STORY.mp4'], "stories/$SERIES/$STORY/shots/$PREV_SHOTS/processed.mp4", {'SERIES': 'levelC', 'STORY': 'save_from_lukos', 'SHOT_ID': 'panda_tosses_ball', 'PREV_SHOTS': 'fade_in_establish_tree\npanda_tosses_ball'})
         ('stories/$SERIES/$STORY/shots/$SHOT_ID/processed.mp4', {'SHOT_ID': 'fade_in_establish_tree\npanda_tosses_ball', 'SERIES': 'levelC', 'STORY': 'save_from_lukos'})
     '''
+    if vars_dict is None:
+        vars_dict = {}
+    
+    # Get all matches using match_pattern_starstar
+    matches = match_pattern_starstar(patterns, input_str)
+    
+    if len(matches) == 0:
+        return (None, vars_dict)
+    
+    # If only one match, use it directly
+    if len(matches) == 1:
+        target1, target1_vars = matches[0]
+    else:
+        # Disambiguate using vars_dict values
+        # For each match, check if extracted variables are consistent with vars_dict
+        valid_matches = []
+        for pattern, extracted_vars in matches:
+            is_valid = True
+            for var, val in extracted_vars.items():
+                if val.startswith('$'):
+                    # This is a reference to another variable
+                    ref_var = val[1:]
+                    if ref_var in vars_dict:
+                        # Check if the referenced value matches what we'd expect
+                        pass  # This is fine, we'll resolve it later
+                else:
+                    # Check if this extracted value matches vars_dict
+                    # Find which input variable maps to this pattern variable
+                    for input_var, input_val in vars_dict.items():
+                        if f'${input_var}' in extracted_vars.get(var, '') or extracted_vars.get(var) == f'${input_var}':
+                            continue
+                        # If the extracted var came from an input variable, check consistency
+                        if var in extracted_vars and extracted_vars[var] == val:
+                            # Find the corresponding input variable
+                            for iv, iv_val in vars_dict.items():
+                                if iv_val == val:
+                                    break
+            valid_matches.append((pattern, extracted_vars))
+        
+        # Now filter by checking if extracted literal values match vars_dict
+        filtered_matches = []
+        for pattern, extracted_vars in valid_matches:
+            match_ok = True
+            for var, val in extracted_vars.items():
+                if not val.startswith('$'):
+                    # This is a literal extracted from the pattern
+                    # Find which vars_dict variable should have this value
+                    for input_var, input_val in vars_dict.items():
+                        # Check if input_var was used in input_str at this position
+                        if f'${input_var}' in input_str:
+                            # If vars_dict has a value for this and it doesn't match, skip
+                            if input_val != val and var == input_var:
+                                match_ok = False
+                                break
+                            # Also check if this var maps to input_var
+                            if extracted_vars.get(var) == val:
+                                # The var was extracted; check if corresponding input var matches
+                                pass
+                if not match_ok:
+                    break
+            if match_ok:
+                filtered_matches.append((pattern, extracted_vars))
+        
+        # More precise filtering: check if literal values match vars_dict values
+        final_matches = []
+        for pattern, extracted_vars in filtered_matches:
+            is_match = True
+            for var, val in extracted_vars.items():
+                if not val.startswith('$'):
+                    # val is a literal from the pattern; check if it matches vars_dict[var] if var exists
+                    if var in vars_dict and vars_dict[var] != val:
+                        is_match = False
+                        break
+            if is_match:
+                final_matches.append((pattern, extracted_vars))
+        
+        if len(final_matches) == 1:
+            target1, target1_vars = final_matches[0]
+        elif len(final_matches) == 0:
+            return (None, vars_dict)
+        else:
+            # Still ambiguous - use first match or raise error
+            target1, target1_vars = final_matches[0]
+    
+    # Build the result vars_dict
     vars_dict1 = {}
-    target1, target1_vars =  match_pattern(patterns, input_str)
     badvars = []
     for var, val in target1_vars.items():
-        if val[0] == '$':
-            if val[1:] in vars_dict:
-                vars_dict1[var] = vars_dict[val[1:]]
-                badvars.append(val[1:])
+        if val.startswith('$'):
+            ref_var = val[1:]
+            if ref_var in vars_dict:
+                vars_dict1[var] = vars_dict[ref_var]
+                badvars.append(ref_var)
             else:
-                raise ValueError
+                raise ValueError(f"Referenced variable {ref_var} not found in vars_dict")
         elif var in vars_dict:
             vars_dict1[var] = vars_dict[var]
         else:
             vars_dict1[var] = val
+    
     for var in vars_dict:
         if var not in vars_dict1 and var not in badvars:
             vars_dict1[var] = vars_dict[var]
+    
     return (target1, vars_dict1)
-
 
 def match_pattern(patterns, input_string):
     """
@@ -715,11 +832,17 @@ def match_pattern(patterns, input_string):
         >>> match_pattern(patterns, "$SERIES/b/chapter$CHAPTER/chapter.json")
         ('$SERIES/$STORY/chapter$CHAPTER/chapter.json', {'STORY': 'b'})
 
-    Reverse pattern matching:
+    Reverse pattern matching is more limited than the match_pattern_withvars function. Because we are not passing in an input dictionary, we cannot use the values of the dictionary to disambiguate matches.
 
         >>> patterns = ['stories/$SERIES/$STORY/shots/$SHOT_ID/shot_type=standard/raw.mp4'] 
         >>> match_pattern(patterns, 'stories/$SERIES/$STORY/shots/$SHOT_ID/shot_type=$SHOT_TYPE/raw.mp4')
         ('stories/$SERIES/$STORY/shots/$SHOT_ID/shot_type=standard/raw.mp4', {'SHOT_TYPE': 'standard'})
+
+        >>> match_pattern(['stories/$SERIES/$STORY/shots/$SHOT_ID/shot_type=standard/raw.mp4', 'stories/$SERIES/$STORY/shots/$SHOT_ID/shot_type=target_frame/raw.mp4'], "stories/$SERIES/$STORY/shots/$SHOT_ID/shot_type=$SHOT_TYPE/raw.mp4")
+        Traceback (most recent call last):
+        ...
+        ValueError: Ambiguous pattern match for 'stories/$SERIES/$STORY/shots/$SHOT_ID/shot_type=$SHOT_TYPE/raw.mp4'
+
     """
 
     if '**' in input_string:
@@ -960,6 +1083,39 @@ def _segment_can_match(pattern_seg, input_seg):
 def _match_single_segment(pattern_seg, input_seg):
     """Match a single pattern segment against input segment."""
     import re
+    
+    # Handle variables in input segment (reverse matching)
+    if '$' in input_seg and '$' not in pattern_seg:
+        # Build regex from input_seg to match against pattern_seg
+        regex = '^'
+        pos = 0
+        var_names = []
+        
+        while pos < len(input_seg):
+            if input_seg[pos] == '$':
+                var_start = pos + 1
+                var_end = var_start
+                while var_end < len(input_seg) and (input_seg[var_end].isalnum() or input_seg[var_end] == '_'):
+                    var_end += 1
+                var_name = input_seg[var_start:var_end]
+                var_names.append(var_name)
+                regex += '(.+)'
+                pos = var_end
+            else:
+                if input_seg[pos] in '.^$*+?{}[]\\|()':
+                    regex += '\\'
+                regex += input_seg[pos]
+                pos += 1
+        regex += '$'
+        
+        match = re.match(regex, pattern_seg)
+        if not match:
+            return None
+        
+        variables = {}
+        for j, var_name in enumerate(var_names):
+            variables[var_name] = match.group(j + 1)
+        return variables
     
     if '$' not in pattern_seg:
         return {} if pattern_seg == input_seg else None
