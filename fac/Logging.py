@@ -5,6 +5,11 @@ import contextlib
 import contextvars
 import logging
 
+# external lib imports
+import json_repair
+import jsonschema
+import yaml
+
 
 class RecursiveLogger(logging.Logger):
     """
@@ -74,7 +79,25 @@ class RecursiveLogger(logging.Logger):
             # Reset the context variable
             self._log_buffer.reset(token)
 
-    def _log(self, level, msg, args, submessage=False, **kwargs):
+    def _log(self, level, msg, args, submessage=False, max_line_length=None, **kwargs):
+
+        # Auto-format non-string objects as YAML
+        if not isinstance(msg, str):
+            yaml_str = yaml.dump(msg, default_flow_style=False, allow_unicode=True, indent=2, width=float('inf')).rstrip('\n')
+            lines = yaml_str.split('\n')
+            for i, line in enumerate(lines):
+                # Truncate long lines
+                if max_line_length and len(line) > max_line_length:
+                    line = line[:max_line_length] + '...'
+                # First line uses passed submessage, rest are always submessages
+                self._log(level, line, args, submessage=(submessage if i == 0 else submessage), **kwargs)
+            return
+
+        # Truncate long string messages too
+        if max_line_length and len(msg) > max_line_length:
+            msg = msg[:max_line_length] + '...'
+
+        # add the depth level annotaions
         extra = kwargs.get('extra', {})
         if self.indent_level > 0:
             if submessage:

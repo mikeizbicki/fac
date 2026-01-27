@@ -78,6 +78,12 @@ registered_models = {
     'fal-ai/veo3.1/fast/first-last-frame-to-video': {'video/out': 0.10},
     'fal-ai/kling-video/v2.5-turbo/standard/image-to-video': {'video/out': 0.042},
     'fal-ai/kling-video/o1/image-to-video': {'video/out': 0.112},
+    'fal-ai/veed/fabric-1.0':               {'video/out': 0.08},
+    'fal-ai/bytedance/omnihuman/v1.5':      {'video/out': 0.16},
+    'fal-ai/creatify/aurora':               {'video/out': 0.14},
+    'fal-ai/kling-video/v1/standard/ai-avatar': {'video/out': 0.0562},
+    'fal-ai/kling-video/v1/pro/ai-avatar':  {'video/out': 0.115},
+    'fal-ai/pixverse/sound-effects':        {'video/out': 0.02},
 
     # fal-ai prices
     'fal-ai/nano-banana':                   {'image/out': 0.04},
@@ -99,7 +105,9 @@ class ModelUsageSummary():
         if str(result).startswith('Video'): # openAI
             tokens['video/out'] = float(result.seconds) * 1000000
             # we multiply by a million here because we divide by 1000000 later
-        elif model.startswith('fal-ai') and 'video' in model: # FAL-AI
+        elif (model.startswith('fal-ai') or model.startswith('veed')) and ('video' in model or 'omnihuman' in model or 'aurora' in model or 'v1' in 'model' or 'sound-effects' in 'model'): # FAL-AI
+            # NOTE:
+            # for some reason, the veed models don't prepend fal-ai
             tokens['video/out'] = float(result['seconds']) * 1000000
 
         # FAL-AI API image calls
@@ -314,8 +322,8 @@ class LLM():
         return content, local_usage
 
 
-    #def image(self, path, mode, data, *, model=None, seed=None):
-        #return asyncio.run(self.image_async(path, mode, data, model=model, seed=seed))
+    def image(self, path, mode, data, *, seed=None):
+        return asyncio.run(self.image_async(path, mode, data, seed=seed))
 
     async def image_async(self, path, mode, data, *, seed=None):
         logger.trace(f'llm.image; data.keys()={list(data.keys())}')
@@ -382,7 +390,7 @@ class LLM():
                 result = await handler.get()
             except fal_client.client.FalClientHTTPError as e:
                 try:
-                    logger.error(f"FalClientHTTPError: {e.message[0]['type']}: {e.message[0]['loc']}")
+                    logger.error(f"FalClientHTTPError: {e.message[0]['type']}: {e.message[0]['loc']}", submessage=True)
                     logger.error(e.message[0]['msg'], submessage=True)
                 except TypeError:
                     # Sometimes e.message is a string instead of a dict.
@@ -474,8 +482,8 @@ class LLM():
                 seconds = int(data.get('duration', 8))
                 arguments = {
                     "prompt": data['prompt'],
-                    "first_frame_url": binary_file_to_base64_url(data['first_frame']),
-                    "last_frame_url": binary_file_to_base64_url(data['last_frame']),
+                    "first_frame_url": fal_client.upload_file(data['first_frame']),
+                    "last_frame_url": fal_client.upload_file(data['last_frame']),
                     "duration": str(seconds) + 's',
                     "aspect_ratio": data.get('aspect_ratio', '16:9'),
                     'resolution': data.get('resolution', '720p'),
@@ -485,10 +493,10 @@ class LLM():
                     'fal-ai/kling-video/v2.5-turbo/pro/image-to-video',
                     'fal-ai/kling-video/v2.5-turbo/standard/image-to-video',
                     ]:
-                seconds = int(data.get('seconds', 5))
+                seconds = int(data.get('duration', 5))
                 arguments = {
                     "prompt": data['prompt'],
-                    "image_url": binary_file_to_base64_url(data['first_frame']),
+                    "image_url": fal_client.upload_file(data['first_frame']),
                     "duration": str(seconds),
                 }
             elif model in [
@@ -497,8 +505,8 @@ class LLM():
                 seconds = int(data.get('seconds', 5))
                 arguments = {
                     "prompt": data['prompt'],
-                    "start_image_url": binary_file_to_base64_url(data['first_frame']),
-                    "end_image_url": binary_file_to_base64_url(data['last_frame']),
+                    "start_image_url": fal_client.upload_file(data['first_frame']),
+                    "end_image_url": fal_client.upload_file(data['last_frame']),
                     "duration": str(seconds),
                 }
             elif model == 'fal-ai/kling-video/o1/reference-to-video':
@@ -513,19 +521,78 @@ class LLM():
                     "image_urls": [start_frame_url],
                     "elements": [{"frontal_image_url": url, "reference_image_urls": [url]} for url in elements_urls],
                 }
+            elif model in [
+                    'fal-ai/veed/fabric-1.0',
+                    'fal-ai/creatify/aurora',
+                    ]:
+                if model == 'fal-ai/veed/fabric-1.0':
+                    model = 'veed/fabric-1.0'
+                start_frame_url = fal_client.upload_file(data['first_frame'])
+                audio_url = fal_client.upload_file(data['audio'])
+                arguments = {
+                    'image_url': start_frame_url,
+                    'audio_url': audio_url,
+                    'resolution': data.get('resolution', '480p'),
+                    'prompt': data.get('prompt', ''),
+                }
+            elif model == 'fal-ai/bytedance/omnihuman/v1.5':
+                start_frame_url = fal_client.upload_file(data['first_frame'])
+                audio_url = fal_client.upload_file(data['audio'])
+                arguments = {
+                    'image_url': start_frame_url,
+                    'audio_url': audio_url,
+                    'resolution': data.get('resolution', '1080p'),
+                    'prompt': data.get('prompt', ''),
+                }
+            elif model in [
+                    'fal-ai/kling-video/v1/standard/ai-avatar',
+                    'fal-ai/kling-video/v1/pro/ai-avatar',
+                    ]:
+                start_frame_url = fal_client.upload_file(data['first_frame'])
+                audio_url = fal_client.upload_file(data['audio'])
+                arguments = {
+                    'image_url': start_frame_url,
+                    'audio_url': audio_url,
+                    'prompt': data.get('prompt', ''),
+                }
+            elif model in [
+                    'fal-ai/pixverse/sound-effects',
+                    ]:
+                arguments = {
+                    'video_url': fal_client.upload_file(data['video']),
+                    'prompt': data.get('prompt', ''),
+                }
             else:
                 raise ValueError(f'model="{model}" not supported')
 
             # call the api and await result
             try:
+                logger.debug({
+                    'fal_client.submit_async() parameters': {
+                        'model': model,
+                        'arguments': arguments,
+                        }
+                    },
+                    submessage=True,
+                    max_line_length=70,
+                    )
                 handler = await fal_client.submit_async(model, arguments)
                 async for event in handler.iter_events(with_logs=True):
                     pass
                 result = await handler.get()
             except fal_client.client.FalClientHTTPError as e:
                 try:
-                    logger.error(f"FalClientHTTPError: {e.message[0]['type']}: {e.message[0]['loc']}")
+                    logger.error(f"FalClientHTTPError: {e.message[0]['type']}: {e.message[0]['loc']}", submessage=True)
                     logger.error(e.message[0]['msg'], submessage=True)
+                    logger.error({
+                        'fal_client.submit_async() parameters': {
+                            'model': model,
+                            'arguments': arguments,
+                            }
+                        },
+                        submessage=True,
+                        #max_line_length=70,
+                        )
                 except TypeError:
                     # Sometimes e.message is a string instead of a dict.
                     # I don't know why, and I don't see this behavior documented.

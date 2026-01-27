@@ -889,8 +889,8 @@ class BuildSystem:
         # if there are no contexts to build,
         # let the user know
         if len(contexts) == 0:
-            logger.error('This target resolves to nothing.')
-            logger.error('Perhaps you need to wrap the target in \'single\' quotes?', submessage=True)
+            logger.warning('This target resolves to nothing.')
+            logger.warning('Perhaps you need to wrap the target in \'single\' quotes?', submessage=True)
 
         # if we are only allowed to run once,
         # then we truncate the contexts to force us to run only once

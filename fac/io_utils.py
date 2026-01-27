@@ -8,6 +8,7 @@ import base64
 import json
 import mimetypes
 import os
+import sys
 
 # external lib imports
 import json_repair
