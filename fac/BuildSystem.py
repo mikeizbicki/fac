@@ -28,6 +28,7 @@ import nest_asyncio
 nest_asyncio.apply()
 
 # project imports
+from fac.Config import *
 from fac.Errors import *
 from fac.LLM import LLM, LLMError
 from fac.Logging import *
@@ -38,66 +39,6 @@ from fac.utils import *
 ################################################################################
 # main functions
 ################################################################################
-
-
-def load_config(path):
-    '''
-    Loads a config.yaml file and generates a dictionary of targets.
-    Basic postprocessing is done to ensure that all targets are in a standard form with,
-    and any non-specified values are assigned defaults.
-    '''
-    with open(path) as fin:
-        raw = yaml.safe_load(fin)
-    return config_to_targets(raw)
-
-def config_to_targets(config):
-    '''
-    '''
-
-    confif = copy.deepcopy(config)
-    for target in config:
-
-        # remove excess whitespace from fields;
-        # this is mostly useful for debugging and getting nice looking configs
-        for option in config[target]:
-            if type(config[target][option]) == str:
-                config[target][option] = config[target][option].strip()
-            elif type(config[target][option]) == dict:
-                for suboption in config[target][option]:
-                    if type(config[target][option][suboption]) == str:
-                        config[target][option][suboption] = config[target][option][suboption].strip()
-
-        # the dependencies field can be specified as a string, list of strings, or list of dictionaries;
-        # we convert all forms into the list of dictionary form here
-        dependencies1 = []
-        dependencies = config[target].get('dependencies', '')
-        if type(dependencies) is str:
-            dependencies = dependencies.split()
-        elif dependencies is None:
-            dependencies = []
-        for dep in dependencies:
-            if type(dep) == str:
-                dep = {'target': dep}
-            assert type(dep) == dict
-            dependencies1.append(dep)
-            for k in dep:
-                if k not in ['target', 'include', 'allow_create', 'is_prompt']:
-                    logger.warning(f'in target "{target}", in dependency "{dep["target"]}", unknown option "{k}"')
-        config[target]['dependencies'] = dependencies1
-
-        # ensure that all fields have reasonable default values
-        config[target].setdefault('description', None)
-        config[target].setdefault('cmd', None)
-        config[target].setdefault('dependencies', {})
-        config[target].setdefault('variables', {})
-        config[target].setdefault('options', {})
-        config[target].setdefault('build_options', {})
-
-    # reorder the variable definitions
-    for target in config:
-        config[target]['variables'] = reorder_variable_dictionary(config[target]['variables'])
-
-    return config
 
 
 @dataclass
@@ -150,11 +91,11 @@ class BuildSystem:
         }
 
         # load config file
-        self.full_config = load_config(self.config_file)
+        self.targets_dict = load_config(self.config_file)
 
         # print the config
         if self.print_config:
-            yaml_str = yaml.dump(self.full_config, default_flow_style=False)
+            yaml_str = yaml.dump(self.targets_dict, default_flow_style=False)
             yaml_str = re.sub(r'\n([a-zA-Z])', r'\n\n\1', yaml_str)
             print(yaml_str)
             sys.exit(0)
@@ -264,7 +205,7 @@ class BuildSystem:
     ########################################
 
     def build_targets(self, targets):
-        config_targets = self.full_config.keys()
+        config_targets = self.targets_dict.keys()
         expanded_targets = [(target, match_pattern_starstar(config_targets, target)) for target in targets]
 
         flattened_targets = []
@@ -332,14 +273,14 @@ class BuildSystem:
             #assert len(input_env[var]) > 0, f'input_env["{var}"]="{input_env[var]}"'
 
         # load target config
-        config_targets = self.full_config.keys()
+        config_targets = self.targets_dict.keys()
         transformed_target, target_env = match_pattern(config_targets, target_to_build)
         if not transformed_target:
             raise TargetNotFound(f"target='{target_to_build}', transformed_target='{transformed_target}'; target_env={target_env}")
         target_variables = extract_variables(transformed_target)
         assert transformed_target
-        assert transformed_target in self.full_config
-        config = self.full_config[transformed_target]
+        assert transformed_target in self.targets_dict
+        config = self.targets_dict[transformed_target]
 
         # parse the dependencies entry in the yaml into unresolved_dependencies list;
         # each entry in the list is a dictionary with a target and flags key

@@ -48,8 +48,9 @@ jobs:
           ./run_test.sh
       - name: fac_test5_variable_inheritance
         run: |
-          cd tests/fac_test5_variable_inheritance
-          ./run_test.sh
+          # removed this feature
+          #cd tests/fac_test5_variable_inheritance
+          #./run_test.sh
       - name: fac_test6_recursive_dependencies
         run: |
           cd tests/fac_test6_recursive_dependencies
