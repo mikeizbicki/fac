@@ -42,30 +42,35 @@ from fac.utils import *
 
 def load_config(path):
     '''
-    Loads a config.yaml file and generates a dictionary of its contents.
-    This function handles needed post-processing that gets the configs into a standard format without any missing fields.
+    Loads a config.yaml file and generates a dictionary of targets.
+    Basic postprocessing is done to ensure that all targets are in a standard form with,
+    and any non-specified values are assigned defaults.
     '''
     with open(path) as fin:
-        full_config = yaml.safe_load(fin)
+        raw = yaml.safe_load(fin)
+    return config_to_targets(raw)
 
-    # several of the keys in the config file allow an abbreviated syntax;
-    # first, we need to convert any abbreviated syntax into the full syntax
-    for target in full_config:
+def config_to_targets(config):
+    '''
+    '''
+
+    confif = copy.deepcopy(config)
+    for target in config:
 
         # remove excess whitespace from fields;
         # this is mostly useful for debugging and getting nice looking configs
-        for option in full_config[target]:
-            if type(full_config[target][option]) == str:
-                full_config[target][option] = full_config[target][option].strip()
-            elif type(full_config[target][option]) == dict:
-                for suboption in full_config[target][option]:
-                    if type(full_config[target][option][suboption]) == str:
-                        full_config[target][option][suboption] = full_config[target][option][suboption].strip()
+        for option in config[target]:
+            if type(config[target][option]) == str:
+                config[target][option] = config[target][option].strip()
+            elif type(config[target][option]) == dict:
+                for suboption in config[target][option]:
+                    if type(config[target][option][suboption]) == str:
+                        config[target][option][suboption] = config[target][option][suboption].strip()
 
         # the dependencies field can be specified as a string, list of strings, or list of dictionaries;
         # we convert all forms into the list of dictionary form here
         dependencies1 = []
-        dependencies = full_config[target].get('dependencies', '')
+        dependencies = config[target].get('dependencies', '')
         if type(dependencies) is str:
             dependencies = dependencies.split()
         elif dependencies is None:
@@ -78,91 +83,21 @@ def load_config(path):
             for k in dep:
                 if k not in ['target', 'include', 'allow_create', 'is_prompt']:
                     logger.warning(f'in target "{target}", in dependency "{dep["target"]}", unknown option "{k}"')
-        full_config[target]['dependencies'] = dependencies1
+        config[target]['dependencies'] = dependencies1
 
-        # ensure that optional fields are present with a default value
-        full_config[target].setdefault('variables', {})
-        full_config[target]['variables_raw'] = copy.deepcopy(full_config[target]['variables'])
-
-    # construct a full variables list for each target
-    dependents = defaultdict(lambda: [])
-    for target in full_config:
-        for dep in full_config[target]['dependencies']:
-            dependents[dep['target']].append(target)
-    targets_to_process = set(full_config.keys())
-    while len(targets_to_process) > 0:
-        processed_targets = 0
-        for target in list(targets_to_process):
-            target_variables = extract_variables(target)
-            all_defined = True
-            for var in target_variables:
-                if var not in full_config[target]['variables']:
-                    all_defined = False
-            if all_defined:
-                targets_to_process.remove(target)
-                processed_targets += 1
-                inconsistent_variables = False
-                for dependent in dependents[target]:
-                    dependent_variables = extract_variables(dependent)
-                    for var in target_variables:
-                        if var in dependent_variables:
-                            if var in full_config[dependent]['variables']:
-                                if not full_config[dependent]['variables'][var] == full_config[target]['variables'][var]:
-                                    logger.error('Inconsistent variables in dependent and target')
-                                    logger.error(f" - (dependent) {dependent}", submessage=True)
-                                    logger.error(f"   {var}: {full_config[dependent]['variables'][var]}", submessage=True)
-                                    logger.error(f" - (target) {target}", submessage=True)
-                                    logger.error(f"   {var}: {full_config[target]['variables'][var]}", submessage=True)
-                                    inconsistent_variables = True
-                                #assert full_config[dependent]['variables'][var] == full_config[target]['variables'][var]
-                            else:
-                                full_config[dependent]['variables'][var] = full_config[target]['variables'][var]
-                if inconsistent_variables:
-                    # FIXME: this is only temporary!!!
-                    #raise FACError
-                    pass
-
-        if processed_targets == 0:
-            break
+        # ensure that all fields have reasonable default values
+        config[target].setdefault('description', None)
+        config[target].setdefault('cmd', None)
+        config[target].setdefault('dependencies', {})
+        config[target].setdefault('variables', {})
+        config[target].setdefault('options', {})
+        config[target].setdefault('build_options', {})
 
     # reorder the variable definitions
-    for target in full_config:
-        full_config[target]['variables'] = reorder_variable_dictionary(full_config[target]['variables'])
-        #for var in full_config[target]['variables']:
-            #logger.trace(f' - var={var}')
+    for target in config:
+        config[target]['variables'] = reorder_variable_dictionary(config[target]['variables'])
 
-    # certain config options result in modifications to the full_config
-    keys0 = list(full_config.keys())
-    for target in keys0:
-        for dep in full_config[target]['dependencies']:
-
-            # add postreqs for creating new dependencies
-            if dep.get('allow_create'):
-                target1_name = target + '--allow_create--' + dep['target'].replace('/', '_').replace('$', '')
-                dep_target_with_stars = 'resources/*/about.json'
-
-                # any automatically created dependencies should not have allow_create set
-                dependencies1 = []
-                for dep in full_config[target]['dependencies']:
-                    dep1 = copy.copy(dep)
-                    if type(dep1) == dict:
-                        dep1['allow_create'] = False
-                    dependencies1.append(dep1)
-
-                # create the actual config entry
-                full_config[target1_name] = {
-                    'model': 'openai/gpt-4.1-mini',
-                    'prompt': f'''The main file '{target}' internally references the secondary files '{dep_target_with_stars}'. Unfortunately, the main file may reference secondary files that do not exist. For each secondary file that does not exist, create the appropriate JSON object.''',
-                    'schema_file': full_config[dep['target']].get('schema_file'),
-                    'dependencies': dependencies1,
-                    'variables': copy.copy(full_config[target]['variables']),
-                    'TMP_augment': True,
-                    }
-                if 'postreqs' not in full_config[target]:
-                    full_config[target]['postreqs'] = []
-                full_config[target]['postreqs'].append(target1_name)
-
-    return full_config
+    return config
 
 
 @dataclass
@@ -654,7 +589,7 @@ class BuildSystem:
 
                     unmatched_vars = []
                     for dep_var in dep_vars:
-                        if dep_var not in context.variables and dep_var in config['variables_raw']:
+                        if dep_var not in context.variables and dep_var in config['variables']:
                             unmatched_vars.append(dep_var)
                     if len(unmatched_vars) > 0:
                         unresolved_dependencies1.append(dep)
