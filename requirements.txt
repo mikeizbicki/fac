@@ -10,3 +10,5 @@ requests >= 2.32.3
 nest-asyncio==1.6.0
 ffmpeg-python==0.2.0
 json_repair >= 0.46.2
+pydantic>=2.11.5
+frozendict>=2.4.7

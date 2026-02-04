@@ -1,4 +1,5 @@
 '''
+This file handles loading and manipulating `fac.yaml` config files.
 '''
 
 # stdlib imports

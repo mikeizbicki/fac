@@ -7,7 +7,8 @@ The Latin verb `facio` means to do/make, and fac is the imperative form.
 from dataclasses import fields
 import typing
 
-from fac.BuildSystem import *
+#from fac.BuildSystem import *
+from fac.Fac import *
 from fac.LLM import *
 
 
@@ -56,11 +57,14 @@ def main():
     del bs_args['targets']
     build_system = BuildSystem(**bs_args)
 
+    build_system.build_targets(args.targets)
+    '''
     try:
         with build_system:
             build_system.build_targets(args.targets)
     except (FACError, LLMError, DirtyRepo, NoTargetsMatched, VariableEvaluationError, CommandExecutionError, UnresolvedDependencies):
         return 1
+    '''
 
 
 if __name__ == '__main__':

@@ -887,6 +887,10 @@ class BuildSystem:
             logger.error(f'context.variables={context.variables}')
             raise UnresolvedDependencies(context.unresolved_dependencies)
 
+        ########################################
+        # compute build options
+        ########################################
+
         # NOTE:
         # by default, we will build the given context;
         # but we may not rebuild if the path already exists
@@ -984,7 +988,9 @@ class BuildSystem:
         if not (build_context or overwrite):
             return
 
-        ################################################################################
+        ########################################
+        # build with shell
+        ########################################
 
         # create output directory if needed
         dirname = os.path.dirname(path_to_generate)
@@ -1031,6 +1037,10 @@ class BuildSystem:
                     raise CommandExecutionError(process.returncode, stdout)
 
             return
+
+        ########################################
+        # generate prompt
+        ########################################
 
         # first we generate the instructions for the llm,
         # which will be stored in the `prompt_cmd` variable.
@@ -1152,7 +1162,10 @@ except for the changes requested by the user.
         if truncated_prompt:
             prompt = truncated_prompt
 
-        # now we do filetype specific processing
+        ########################################
+        # filetype specific processing
+        ########################################
+
         filename = os.path.basename(path_to_generate)
         _, extension = os.path.splitext(filename)
         response_format = None

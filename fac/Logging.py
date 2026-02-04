@@ -83,14 +83,14 @@ class RecursiveLogger(logging.Logger):
 
         # Auto-format non-string objects as YAML
         if not isinstance(msg, str):
-            yaml_str = yaml.dump(msg, default_flow_style=False, allow_unicode=True, indent=2, width=float('inf')).rstrip('\n')
+            yaml_str = yaml.dump(msg, default_flow_style=False, allow_unicode=True, indent=2, width=float('inf'), sort_keys=False).rstrip('\n')
             lines = yaml_str.split('\n')
             for i, line in enumerate(lines):
                 # Truncate long lines
                 if max_line_length and len(line) > max_line_length:
                     line = line[:max_line_length] + '...'
                 # First line uses passed submessage, rest are always submessages
-                self._log(level, line, args, submessage=(submessage if i == 0 else submessage), **kwargs)
+                self._log(level, line, args, submessage=(submessage if i == 0 else True), **kwargs)
             return
 
         # Truncate long string messages too
