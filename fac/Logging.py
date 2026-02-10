@@ -83,7 +83,28 @@ class RecursiveLogger(logging.Logger):
 
         # Auto-format non-string objects as YAML
         if not isinstance(msg, str):
-            yaml_str = yaml.dump(msg, default_flow_style=False, allow_unicode=True, indent=2, width=float('inf'), sort_keys=False).rstrip('\n')
+
+            # boilerplate for formatting strings;
+            # this should make strings with newlines display the \n character
+            # instead of a proper newline
+            class CustomDumper(yaml.SafeDumper):
+                pass
+            def str_representer(dumper, data):
+                if '\n' in data:
+                    return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='"')
+                return dumper.represent_scalar('tag:yaml.org,2002:str', data)
+            CustomDumper.add_representer(str, str_representer)
+
+            # generate the yaml
+            yaml_str = yaml.dump(
+                    msg,
+                    Dumper=CustomDumper,
+                    default_flow_style=False,
+                    allow_unicode=True,
+                    indent=2,
+                    width=float('inf'),
+                    sort_keys=False,
+                    ).rstrip('\n')
             lines = yaml_str.split('\n')
             for i, line in enumerate(lines):
                 # Truncate long lines
