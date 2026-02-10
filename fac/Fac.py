@@ -7,6 +7,7 @@ import itertools
 import subprocess
 
 # external imports
+from deepdiff import DeepDiff
 from frozendict import frozendict
 from pydantic import BaseModel
 import yaml
@@ -86,14 +87,32 @@ class BuildContext(BaseModel):
             'arbitrary_types_allowed': True,
             }
 
-    # build context is uniquely hashed/deduped based on the following fields
+    ############################## 
+    # fields
+    ############################## 
+
+    # the target (as it appears in the fac.yaml, with no variable substitutions)
     normalized_target: str
+
+    # the fac.yaml config entry for normalized_target
     config: frozendict[str, Any]
+
+    # both dicts below have variable names as keys
+    # for resolved dict, the value is the content of the variable
+    # for unresolved dict, the value is the code-to-generate the value (should match config)
     variables_resolved: frozendict[str, str]
     variables_unresolved: frozendict[str, str]
-    dependencies_built: frozenset[frozendict[str, str]]
-    dependencies_building: frozenset[frozendict[str, str]]
+
+    # each frozendict must contain a 'target' key;
+    # for unresolved/building: these targets will correspond to entries in the config
+    # for built: the 'target' value will be denormalized to a file path
     dependencies_unresolved: frozenset[frozendict[str, str]]
+    dependencies_building: frozenset[frozendict[str, str]]
+    dependencies_built: frozenset[frozendict[str, str]]
+
+    ############################## 
+    # methods
+    ############################## 
 
     def __init__(self, **data):
         # we call freeze on all input data to convert dict to frozendict
@@ -108,7 +127,6 @@ class BuildContext(BaseModel):
 
     def split(self):
         r'''
-
         The helper function below converts the input to yaml and prints it.
         It makes visualization of the split BuildContext instances easier.
 
@@ -189,24 +207,20 @@ class BuildContext(BaseModel):
                     ):
                 assert var in target_variables or var in self.config['variables']
 
-            # ensure variable value are well behaved
+            # ensure variable values are well behaved
             for var, value in self.variables_resolved.items():
-                # variables that are defined in the config
-                # but not used in the target can be arbitrary;
-                # only variables used in the target have constraints
+                # NOTE:
+                # In theory, we could allow $ in out variable values
+                # in order to allow generation of paths that contain $;
+                # This is an unimportant edge case, however.
+                # In practice, having a $ in a variable value
+                # has always been due to a bug in the code.
+                assert '$' not in value
+
+                # an empty target variable indicates
+                # the context should never have been created
                 if var in target_variables:
-                    # no whitespaces allowed
-                    # FIXME: add back in?
-                    # assert ''.join(value.split()) == value
-                    # not empty
                     assert value != ''
-                    # NOTE:
-                    # In theory, we could allow $ in out variable values
-                    # in order to allow generation of paths that contain $;
-                    # This is an unimportant edge case, however.
-                    # In practice, having a $ in a variable value
-                    # has always been due to a bug in the code.
-                    assert '$' not in value
 
             # a variable can have at most one state
             for var in self.variables_resolved:
@@ -214,18 +228,24 @@ class BuildContext(BaseModel):
             for var in self.variables_unresolved:
                 assert var not in self.variables_resolved
 
-            # a dependency can have at most one state
-            '''
+            # if a dependency is built, the file must exist
             for dep in self.dependencies_built:
-                assert dep not in self.dependencies_building
-                assert dep not in self.dependencies_unresolved
+                assert '$' not in dep['target']
+                assert os.path.exists(dep['target'])
+
+            # a dependency cannot be both building and unresolved
             for dep in self.dependencies_building:
-                assert dep not in self.dependencies_built
                 assert dep not in self.dependencies_unresolved
             for dep in self.dependencies_unresolved:
                 assert dep not in self.dependencies_building
-                assert dep not in self.dependencies_built
-            '''
+
+            # NOTE:
+            # dependencies_built has a complicated relationship to dependencies_unresolved/building
+            # for dependencies that contain non-target variables,
+            # it is possible for the same dependency to be in multiple states at once
+            # (for different values of the non-target variable);
+            # there are more invariants that could be asserted here,
+            # but I have not yet done so because it's not obvious how to express them
 
         except AssertionError as e:
             logger.error('BuildContext.assert_invariants() failed')
@@ -235,6 +255,12 @@ class BuildContext(BaseModel):
     def assert_invariants_buildable(self):
         # ensure normalized_target will resolve to exactly one path
         self.path()
+
+        # target variables must have been previously split
+        target_variables = self.target_variables()
+        for var, value in self.variables_resolved.items():
+            if var in target_variables:
+                assert ''.join(value.split()) == value
 
         # all variables must be resolved
         assert len(self.variables_unresolved) == 0
@@ -267,6 +293,14 @@ class BuildContext(BaseModel):
         assert '$' not in paths[0]
         return paths[0]
 
+    def FAC_DEPENDENCIES(self):
+        '''
+        Whenever a target is built, the environment variable FAC_DEPENDENCIES contains a newline delimited list of files that the target depends on.
+        This method returns that variable.
+        '''
+        files = sorted([dep['target'] for dep in self.dependencies_built])
+        return '\n'.join(files)
+
     def build_priority(self):
         '''
         This function determines the order that contexts will be processed in.
@@ -278,7 +312,9 @@ class BuildContext(BaseModel):
         return extract_variables(self.normalized_target)
 
     def to_dict(self):
-        """Convert to a plain dict suitable for YAML serialization."""
+        '''
+        Convert to a plain dict suitable for YAML serialization.
+        '''
         ret = {
             'normalized_target': self.normalized_target,
             }
@@ -358,6 +394,48 @@ class BuildState:
             'len(self.contexts_built)': len(self.contexts_built),
             }}, submessage=submessage)
 
+    def _state_as_dict(self):
+        '''
+        Convert the internal state into dictionary suitable for yaml conversion.
+        Return a deepcopy so that the returned value does not get modified as future processing happens.
+        '''
+        yaml_dict = {
+            'built_paths': sorted([path for path in self.built_paths]),
+            #'buildable': sorted([context.denormalized_target() for priority, context in self.contexts_buildable.to_list()]),
+            #'waiting': sorted([context.denormalized_target() for context in self.contexts_waiting]),
+            #'unresolved': sorted([context.denormalized_target() for  context in self.contexts_unresolved]),
+            'buildable(long)': [context.to_dict() for priority, context in self.contexts_buildable.to_list()],
+            'waiting(long)': [context.to_dict() for context in self.contexts_waiting],
+            'unresolved(long)': [context.to_dict() for  context in self.contexts_unresolved],
+            }
+        return copy.deepcopy(yaml_dict)
+
+    def debug_statediff(self, state0, msg_str=''):
+        state1 = self._state_as_dict()
+        diff = DeepDiff(state0, state1, verbose_level=2)
+        
+        # ensure that the diff only has keys we recognize
+        for k in diff:
+            assert k in ['values_changed', 'iterable_item_added', 'iterable_item_removed']
+
+        # print output
+        print(10 * '-')
+        print(f'|| BuildState diff {msg_str} ||')
+        print(10 * '-')
+        output = {}
+        states = ['built_paths', 'buildable', 'waiting', 'unresolved']
+        for state in states:
+            print(f'{state} (diff)')
+            for k in diff.get('iterable_item_removed', []):
+                print(f'< {diff["iterable_item_removed"][k]}')
+            for k in diff.get('iterable_item_added', []):
+                print(f'> {diff["iterable_item_added"][k]}')
+            for k in diff.get('values_changed', []):
+                print(f'< {diff["values_changed"][k]["old_value"]}')
+                print(f'> {diff["values_changed"][k]["new_value"]}')
+
+        return state1
+
     def debug_print(self, msg=None):
         '''
         Shows a human-readable yaml-like version of the state that each context is in.
@@ -370,16 +448,7 @@ class BuildState:
         print(40 * '=')
         print(f'|| BuildState {msg_str} ||')
         print(40 * '=')
-        yaml_dict = {
-            'built_paths': sorted([path for path in self.built_paths]),
-            'buildable': sorted([context.denormalized_target() for priority, context in self.contexts_buildable.to_list()]),
-            'waiting': sorted([context.denormalized_target() for context in self.contexts_waiting]),
-            'unresolved': sorted([context.denormalized_target() for  context in self.contexts_unresolved]),
-            #'buildable': [context.to_dict() for priority, context in self.contexts_buildable.to_list()],
-            'waiting(long)': [context.to_dict() for context in self.contexts_waiting],
-            #'unresolved': [context.to_dict() for  context in self.contexts_unresolved],
-            }
-        print(yaml.dump(yaml_dict, default_flow_style=False, sort_keys=False))
+        print(yaml.dump(self._state_as_dict(), default_flow_style=False, sort_keys=False))
 
     def _add_context(self, context):
         '''
@@ -437,16 +506,20 @@ class BuildState:
             states = set()
             self.debug_print(f'iter={len(states)}')
             while not self.is_done():
+                state0 = self._state_as_dict()
 
                 # perform all state transitions
                 self.process_all_dependencies()
-                self.debug_print(f'iter={len(states)} -- deps')
+                #state0 = self.debug_statediff(state0, f'iter={len(states)} -- deps')
+                #self.debug_print(f'iter={len(states)} -- deps')
                 self.assert_invariants()
                 self.process_all_buildable()
-                self.debug_print(f'iter={len(states)} -- build')
+                #state0 = self.debug_statediff(state0, f'iter={len(states)} -- build')
+                #self.debug_print(f'iter={len(states)} -- build')
                 self.assert_invariants()
                 self.process_all_variable()
-                self.debug_print(f'iter={len(states)} -- vars')
+                #state0 = self.debug_statediff(state0, f'iter={len(states)} -- vars')
+                #self.debug_print(f'iter={len(states)} -- vars')
                 self.assert_invariants()
                 self.debug_print(f'iter={len(states) + 1}')
 
@@ -485,7 +558,9 @@ class BuildState:
                 if '$' not in denormalized_target:
                     path = denormalized_target
                     if path in self.built_paths:
-                        dependencies_built1.append(dep)
+                        dep1 = dict(dep)
+                        dep1['target'] = path
+                        dependencies_built1.append(dep1)
                     else:
                         dependencies_building1.append(dep)
 
@@ -513,9 +588,10 @@ class BuildState:
                             dep1 = dict(copy.deepcopy(dep))
                             dep1['target'] = loop_context.path()
                             dependencies_built1.append(freeze(dep1))
+                            assert '$' not in dep1['target']
         context1 = context.model_copy(update={
-            'dependencies_built': frozenset(dependencies_built1),
-            'dependencies_building': frozenset(dependencies_building1),
+            'dependencies_built': dependencies_built1,
+            'dependencies_building': dependencies_building1,
             })
         self._add_context(context1)
 
@@ -605,11 +681,15 @@ class BuildState:
                                     dep['target'],
                                     )
 
-                            # FIXME: is this correct?
-                            # if there is a $ in dep['target'],
-                            # then we must match because we have previously checked
-                            # that there are no unmatched variables
-                            assert len(matches) > 0
+                            # if we don't find a match,
+                            # then the target is not defined in the config;
+                            # this means that target file cannot be automatically built
+                            # but must be provided already by the user;
+                            # we will not actually build this file,
+                            # but we should still add it to matches and track it like it will be built
+                            # so that it gets properly recorded as a dependency
+                            if len(matches) == 0:
+                                matches = [(dep['target'], {})]
 
                         for normalized_target, target_env in matches:
                             # construct the new variables_resolved;
@@ -621,6 +701,7 @@ class BuildState:
                                 **context.variables_resolved,
                                 })
                             for var in dict(variables_resolved):
+                                assert '$' not in variables_resolved[var]
                                 if var not in target_variables:
                                     del variables_resolved[var]
 
@@ -853,7 +934,7 @@ async def build_context(context, config):
             env=variables_transitive_substitute({
                 **os.environ,
                 **context.variables_resolved,
-                #'FAC_DEPENDENCIES': '\n'.join(sorted(context.dependency_paths)),
+                'FAC_DEPENDENCIES': context.FAC_DEPENDENCIES(),
                 }),
             )
         try:
