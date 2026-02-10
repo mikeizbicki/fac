@@ -127,6 +127,10 @@ class BuildContext(BaseModel):
 
     def split(self):
         r'''
+        This function creates a list of BuildContext instances by splitting all non-target variables on newlines.
+
+        ---
+
         The helper function below converts the input to yaml and prints it.
         It makes visualization of the split BuildContext instances easier.
 
@@ -511,15 +515,15 @@ class BuildState:
                 # perform all state transitions
                 self.process_all_dependencies()
                 #state0 = self.debug_statediff(state0, f'iter={len(states)} -- deps')
-                #self.debug_print(f'iter={len(states)} -- deps')
+                self.debug_print(f'iter={len(states)} -- deps')
                 self.assert_invariants()
                 self.process_all_buildable()
                 #state0 = self.debug_statediff(state0, f'iter={len(states)} -- build')
-                #self.debug_print(f'iter={len(states)} -- build')
+                self.debug_print(f'iter={len(states)} -- build')
                 self.assert_invariants()
                 self.process_all_variable()
                 #state0 = self.debug_statediff(state0, f'iter={len(states)} -- vars')
-                #self.debug_print(f'iter={len(states)} -- vars')
+                self.debug_print(f'iter={len(states)} -- vars')
                 self.assert_invariants()
                 self.debug_print(f'iter={len(states) + 1}')
 
@@ -697,8 +701,8 @@ class BuildState:
                             # and delete any variables that are not need for the target
                             target_variables = extract_variables(normalized_target)
                             variables_resolved = variables_transitive_substitute({
-                                **target_env,
                                 **context.variables_resolved,
+                                **target_env,
                                 })
                             for var in dict(variables_resolved):
                                 assert '$' not in variables_resolved[var]
@@ -709,7 +713,7 @@ class BuildState:
                             # that means that the match is not supposed to be added as a dependency
                             has_empty_var = False
                             for var, val in variables_resolved.items():
-                                if val.strip() == '':
+                                if len(val) == 0:
                                     has_empty_var = True
                             if has_empty_var:
                                 continue
@@ -782,8 +786,6 @@ class BuildState:
                 self._add_context(context)
                 continue
 
-            '''
-            XXX
             # create new dictionaries for the resolved/unresolved variables;
             # then transfer the variable from unresolved to resolved;
             # note that we convert from frozendict to dict (making a copy)
@@ -805,45 +807,6 @@ class BuildState:
                     )
             self.required_for[context1].append(context)
             self._add_context(context1)
-            '''
-            # NOTE:
-            # the following if/for statement combo has confusing non-local effects;
-            # if the variable is used in the target,
-            # then we split the variable on newlines,
-            # and we create a new context for each one of these split values;
-            # this is what allows a single target to build many files;
-            # but when we have a variable that is not included in the target,
-            # we do not want to rebuild the same file with many different variable combinations
-            # so we do not split the variable here (and do that elsewhere)
-            if var in context.target_variables():
-                value_list = value.split('\n')
-            else:
-                value_list = [value]
-
-            for val in value_list:
-
-                # create new dictionaries for the resolved/unresolved variables;
-                # then transfer the variable from unresolved to resolved;
-                # note that we convert from frozendict to dict (making a copy)
-                # so that we can edit the entries
-                variables_resolved1 = dict(context.variables_resolved)
-                variables_resolved1[var] = val
-
-                variables_unresolved1 = dict(context.variables_unresolved)
-                del variables_unresolved1[var]
-
-                # generate the new context
-                context1 = BuildContext(
-                        normalized_target=context.normalized_target,
-                        config=context.config,
-                        variables_resolved=variables_resolved1,
-                        variables_unresolved=variables_unresolved1,
-                        dependencies_built=context.dependencies_built,
-                        dependencies_building=context.dependencies_building,
-                        dependencies_unresolved=context.dependencies_unresolved,
-                        )
-                self.required_for[context1].append(context)
-                self._add_context(context1)
 
 @dataclass
 class BuildSystem:
