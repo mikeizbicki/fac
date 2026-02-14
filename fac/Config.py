@@ -148,6 +148,28 @@ def _configdict_to_targets(config):
 
     # clean the final output targets dict
     for target in targets:
+        # set the mime-type
+        if 'mime-type' not in targets[target]:
+            filename = os.path.basename(target)
+            _, extension = os.path.splitext(filename)
+
+            if extension == '.md' or extension == '.markdown':
+                targets[target]['mime-type'] = 'text/markdown'
+            elif extension == '.html':
+                targets[target]['mime-type'] = 'text/html'
+            elif extension == '.json':
+                targets[target]['mime-type'] = 'text/json'
+            elif extension == '.jsonl':
+                targets[target]['mime-type'] = 'text/jsonl'
+            elif extension == '.png':
+                targets[target]['mime-type'] = 'image/png'
+            elif extension == '.wav':
+                targets[target]['mime-type'] = 'audio/wav'
+            elif extension == '.mp4':
+                targets[target]['mime-type'] = 'video/mp4'
+            else:
+                targets[target]['mime-type'] = 'text/plain'
+
 
         # remove excess whitespace from fields;
         # this is mostly useful for debugging and getting nice looking configs

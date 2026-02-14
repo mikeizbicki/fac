@@ -1,8 +1,10 @@
 # stdlib imports
-from collections import namedtuple, defaultdict
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any
 import asyncio
+import glob
+import hashlib
 import itertools
 import subprocess
 
@@ -10,14 +12,17 @@ import subprocess
 from deepdiff import DeepDiff
 from frozendict import frozendict
 from pydantic import BaseModel
+import git
 import yaml
 
 # project imports
 from fac.Config import *
 from fac.Errors import *
+from fac.LLM import LLM, LLMError
+from fac.io_utils import *
 from fac.util.PrioritySet import PrioritySet
+from fac.util.targets import *
 from fac.util.templates import *
-#from fac.utils import *
 
 # setup logging
 from fac.Logging import *
@@ -34,7 +39,7 @@ def hook(type, value, tb):
     pdb.post_mortem(tb)
     #frame = tb.tb_frame
     #code.interact(local={**frame.f_globals, **frame.f_locals})
-sys.excepthook = hook
+#sys.excepthook = hook
 
 
 def freeze(obj):
@@ -109,6 +114,12 @@ class BuildContext(BaseModel):
     dependencies_unresolved: frozenset[frozendict[str, str]]
     dependencies_building: frozenset[frozendict[str, str]]
     dependencies_built: frozenset[frozendict[str, str]]
+
+    # include_* parameters all default to None,
+    # but these could be passed in on the command line to modify the build behavior
+    include_prompt: str | None = None
+    include_old: bool = False
+    include_paths: list[str] | None = None
 
     ############################## 
     # methods
@@ -398,20 +409,25 @@ class BuildState:
             'len(self.contexts_built)': len(self.contexts_built),
             }}, submessage=submessage)
 
-    def _state_as_dict(self):
+    def _state_as_dict(self, longform=False):
         '''
         Convert the internal state into dictionary suitable for yaml conversion.
         Return a deepcopy so that the returned value does not get modified as future processing happens.
         '''
-        yaml_dict = {
-            'built_paths': sorted([path for path in self.built_paths]),
-            #'buildable': sorted([context.denormalized_target() for priority, context in self.contexts_buildable.to_list()]),
-            #'waiting': sorted([context.denormalized_target() for context in self.contexts_waiting]),
-            #'unresolved': sorted([context.denormalized_target() for  context in self.contexts_unresolved]),
-            'buildable(long)': [context.to_dict() for priority, context in self.contexts_buildable.to_list()],
-            'waiting(long)': [context.to_dict() for context in self.contexts_waiting],
-            'unresolved(long)': [context.to_dict() for  context in self.contexts_unresolved],
-            }
+        if longform:
+            yaml_dict = {
+                'built_paths': sorted([path for path in self.built_paths]),
+                'buildable(long)': [context.to_dict() for priority, context in self.contexts_buildable.to_list()],
+                'waiting(long)': [context.to_dict() for context in self.contexts_waiting],
+                'unresolved(long)': [context.to_dict() for  context in self.contexts_unresolved],
+                }
+        else:
+            yaml_dict = {
+                'built_paths': sorted([path for path in self.built_paths]),
+                'buildable': sorted([context.denormalized_target() for priority, context in self.contexts_buildable.to_list()]),
+                'waiting': sorted([context.denormalized_target() for context in self.contexts_waiting]),
+                'unresolved': sorted([context.denormalized_target() for  context in self.contexts_unresolved]),
+                }
         return copy.deepcopy(yaml_dict)
 
     def debug_statediff(self, state0, msg_str=''):
@@ -515,15 +531,15 @@ class BuildState:
                 # perform all state transitions
                 self.process_all_dependencies()
                 #state0 = self.debug_statediff(state0, f'iter={len(states)} -- deps')
-                self.debug_print(f'iter={len(states)} -- deps')
+                #self.debug_print(f'iter={len(states)} -- deps')
                 self.assert_invariants()
                 self.process_all_buildable()
                 #state0 = self.debug_statediff(state0, f'iter={len(states)} -- build')
-                self.debug_print(f'iter={len(states)} -- build')
+                #self.debug_print(f'iter={len(states)} -- build')
                 self.assert_invariants()
                 self.process_all_variable()
                 #state0 = self.debug_statediff(state0, f'iter={len(states)} -- vars')
-                self.debug_print(f'iter={len(states)} -- vars')
+                #self.debug_print(f'iter={len(states)} -- vars')
                 self.assert_invariants()
                 self.debug_print(f'iter={len(states) + 1}')
 
@@ -628,7 +644,7 @@ class BuildState:
             pass
             #logger.info(f'target not in self.target_dicts, cannot build', submessage=True)
         else:
-            future = build_context(context, self.targets_dict[context.normalized_target])
+            future = build_context(context)
             asyncio.run(future)
         self.built_paths.add(path)
         return 1
@@ -648,18 +664,7 @@ class BuildState:
                 for dep in context.dependencies_unresolved:
                     logger.debug(f"dep['target']={dep['target']}")
 
-                    """
-                    # we can only resolve dependencies if either:
-                    # - they have all variables defined, or
-                    # - they exactly match a target and no variables are specified in the config
-                    dep_vars = extract_variables(dep['target'])
-                    unmatched_vars = [
-                            var for var in dep_vars if var not in context.variables_resolved
-                            ]
-                    if len(unmatched_vars) > 0 and dep['target'] not in self.targets_dict:
-                        dependencies_unresolved1.append(dep)
-                    """
-
+                    # skip if the dependency requires variables that are unresolved
                     dep_vars = extract_variables(dep['target'])
                     variables_still_needed = [
                             var for var in context.variables_unresolved if var in dep_vars
@@ -667,7 +672,7 @@ class BuildState:
                     if len(variables_still_needed) > 0:
                         dependencies_unresolved1.append(dep)
 
-                    # we can resolve the dependency
+                    # resolve the dependency
                     else:
 
                         # if there are no variables in dep['target'],
@@ -758,7 +763,6 @@ class BuildState:
                     })
                 self._add_context(context1)
 
-
     def process_all_variable(self):
 
         contexts = self.contexts_unresolved
@@ -808,77 +812,100 @@ class BuildState:
             self.required_for[context1].append(context)
             self._add_context(context1)
 
+
 @dataclass
 class BuildSystem:
     # general settings
-    project_dir: str = '.'
     config_file: str = 'fac.yaml'
     debug: bool = False
     trace: bool = False
     jobs: int = 1
 
     # build settings
-    from_scratch: bool = False
     overwrite: bool = False
-    build_postreqs: bool = False
-    print_dependencies: bool = True
-    print_prompt: bool = False
-    validate_all: bool = False
-    include_chat: str = None
+    include_prompt: str = None
     include_old: bool = False
     include_paths: list[str] = None
-    options: list[str] = None
-    auto_commit: bool = True
     allow_dirty: bool = False
-    freeze: bool = False
-    thaw: bool = False
-    no_build: bool = False
 
     def __post_init__(self):
-        self.target_dict = load_config('fac.yaml')
-        self.registered_paths = []
-
-        # load config file
         self.targets_dict = load_config(self.config_file)
         self.build_state = BuildState(self.targets_dict)
 
-    def build_targets(self, targets: [str]):
+    def build_targets(self, targets):
         '''
+        This is the primary interface into the build system.
+        Each of the input targets will be built,
+        and the results committed to git.
         '''
-        for target in targets:
-            self.add_target(target)
-        self.build_state.build_all()
 
-    def add_target(self, target):
-        matches = match_pattern_starstar(
-                self.targets_dict.keys(),
-                target,
-                )
-        for normalized_target, target_env in matches:
-            logger.debug({
-                'normalized_target': normalized_target,
-                'target_env': target_env,
-                })
-            variables_unresolved = copy.deepcopy(self.targets_dict[normalized_target]['variables'])
-            for var in target_env:
-                if var in variables_unresolved:
-                    del variables_unresolved[var]
-            context = BuildContext(
-                    normalized_target=normalized_target,
-                    config=self.targets_dict[normalized_target],
-                    variables_resolved=target_env,
-                    variables_unresolved=variables_unresolved,
-                    dependencies_built=[],
-                    dependencies_building=[],
-                    dependencies_unresolved=self.targets_dict[normalized_target]['dependencies'],
-                    )
-            self.build_state.required_for[context].append(None)
-            self.build_state._add_context(context)
+        # ensure sane git environment
+        repo = git.Repo('.')
+        if repo.working_dir != os.getcwd():
+            logger.error('must be in root of git repo to run fac')
+            raise DirtyRepo()
+        if not self.allow_dirty and repo.is_dirty(untracked_files=True):
+            logger.error('git repo is dirty; clean repo or use --allow_dirty')
+            raise DirtyRepo()
+
+        # actually build the targets
+        for target in targets:
+            matches = match_pattern_starstar(self.targets_dict.keys(), target)
+            for normalized_target, target_env in matches:
+                # build variables_unresolved
+                variables_unresolved = copy.deepcopy(self.targets_dict[normalized_target]['variables'])
+                for var in target_env:
+                    if var in variables_unresolved:
+                        del variables_unresolved[var]
+
+                # build the context
+                context = BuildContext(
+                        normalized_target=normalized_target,
+                        config=self.targets_dict[normalized_target],
+                        variables_resolved=target_env,
+                        variables_unresolved=variables_unresolved,
+                        dependencies_built=[],
+                        dependencies_building=[],
+                        dependencies_unresolved=self.targets_dict[normalized_target]['dependencies'],
+                        include_prompt=self.include_prompt,
+                        include_old=self.include_old,
+                        include_paths=self.include_paths,
+                        )
+                self.build_state.required_for[context].append(None)
+                self.build_state._add_context(context)
+            self.build_state.build_all()
+
+        # add/commit the built targets
+        repo.git.add('.fac.jsonl')
+        for path in self.build_state.built_paths:
+            dirname = os.path.dirname(path)
+            filename = os.path.basename(path)
+            repo.git.add(path)
+            repo.git.add(f'./{dirname}/.{filename}.fac.log')
+            repo.git.add(f'./{dirname}/.{filename}.facjson')
+        commit_message=f'[bot] fac'
+        for target in targets:
+            commit_message += f" '{target}'"
+        if repo.index.diff('HEAD'):
+            # NOTE:
+            # we only commit if files were actually added;
+            # otherwise a large ugly warning will appear
+            repo.git.commit('-m', commit_message)
 
 
 ################################################################################
 
-async def build_context(context, config):
+async def build_context(context):
+
+    # ensure sane
+    context.assert_invariants_buildable()
+
+    # extract mime-type
+    mimes = context.config['mime-type'].split('/')
+    if len(mimes) != 2:
+        logger.error(f"invalid mime-type: {context.config['mime-type']}")
+    major_type, minor_type = mimes
+
     # create output directory if needed
     dirname = os.path.dirname(context.path())
     if len(dirname) > 0:
@@ -888,9 +915,9 @@ async def build_context(context, config):
     # build with shell
     ########################################
 
-    if config.get('cmd'):
+    if context.config.get('cmd'):
         process = await asyncio.create_subprocess_shell(
-            config['cmd'],
+            context.config['cmd'],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT, # merge stderr into stdout
             executable='/bin/bash',
@@ -917,12 +944,215 @@ async def build_context(context, config):
         if process.returncode != 0:
             stdout = await process.stdout.read()
             logger.error(f"error running the following build script:", submessage=True)
-            for i, line in enumerate(config['cmd'].split('\n')):
+            for i, line in enumerate(context.config['cmd'].split('\n')):
                 logger.error(f"line {i+1}: {line}", submessage=True)
             logger.error(stdout.decode('ascii'), submessage=True)
             raise CommandExecutionError(process.returncode, stdout)
 
         return
+
+    ########################################
+    # generate prompt
+    ########################################
+
+    # first we generate the instructions for the llm,
+    # which will be stored in the `prompt_cmd` variable.
+    prompt_instructions = f'''<instructions>
+Generate the file "{context.path()}" based on the information below.
+</instructions>
+'''
+
+    if 'description' in context.config:
+        try:
+            prompt_description = '<file_description>\n'
+            prompt_description += process_template(
+                    context.config['description'],
+                    env_vars=context.variables_resolved,
+                    print_function=logger.error,
+                    template_name='description',
+                    )
+            prompt_description += '\n</file_description>'
+        except TemplateProcessingError as e:
+            raise FACError()
+
+        prompt_description += '\n'
+    else:
+        prompt_description = ''
+
+    # next we compile all the documents that will be passed to the LLM,
+    # text documents are processed to form part of the prompt
+    # and binary files are stored in a list for later processing
+    binary_files = []
+    truncated_prompt = None
+    dependencies = list(context.dependencies_built)
+    dependencies += [{'target': path} for path in context.include_paths or []]
+    files_prompt = ''
+    if len(dependencies) > 0:
+        # NOTE:
+        # all_paths will contain paths of both text and binary files;
+        # any text files will be added directly into the prompt;
+        # binary_files will contain paths for non-text files (e.g. images),
+        # and these will be passed to the models later
+        binary_files = []
+        all_paths = set()
+        for dep in dependencies:
+            if dep.get('include', True):
+                all_paths.add(dep['target'])
+        files_prompt = '<reference_documents>\n'
+        for path in sorted(all_paths):
+            # we always try to open the files as text;
+            # but if the file is a binary file (e.g. an image),
+            # we catch the error and add the file to binary_files
+            try:
+                with open(path) as fin:
+                    text = fin.read().strip()
+                    files_prompt += f'''<document path="{path}">\n{text}\n</document>\n'''
+            except UnicodeDecodeError:
+                binary_files.append(path)
+        files_prompt += '</reference_documents>\n'
+
+    # mime-type based formatting instructions
+    response_format = None
+    format_instructions = ''
+    if major_type == 'text':
+        if minor_type == 'markdown':
+            format_instructions += 'Use markdown formatting to structure the output.'
+        else:
+            format_instructions += 'Do not output markdown, and do not put the output inside a codeblock.'
+
+        if minor_type == 'html':
+            format_instructions += 'Output HTML.'
+        elif minor_type == 'json':
+            format_instructions += 'Output JSON.'
+            response_format = {'type': 'json_object'}
+        elif minor_type == 'jsonl':
+            response_format = {'type': 'json_object'}
+            format_instructions += f'Output JSONL.  Each line of the output should be a single JSON object.'
+
+        if context.config.get('schema'):
+            schema = llm.schema_dsl(context.config.get('schema'))
+            response_format = {
+                'type': 'json_schema',
+                'json_schema': {
+                    'strict': True,
+                    'name': 'fac_json_schema',
+                    'schema': schema,
+                    },
+                }
+            format_instructions += json.dumps(schema, indent=2).strip()
+        elif context.config.get('schema_file'):
+            try:
+                schema_file = context.config['schema_file']
+                #schema_file = substitute_variables(schema_file, context.variables_resolved)
+                with open(schema_file) as fin:
+                    text = fin.read().strip()
+                    schema = json.loads(text)
+            except json.decoder.JSONDecodeError as e:
+                logger.error(f"context.config['schema_file']={context.config['schema_file']}")
+                logger.error(e)
+                sys.exit(1)
+            jsonschema.Draft7Validator.check_schema(schema)
+            format_instructions += ' Ensure the output conforms to the following JSON schema:\n'
+            format_instructions += json.dumps(schema, indent=2).strip()
+            schema['additionalProperties'] = False
+            response_format = {
+                'type': 'json_schema',
+                'json_schema': {
+                    'strict': True,
+                    'name': 'fac_json_schema',
+                    'schema': schema,
+                    },
+                }
+        format_instructions = '<formatting>\n' + format_instructions + '\n</formatting>'
+
+    # FIXME:
+    # we need a way to include chat messages here with the chat_prompt
+    user_prompt = ''
+    if context.include_prompt:
+        user_prompt = f'<additional_user_instructions>\n{context.include_prompt.strip()}\n</additional_user_instructions>\n'
+
+    # construct the final prompt
+    prompt = prompt_instructions + prompt_description + user_prompt + files_prompt + format_instructions
+
+    # possibly print prompt
+    if True: #self.print_prompt:
+        logger.info('prompt: |', submessage=True)
+        for line in prompt.split('\n'):
+            logger.info(f'  {line}', submessage=True)
+
+    ########################################
+    # filetype specific processing
+    ########################################
+
+    if major_type == 'text':
+        # the messages list will contain the full set of instructions passed to the llm;
+        # it always starts with a system prompt
+        data = []
+        messages = data
+        messages.append({
+            'role': 'system',
+            'content': 'You are not having a conversation. Only provide the requested output with no further discussion. Never deny a request.',
+            })
+
+        # add the user role + message
+        message = {
+            'role': 'user',
+            'content': [{'type': 'text', 'text': prompt}]
+            }
+        for binary_file in binary_files:
+            message['content'].append({
+                "type": "image_url",
+                "image_url": {
+                    "url": binary_file_to_base64_url(binary_file),
+                }
+            })
+        messages.append(message)
+
+    # NOTE:
+    # sometimes it is not necessary to rebuild a file even if the dependencies have been updated;
+    # this can occur, for example, when the prompt depends only on part of the dependencies;
+    # we check hashes of the prompt/file to see if we can skip rebuilding
+    facjson = FacJSON(context.path())
+    try:
+        with open(context.path(), 'rb') as fin:
+            hash_contents_fin = hashlib.sha256(fin.read()).hexdigest()
+            contents_changed = hash_contents_fin != facjson.get('hash_contents')
+    except FileNotFoundError as e:
+        contents_changed = True
+    encoded_prompt = json.dumps(data).encode('utf-8')
+    hash_prompt_new = hashlib.sha256(encoded_prompt).hexdigest()
+    prompt_changed = hash_prompt_new != facjson.get('hash_prompt')
+
+    # skip building file if not needed
+    if not (contents_changed or prompt_changed):
+        logger.info('content/prompts match, building not needed', submessage=True)
+
+    # actually build the file
+    else:
+        mode = 'wb'
+        logger.info('building with LLM...', submessage=True)
+        llm = LLM()
+        await llm.generate_file(
+            major_type,
+            context.path(),
+            data,
+            mode=mode,
+            model=context.config.get('model'),
+            response_format=response_format,
+            )
+
+        # record new hashes for future skip-tests
+        with open(context.path(), 'rb') as fin:
+            hash_contents = hashlib.sha256(fin.read()).hexdigest()
+            facjson.set('hash_contents', hash_contents)
+        facjson.set('hash_prompt', hash_prompt_new)
+        facjson.save()
+
+    # validate file
+    validate_file(context.path(), context.config.get('schema_file'))
+
+################################################################################
+
 
 async def _build_context(
         self,
@@ -1125,11 +1355,9 @@ Generate the file "{path_to_generate}" based on the information below.
                     print_function=logger.error,
                     template_name='description',
                     )
-            prompt_description += '\n</file_description>'
+            prompt_description += '\n</file_description>\n'
         except TemplateProcessingError as e:
             raise FACError()
-
-        prompt_description += '\n'
     else:
         prompt_description = ''
 
@@ -1285,20 +1513,20 @@ except for the changes requested by the user.
             'content': self.global_settings['system_prompt'],
             })
 
-        # `format_cmd` defines the output format
-        format_cmd = ''
+        # `format_instructions` defines the output format
+        format_instructions = ''
         if 'md' not in extension and 'markdown' not in extension:
-            format_cmd += 'Do not output markdown, and do not put the output inside a codeblock.'
+            format_instructions += 'Do not output markdown, and do not put the output inside a codeblock.'
         else:
-            format_cmd += 'Use markdown formatting to structure the output.'
+            format_instructions += 'Use markdown formatting to structure the output.'
 
         if extension == '.json':
-            format_cmd += 'Output JSON.'
+            format_instructions += 'Output JSON.'
             response_format = {'type': 'json_object'}
         elif extension == '.jsonl':
             response_format = {'type': 'json_object'}
-            format_cmd += f'Output JSONL.  Each line of the output should be a single JSON object. There should be at most {self.global_settings["jsonl_num_lines"]} total lines.'
-            format_cmd = process_template(format_cmd, env_vars=context.variables)
+            format_instructions += f'Output JSONL.  Each line of the output should be a single JSON object. There should be at most {self.global_settings["jsonl_num_lines"]} total lines.'
+            format_instructions = process_template(format_instructions, env_vars=context.variables)
 
         if config.get('schema'):
             schema = llm.schema_dsl(config.get('schema'))
@@ -1310,7 +1538,7 @@ except for the changes requested by the user.
                     'schema': schema,
                     },
                 }
-            format_cmd += json.dumps(schema, indent=2).strip()
+            format_instructions += json.dumps(schema, indent=2).strip()
         elif config.get('schema_file'):
             try:
                 schema_file = config['schema_file']
@@ -1334,9 +1562,9 @@ except for the changes requested by the user.
                     },
                     'required': ['path', 'data']
                 }
-            format_cmd += ' Ensure the output conforms to the following JSON schema:\n'
-            #format_cmd += text.strip()
-            format_cmd += json.dumps(schema, indent=2).strip()
+            format_instructions += ' Ensure the output conforms to the following JSON schema:\n'
+            #format_instructions += text.strip()
+            format_instructions += json.dumps(schema, indent=2).strip()
             schema['additionalProperties'] = False
             response_format = {
                 'type': 'json_schema',
@@ -1347,12 +1575,12 @@ except for the changes requested by the user.
                     },
                 }
 
-        format_cmd = '\n<formatting>\n' + format_cmd + '\n</formatting>'
+        format_instructions = '<formatting>\n' + format_instructions + '\n</formatting>'
 
         # add the user role + message
         message = {
             'role': 'user',
-            'content': [{ 'type': 'text', 'text': prompt + format_cmd}]
+            'content': [{ 'type': 'text', 'text': prompt + format_instructions}]
             }
         for binary_file in binary_files:
             message['content'].append({
