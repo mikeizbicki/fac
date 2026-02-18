@@ -32,6 +32,7 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
       - name: install fac
         env:
+          # hardcoded version number needed to fix a race condition in the automatic version numbering
           SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0"
         run: |
           pip3 install .
