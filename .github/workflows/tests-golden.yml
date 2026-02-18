@@ -31,6 +31,8 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
       - name: install fac
+        env:
+          SETUPTOOLS_SCM_PRETEND_VERSION: "github-actions-version"
         run: |
           pip3 install .
       - name: fac_test1_basicproject
