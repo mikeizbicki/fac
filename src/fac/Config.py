@@ -74,6 +74,7 @@ def rawyaml_to_targets(rawyaml):
       - target: file1
       - target: file2
       description: example target's description
+      mime-type: text/plain
       variables: {}
 
     We call a top-level entry in the yaml config a "scope" if it ends in a slash.
@@ -104,6 +105,7 @@ def rawyaml_to_targets(rawyaml):
       _working_directory: example/scope
       dependencies: []
       description: a different target
+      mime-type: text/plain
       options_text:
         model: gpt5.2
       variables:
@@ -115,6 +117,7 @@ def rawyaml_to_targets(rawyaml):
       dependencies: []
       description: this target has the same name as a different target in a different
         scope, and that's okay
+      mime-type: text/plain
       options_text:
         model: opus4.5
       variables:
@@ -124,6 +127,7 @@ def rawyaml_to_targets(rawyaml):
       _working_directory: example/scope
       dependencies: []
       description: this is an example target within a scope
+      mime-type: text/plain
       options_text:
         model: gpt5.2
       variables:
