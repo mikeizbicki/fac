@@ -32,7 +32,7 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
       - name: install fac
         env:
-          SETUPTOOLS_SCM_PRETEND_VERSION: "github-actions-version"
+          SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0"
         run: |
           pip3 install .
       - name: fac_test1_basicproject
