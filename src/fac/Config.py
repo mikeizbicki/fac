@@ -12,6 +12,33 @@ import re
 import yaml
 
 
+def fac_targets_completer(prefix, parsed_args, **kwargs):
+    '''
+    An autocompleter for fac targets compatible with the argcomplete library.
+
+    This function can be used with the argparse library to implement tab completion in the shell.
+    Example usage is shown below.
+
+    ```
+    def main():
+        parser = argparse.ArgumentParser()
+        parser.add_argument('targets', nargs='*').completer = fac_yaml_completer
+        # ... other args
+        
+        argcomplete.autocomplete(parser)
+        args = parser.parse_args()
+        # ... rest of main
+    ```
+    '''
+    from argcomplete import warn
+    try:
+        config = load_config('fac.yaml')
+        return [k for k in config.keys() if k.startswith(prefix)]
+    except (FileNotFoundError, yaml.YAMLError):
+        warn('fac.yaml file does not exist in current folder')
+    return []
+
+
 def load_config(path):
     '''
     Loads a fac.yaml file and generates a dictionary of targets.
@@ -19,7 +46,8 @@ def load_config(path):
     '''
     with open(path) as fin:
         text = fin.read()
-    return rawyaml_to_targets(text)
+    targets_dict = rawyaml_to_targets(text)
+    return targets_dict
 
 
 def pprint_targets(targets):

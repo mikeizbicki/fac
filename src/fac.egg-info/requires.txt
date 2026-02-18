@@ -1,0 +1,16 @@
+jsonschema>=4.24.0
+mdformat>=0.7.22
+openai>=1.84.0
+fal-client>=0.9
+PyYAML>=6.0.2
+llm>=0.25
+GitPython>=3.1.45
+files-to-prompt>=0.6
+requests>=2.32.3
+nest-asyncio==1.6.0
+ffmpeg-python==0.2.0
+json_repair>=0.46.2
+pydantic>=2.11.5
+frozendict>=2.4.7
+deepdiff==8.6.1
+argcomplete>=3.6.3

@@ -1,0 +1,153 @@
+.gitignore
+.gitmodules
+pyproject.toml
+requirements.txt
+.github/workflows/tests-docsum.yml
+.github/workflows/tests-golden.yml
+FabulaMachina/FabulaMachina.py
+FabulaMachina/README.md
+FabulaMachina/pages/__init__.py
+FabulaMachina/pages/story/__init__.py
+FabulaMachina/pages/story/routes.py
+FabulaMachina/pages/story/template.html
+FabulaMachina/pages/story/static/audio-controls.css
+FabulaMachina/pages/story/static/audio-controls.js
+FabulaMachina/pages/story/static/media-switcher.css
+FabulaMachina/pages/story/static/media-switcher.js
+FabulaMachina/pages/story/static/script.js
+FabulaMachina/pages/story/static/style.css
+FabulaMachina/routes/__init__.py
+FabulaMachina/routes/api.py
+FabulaMachina/routes/auto_updater.py
+FabulaMachina/routes/console_logging.py
+FabulaMachina/routes/fac.py
+FabulaMachina/routes/git_history.py
+FabulaMachina/routes/target_collection.py
+FabulaMachina/static/audio.js
+FabulaMachina/static/auto_updater.js
+FabulaMachina/static/fac.css
+FabulaMachina/static/fac.js
+FabulaMachina/static/index.css
+FabulaMachina/static/index.js
+FabulaMachina/static/script.js
+FabulaMachina/static/sidebar.css
+FabulaMachina/static/sidebar.js
+FabulaMachina/static/style.css
+FabulaMachina/static/target_collection.css
+FabulaMachina/static/target_collection.js
+FabulaMachina/templates/base.html
+FabulaMachina/templates/index.html
+FabulaMachina/templates/target_collection.html
+FabulaMachina_oldstyle/Bubbles.py
+FabulaMachina_oldstyle/Camera.py
+FabulaMachina_oldstyle/Element.py
+FabulaMachina_oldstyle/Media.py
+FabulaMachina_oldstyle/__main__.py
+FabulaMachina_oldstyle/map.json
+FabulaMachina_oldstyle/utils.py
+examples/game/.fac.jsonl
+examples/game/.game_description.fac.2025-07-11T11:46:54.692849725
+examples/game/.game_description.fac.2025-07-11T11:46:54.692849725.patch
+examples/game/.game_description.fac.2025-07-11T11:48:58.507472614
+examples/game/.game_description.fac.2025-07-11T11:48:58.507472614.patch
+examples/game/.game_description.fac.2025-07-11T11:49:22.766070610
+examples/game/.game_description.fac.2025-07-11T11:49:22.766070610.patch
+examples/game/.game_description.fac.2025-07-11T11:50:45.522423490
+examples/game/.game_description.fac.2025-07-11T11:50:45.522423490.patch
+examples/game/.game_description.fac.2025-07-11T11:54:27.118718865
+examples/game/.game_description.fac.2025-07-11T11:55:08.668509517
+examples/game/.game_description.fac.2025-07-11T11:55:13.111153319
+examples/game/.game_description.fac.2025-07-11T11:55:25.717531528
+examples/game/.game_description.fac.2025-07-11T11:55:25.717531528.patch
+examples/game/.game_description.fac.2025-07-11T12:01:00.111255187
+examples/game/.game_description.fac.2025-07-11T12:01:00.111255187.patch
+examples/game/.game_description.fac.2025-07-11T12:01:51.213191561
+examples/game/.game_description.fac.2025-07-11T12:01:51.213191561.patch
+examples/game/.game_description.fac.2025-07-11T12:07:30.698759380
+examples/game/.game_description.fac.2025-07-11T12:07:30.698759380.patch
+examples/game/.game_description.fac.2025-07-11T12:09:05.629825528
+examples/game/.game_description.fac.2025-07-11T12:09:05.629825528.patch
+examples/game/.game_description.fac.2025-07-11T12:09:24.124326780
+examples/game/.game_description.fac.2025-07-11T12:09:24.124326780.patch
+examples/game/.game_description.fac.2025-07-11T12:12:38.385595479
+examples/game/.game_description.fac.2025-07-11T12:12:38.385595479.patch
+examples/game/.game_description.fac.2025-07-13T23:19:41.390990570
+examples/game/.game_description.fac.2025-07-13T23:19:41.390990570.patch
+examples/game/.patch
+examples/game/cards.json-schema
+examples/game/fac.yaml
+examples/game/test.pdf
+examples/game/0ad/.cards.jsonl.fac
+examples/game/0ad/cards.jsonl
+examples/game/0ad/description.html
+examples/game/0ad/description.md
+examples/game/0ad/img/.τὸ γυμνάσιον.png.fac
+examples/game/0ad/img/.τὸ θέατρον.png.fac
+examples/game/0ad/img/.τὸ ξύλον.png.fac
+examples/game/0ad/img/.τὸ τεῖχος.png.fac
+examples/game/0ad/img/.τὸ ἐμπόριον.png.fac
+examples/game/0ad/img/.τὸ ἱερόν.png.fac
+examples/game/0ad/img/.τὸ ὄρος.png.fac
+examples/game/0ad/img/.ἡ βιβλιοθήκη.png.fac
+examples/game/0ad/img/.ἡ γυνή.png.fac
+examples/game/0ad/img/.ἡ οἰκία.png.fac
+examples/game/0ad/img/.ἡ σχολή.png.fac
+examples/game/0ad/img/.ἡ τροφή.png.fac
+examples/game/0ad/img/.ἡ ἀγορὰ.png.fac
+examples/game/0ad/img/.ἡ ἀποθήκη.png.fac
+examples/game/0ad/img/.ἡ ὕλη.png.fac
+examples/game/0ad/img/.ὁ Παρθενών.png.fac
+examples/game/0ad/img/.ὁ λίθος.png.fac
+examples/game/0ad/img/.ὁ πύργος.png.fac
+examples/game/0ad/img/.ὁ ἀγρός.png.fac
+examples/game/0ad/img/.ὁ ὁπλίτης.png.fac
+examples/game/0ad/pdf/buildings1.pdf
+examples/game/0ad/pdf/buildings2.pdf
+examples/game/0ad/pdf/buildings3.pdf
+examples/game/0ad/pdf/units.pdf
+examples/game/old/game_description.orig
+examples/game/old/llm_edit.sh
+examples/game/old/mk_vocab.sh
+examples/game/old/vocab.md
+examples/game/scripts/make_pdf.py
+examples/game/scripts/make_pdfs.sh
+examples/lessons/.fac.jsonl
+examples/lessons/fac.yaml
+examples/lessons/0001-verbs1/.lesson.md.fac
+examples/lessons/0001-verbs1/lesson.md
+examples/lessons/0001-verbs1/prompt
+examples/lyrics/friedman_todah
+examples/lyrics/friedman_yama
+examples/sandwich-method/fac.yaml
+examples/sandwich-method/pdf/percy-jackson-01-el-ladron-del-rayo-rick-riordan.pdf
+examples/sandwich-method/scripts/pdf2text.py
+examples/sandwich-method/text/percy-jackson-01-el-ladron-del-rayo-rick-riordan.pdf/content.txt
+src/fac/BuildSystem.py
+src/fac/Config.py
+src/fac/Errors.py
+src/fac/Fac.py
+src/fac/LLM.py
+src/fac/Logging.py
+src/fac/__main__.py
+src/fac/_version.py
+src/fac/io_utils.py
+src/fac/utils.py
+src/fac.egg-info/PKG-INFO
+src/fac.egg-info/SOURCES.txt
+src/fac.egg-info/dependency_links.txt
+src/fac.egg-info/entry_points.txt
+src/fac.egg-info/requires.txt
+src/fac.egg-info/top_level.txt
+src/fac/util/PrioritySet.py
+src/fac/util/misc.py
+src/fac/util/targets.py
+src/fac/util/templates.py
+src/loquere/__main__.py
+src/loquere/utils.py
+src/loquere/tools/create_file.py
+src/loquere/tools/fac_build.py
+src/loquere/tools/overwrite_file.py
+src/loquere/tools/read_file.py
+src/reporta/__main__.py
+tests/doctest.sh
+tmp/video_test.py

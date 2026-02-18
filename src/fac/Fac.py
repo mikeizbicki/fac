@@ -29,18 +29,6 @@ from fac.Logging import *
 #logger.setLevel(logging.DEBUG)
 logger.setLevel(logging.INFO)
 
-# on error go into interactive python
-import code
-import sys
-import traceback
-import pdb
-def hook(type, value, tb):
-    traceback.print_exception(type, value, tb)
-    pdb.post_mortem(tb)
-    #frame = tb.tb_frame
-    #code.interact(local={**frame.f_globals, **frame.f_locals})
-#sys.excepthook = hook
-
 
 def freeze(obj):
     """Recursively convert dicts to frozendicts and iterables to frozensets.
@@ -85,16 +73,18 @@ def freeze(obj):
 
 
 class BuildContext(BaseModel):
-    # we do not allow the BuildContext attributes to be modified after creation
-    # this ensures they are hashable
+    # we do not allow the BuildContext attributes to be modified after creation;
+    # this ensures BuildContext is hashable;
+    # it also prevents aliasing bugs
+    # (which I've unfortunately encountered a lot of)
     model_config = {
             'frozen': True,
             'arbitrary_types_allowed': True,
             }
 
-    ############################## 
+    ##############################
     # fields
-    ############################## 
+    ##############################
 
     # the target (as it appears in the fac.yaml, with no variable substitutions)
     normalized_target: str
@@ -121,9 +111,9 @@ class BuildContext(BaseModel):
     include_old: bool = False
     include_paths: list[str] | None = None
 
-    ############################## 
+    ##############################
     # methods
-    ############################## 
+    ##############################
 
     def __init__(self, **data):
         # we call freeze on all input data to convert dict to frozendict
@@ -153,7 +143,7 @@ class BuildContext(BaseModel):
 
         >>> doctest_vis(BuildContext(
         ...     normalized_target='example/$FOO/$BAR/outline.json',
-        ...     config={},
+        ...     config={'variables': {'TEST': ''}},
         ...     variables_resolved={'TEST': 'a\bb\nc', 'FOO': '1\n2\n3', 'BAR': 'x\ny'},
         ...     variables_unresolved={},
         ...     dependencies_built=[],
@@ -192,8 +182,36 @@ class BuildContext(BaseModel):
             TEST: "a\bb\nc"
         <BLANKLINE>
 
+        >>> BuildContext(
+        ...     normalized_target='example/$FOO/$BAR/outline.json',
+        ...     config={'variables': {'TEST': ''}},
+        ...     variables_resolved={'TEST': 'a\bb\nc', 'FOO': '', 'BAR': 'x\ny'},
+        ...     variables_unresolved={},
+        ...     dependencies_built=[],
+        ...     dependencies_building=[],
+        ...     dependencies_unresolved=[],
+        ...     ).split()
+        []
+
+        The following is a realworld BuildContext that was giving some problems.
+
+        >>> len(BuildContext(
+        ... normalized_target='sub$LEVEL1/outline.json',
+        ... config=frozendict({'cmd': 'cp basic.json sub$LEVEL1/outline.json', 'dependencies': frozenset({frozendict({'target': 'resources/$RESOURCE/about.json'}), frozendict({'target': 'outline.json'})}), 'variables': frozendict({'LEVEL1': "jq -r 'range(0; .sections | length)' outline.json", 'NAME': 'echo "d"\necho "e"\necho "f"'}), 'postreqs': frozenset({'resources/b/about.json', 'resources/a/about.json', 'resources/c/about.json'}), '_working_directory': '.', 'mime-type': 'text/json'}),
+        ... variables_resolved=frozendict({}),
+        ... variables_unresolved=frozendict({'LEVEL1': "jq -r 'range(0; .sections | length)' outline.json", 'NAME': 'echo "d"\necho "e"\necho "f"'}),
+        ... dependencies_unresolved=frozenset({frozendict({'target': 'outline.json'}), frozendict({'target': 'resources/$RESOURCE/about.json'})}),
+        ... dependencies_building=frozenset(),
+        ... dependencies_built=frozenset(),
+        ... include_prompt=None,
+        ... include_old=False,
+        ... include_paths=None,
+        ... ).split()) == 1
+        True
         '''
         splitting_variables = [var for var in self.target_variables() if '\n' in self.variables_resolved.get(var, '')]
+        if any([self.variables_resolved.get(var) == '' for var in self.target_variables()]):
+            return []
         splitting_values = [self.variables_resolved[var].split('\n') for var in splitting_variables]
         splits = list(itertools.product(*splitting_values))
 
@@ -231,11 +249,6 @@ class BuildContext(BaseModel):
                 # In practice, having a $ in a variable value
                 # has always been due to a bug in the code.
                 assert '$' not in value
-
-                # an empty target variable indicates
-                # the context should never have been created
-                if var in target_variables:
-                    assert value != ''
 
             # a variable can have at most one state
             for var in self.variables_resolved:
@@ -275,7 +288,8 @@ class BuildContext(BaseModel):
         target_variables = self.target_variables()
         for var, value in self.variables_resolved.items():
             if var in target_variables:
-                assert ''.join(value.split()) == value
+                assert ''.join(value.split('\n')) == value
+                assert value != ''
 
         # all variables must be resolved
         assert len(self.variables_unresolved) == 0
@@ -368,6 +382,10 @@ class BuildState:
         # values: a list of BuildContext instances that require the key
         self.required_for = defaultdict(lambda: [])
 
+    ########################################
+    # sanity checking
+    ########################################
+
     def assert_invariants(self):
         # no context can be in more than one state
         states = [
@@ -400,6 +418,10 @@ class BuildState:
                 self.contexts_built,
                 ):
             context.assert_invariants_buildable()
+
+    ########################################
+    # visualize state
+    ########################################
 
     def debug_short(self, submessage=False):
         logger.debug({'BuildState': {
@@ -470,6 +492,97 @@ class BuildState:
         print(40 * '=')
         print(yaml.dump(self._state_as_dict(), default_flow_style=False, sort_keys=False))
 
+    def _state_hash(self):
+        '''
+        Compute a hash of the states.
+        This is a debug utility function.
+        It is used to ensure that we do not get stuck in an infinite loop processing a cycle of states.
+
+        NOTE:
+        We do not implmement __hash__ because this object is mutable and not hashable.
+        '''
+        states = [
+            self.contexts_built,
+            self.contexts_buildable, 
+            self.contexts_waiting,
+            self.contexts_unresolved,
+            ]
+        return hash(freeze(states))
+
+    ########################################
+    # build files
+    ########################################
+
+    def build_all(self):
+        with logger.make_subtree():
+            # states will store a hash of BuildState at every iteration;
+            # we will use this set to ensure that we don't get stuck in an infinite loop
+            # repeating the same cycle of states forever;
+            # in theory, this should not be needed,
+            # and it is a sanity debug check to ensure our state transitions work correctly
+            states = set()
+            #self.debug_print(f'iter={len(states)}')
+            while not self.is_done():
+                state0 = self._state_as_dict()
+
+                # perform all state transitions
+                self.process_all_dependencies()
+                #state0 = self.debug_statediff(state0, f'iter={len(states)} -- deps')
+                #self.debug_print(f'iter={len(states)} -- deps')
+                self.assert_invariants()
+                self.process_all_buildable()
+                #state0 = self.debug_statediff(state0, f'iter={len(states)} -- build')
+                #self.debug_print(f'iter={len(states)} -- build')
+                self.assert_invariants()
+                self.process_all_variable()
+                #state0 = self.debug_statediff(state0, f'iter={len(states)} -- vars')
+                #self.debug_print(f'iter={len(states)} -- vars')
+                self.assert_invariants()
+                #self.debug_print(f'iter={len(states) + 1}')
+
+                # sanity infinite loop check
+                state = self._state_hash()
+                if state in states:
+                    logger.error('duplicate state detected')
+                    break
+                states.add(state)
+
+    def is_done(self):
+        return not any([
+            len(self.contexts_unresolved) > 0,
+            len(self.contexts_buildable) > 0,
+            len(self.contexts_waiting) > 0,
+            ])
+
+    ########################################
+    # state transition methods
+    ########################################
+
+    def add_target(self, target, required_for=None, include_prompt=None, include_old=False, include_paths=None):
+        matches = match_pattern_starstar(self.targets_dict.keys(), target)
+        for normalized_target, target_env in matches:
+            # build variables_unresolved
+            variables_unresolved = copy.deepcopy(self.targets_dict[normalized_target]['variables'])
+            for var in target_env:
+                if var in variables_unresolved:
+                    del variables_unresolved[var]
+
+            # build the context
+            context = BuildContext(
+                    normalized_target=normalized_target,
+                    config=self.targets_dict[normalized_target],
+                    variables_resolved=target_env,
+                    variables_unresolved=variables_unresolved,
+                    dependencies_built=[],
+                    dependencies_building=[],
+                    dependencies_unresolved=self.targets_dict[normalized_target]['dependencies'],
+                    include_prompt=include_prompt,
+                    include_old=include_old,
+                    include_paths=include_paths,
+                    )
+            self.required_for[context].append(required_for)
+            self._add_context(context)
+
     def _add_context(self, context):
         '''
         A BuildContext object should rarely be added directly to one of the states.
@@ -491,69 +604,6 @@ class BuildState:
                     self.contexts_buildable.add(context)
                 else:
                     self.contexts_unresolved.add(context)
-
-    def is_done(self):
-        return not any([
-            len(self.contexts_unresolved) > 0,
-            len(self.contexts_buildable) > 0,
-            len(self.contexts_waiting) > 0,
-            ])
-
-    def _state_hash(self):
-        '''
-        Compute a hash of the states.
-        This is a debug utility function.
-        It is used to ensure that we do not get stuck in an infinite loop processing a cycle of states.
-
-        NOTE:
-        We do not implmement __hash__ because this object is mutable and not hashable.
-        '''
-        states = [
-            self.contexts_built,
-            self.contexts_buildable, 
-            self.contexts_waiting,
-            self.contexts_unresolved,
-            ]
-        return hash(freeze(states))
-
-    def build_all(self):
-        with logger.make_subtree():
-            # states will store a hash of BuildState at every iteration;
-            # we will use this set to ensure that we don't get stuck in an infinite loop
-            # repeating the same cycle of states forever;
-            # in theory, this should not be needed,
-            # and it is a sanity debug check to ensure our state transitions work correctly
-            states = set()
-            self.debug_print(f'iter={len(states)}')
-            while not self.is_done():
-                state0 = self._state_as_dict()
-
-                # perform all state transitions
-                self.process_all_dependencies()
-                #state0 = self.debug_statediff(state0, f'iter={len(states)} -- deps')
-                #self.debug_print(f'iter={len(states)} -- deps')
-                self.assert_invariants()
-                self.process_all_buildable()
-                #state0 = self.debug_statediff(state0, f'iter={len(states)} -- build')
-                #self.debug_print(f'iter={len(states)} -- build')
-                self.assert_invariants()
-                self.process_all_variable()
-                #state0 = self.debug_statediff(state0, f'iter={len(states)} -- vars')
-                #self.debug_print(f'iter={len(states)} -- vars')
-                self.assert_invariants()
-                self.debug_print(f'iter={len(states) + 1}')
-
-                # sanity infinite loop check
-                state = self._state_hash()
-                if state in states:
-                    logger.error('duplicate state detected')
-                    break
-                states.add(state)
-
-
-    ########################################
-    # state transition methods
-    ########################################
 
     def process_all_waiting(self):
         logger.debug(f'process_all_waiting()')
@@ -632,21 +682,21 @@ class BuildState:
         except KeyError:
             return 0
         path = context.path()
-        logger.info(f'building {path}')
 
-        # sort portions of context for better logger output
-        context_dict = context.to_dict()
-        context_dict.get('dependencies_built', []).sort(key=lambda x: x.get('target'))
-        logger.info({'context': context_dict}, submessage=True)
-
-        self.contexts_built.add(context)
         if context.normalized_target not in self.targets_dict:
             pass
-            #logger.info(f'target not in self.target_dicts, cannot build', submessage=True)
+            logger.debug(f'target not in self.target_dicts, cannot build', submessage=True)
         else:
             future = build_context(context)
             asyncio.run(future)
+        self.contexts_built.add(context)
         self.built_paths.add(path)
+
+        for postreq in context.config.get('postreqs', []):
+            self.add_target(
+                    postreq,
+                    )
+
         return 1
 
     def process_all_dependencies(self):
@@ -737,7 +787,7 @@ class BuildState:
                             # build the context
                             context1 = BuildContext(
                                     normalized_target=normalized_target,
-                                    config=context.config,
+                                    config=self.targets_dict.get(normalized_target, {}),
                                     variables_resolved=variables_resolved,
                                     variables_unresolved=variables_unresolved,
                                     dependencies_built=[],
@@ -827,6 +877,7 @@ class BuildSystem:
     include_old: bool = False
     include_paths: list[str] = None
     allow_dirty: bool = False
+    auto_commit: bool = True
 
     def __post_init__(self):
         self.targets_dict = load_config(self.config_file)
@@ -844,116 +895,111 @@ class BuildSystem:
         if repo.working_dir != os.getcwd():
             logger.error('must be in root of git repo to run fac')
             raise DirtyRepo()
-        if not self.allow_dirty and repo.is_dirty(untracked_files=True):
+        if self.auto_commit and not self.allow_dirty and repo.is_dirty(untracked_files=True):
             logger.error('git repo is dirty; clean repo or use --allow_dirty')
             raise DirtyRepo()
 
         # actually build the targets
         for target in targets:
-            matches = match_pattern_starstar(self.targets_dict.keys(), target)
-            for normalized_target, target_env in matches:
-                # build variables_unresolved
-                variables_unresolved = copy.deepcopy(self.targets_dict[normalized_target]['variables'])
-                for var in target_env:
-                    if var in variables_unresolved:
-                        del variables_unresolved[var]
-
-                # build the context
-                context = BuildContext(
-                        normalized_target=normalized_target,
-                        config=self.targets_dict[normalized_target],
-                        variables_resolved=target_env,
-                        variables_unresolved=variables_unresolved,
-                        dependencies_built=[],
-                        dependencies_building=[],
-                        dependencies_unresolved=self.targets_dict[normalized_target]['dependencies'],
-                        include_prompt=self.include_prompt,
-                        include_old=self.include_old,
-                        include_paths=self.include_paths,
-                        )
-                self.build_state.required_for[context].append(None)
-                self.build_state._add_context(context)
-            self.build_state.build_all()
+            self.build_state.add_target(
+                    target,
+                    include_prompt=self.include_prompt,
+                    include_old=self.include_old,
+                    include_paths=self.include_paths,
+                    )
+        self.build_state.build_all()
 
         # add/commit the built targets
-        repo.git.add('.fac.jsonl')
-        for path in self.build_state.built_paths:
-            dirname = os.path.dirname(path)
-            filename = os.path.basename(path)
-            repo.git.add(path)
-            repo.git.add(f'./{dirname}/.{filename}.fac.log')
-            repo.git.add(f'./{dirname}/.{filename}.facjson')
-        commit_message=f'[bot] fac'
-        for target in targets:
-            commit_message += f" '{target}'"
-        if repo.index.diff('HEAD'):
-            # NOTE:
-            # we only commit if files were actually added;
-            # otherwise a large ugly warning will appear
-            repo.git.commit('-m', commit_message)
+        if self.auto_commit:
+            for path in self.build_state.built_paths:
+                dirname = os.path.dirname(path)
+                filename = os.path.basename(path)
+                repo.git.add(path)
+                try:
+                    repo.git.add('.fac.jsonl')
+                    repo.git.add(f'./{dirname}/.{filename}.fac.log')
+                    repo.git.add(f'./{dirname}/.{filename}.facjson')
+                except git.exc.GitCommandError:
+                    pass
+            commit_message=f'[bot] fac'
+            for target in targets:
+                commit_message += f" '{target}'"
+            if repo.index.diff('HEAD'):
+                # NOTE:
+                # we only commit if files were actually added;
+                # otherwise a large ugly warning will appear
+                repo.git.commit('-m', commit_message)
 
 
 ################################################################################
 
-async def build_context(context):
+def _get_file_timestamp(path):
+    '''
+    Get the timestamp a path was last modified.
+    This timestamp will be used to determine if a rebuild is required.
+
+    NOTE:
+    Other build systems (e.g. make) use the timestamp on the file system;
+    we uses a combination of the timestamp in git and the file system.
+    This difference is due to the fact that in ordinary build systems (like make)
+    the results of the build are never committed to the git repo,
+    but the results of our build are always committed to the git repo.
+    '''
+
+    if not os.path.isfile(path):
+        raise FileNotFoundError
+
+    # if a file is dirty or not in the repo,
+    # we use the last modified time on the harddrive
+
+    try:
+        # Git status returns empty if file is clean
+        result = repo.git.status('--porcelain', path)
+        is_file_dirty = len(result.strip()) > 0
+    except:
+        is_file_dirty = False
+
+    try:
+        # If file is tracked, this won't raise an exception
+        repo.git.ls_files('--error-unmatch', path)
+        is_path_untracked = False
+    except:
+        # File is untracked if it exists but ls-files fails
+        is_path_untracked = os.path.exists(path)
+
+    if is_file_dirty or is_path_untracked:
+        # FIXME:
+        # there can be bugs when clocks are not synced correctly;
+        # it is possible for git timestamps to be in the "future" for local machine
+        # this is likely to cause errors and we should warn about this
+        mtime = os.path.getmtime(path)
+        return mtime
+
+    # if the file has been committed to git and is clean,
+    # we use the git commit timestamp
+    commits = list(repo.iter_commits(paths=path, max_count=1))
+    if len(commits) > 0:
+        return commits[0].committed_date
+
+    # the above code should handle all possible cases,
+    # so this should never happen
+    assert False
+
+
+async def build_context(context, print_prompt=False, overwrite=False):
 
     # ensure sane
     context.assert_invariants_buildable()
+
+    ########################################
+    # generate prompt
+    ########################################
 
     # extract mime-type
     mimes = context.config['mime-type'].split('/')
     if len(mimes) != 2:
         logger.error(f"invalid mime-type: {context.config['mime-type']}")
     major_type, minor_type = mimes
-
-    # create output directory if needed
-    dirname = os.path.dirname(context.path())
-    if len(dirname) > 0:
-        os.makedirs(dirname, exist_ok=True)
-
-    ########################################
-    # build with shell
-    ########################################
-
-    if context.config.get('cmd'):
-        process = await asyncio.create_subprocess_shell(
-            context.config['cmd'],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT, # merge stderr into stdout
-            executable='/bin/bash',
-            env=variables_transitive_substitute({
-                **os.environ,
-                **context.variables_resolved,
-                'FAC_DEPENDENCIES': context.FAC_DEPENDENCIES(),
-                }),
-            )
-        try:
-            first_line = True
-            while True:
-                line = await process.stdout.readline()
-                if not line:
-                    break
-                if first_line:
-                    logger.warning('build command output:', submessage=True)
-                    first_line = False
-                logger.warning(line.decode().rstrip(), submessage=True)
-        except UnicodeDecodeError:
-            logger.warning('cannot decode stdout: UnicodeDecodeError')
-        await process.wait()
-
-        if process.returncode != 0:
-            stdout = await process.stdout.read()
-            logger.error(f"error running the following build script:", submessage=True)
-            for i, line in enumerate(context.config['cmd'].split('\n')):
-                logger.error(f"line {i+1}: {line}", submessage=True)
-            logger.error(stdout.decode('ascii'), submessage=True)
-            raise CommandExecutionError(process.returncode, stdout)
-
-        return
-
-    ########################################
-    # generate prompt
-    ########################################
 
     # first we generate the instructions for the llm,
     # which will be stored in the `prompt_cmd` variable.
@@ -979,22 +1025,19 @@ Generate the file "{context.path()}" based on the information below.
     else:
         prompt_description = ''
 
-    # next we compile all the documents that will be passed to the LLM,
-    # text documents are processed to form part of the prompt
-    # and binary files are stored in a list for later processing
+    # convert the dependencies into paths;
+    # NOTE:
+    # all_paths will contain paths of both text and binary files;
+    # any text files will be added directly into the prompt;
+    # binary_files will contain paths for non-text files (e.g. images),
+    # and these will be passed to the models later
     binary_files = []
+    all_paths = set()
     truncated_prompt = None
     dependencies = list(context.dependencies_built)
     dependencies += [{'target': path} for path in context.include_paths or []]
     files_prompt = ''
     if len(dependencies) > 0:
-        # NOTE:
-        # all_paths will contain paths of both text and binary files;
-        # any text files will be added directly into the prompt;
-        # binary_files will contain paths for non-text files (e.g. images),
-        # and these will be passed to the models later
-        binary_files = []
-        all_paths = set()
         for dep in dependencies:
             if dep.get('include', True):
                 all_paths.add(dep['target'])
@@ -1074,12 +1117,6 @@ Generate the file "{context.path()}" based on the information below.
     # construct the final prompt
     prompt = prompt_instructions + prompt_description + user_prompt + files_prompt + format_instructions
 
-    # possibly print prompt
-    if True: #self.print_prompt:
-        logger.info('prompt: |', submessage=True)
-        for line in prompt.split('\n'):
-            logger.info(f'  {line}', submessage=True)
-
     ########################################
     # filetype specific processing
     ########################################
@@ -1108,6 +1145,33 @@ Generate the file "{context.path()}" based on the information below.
             })
         messages.append(message)
 
+    ########################################
+    # should we actually build?
+    ########################################
+
+    # if the file is up-to-date (i.e. all dependencies are older),
+    # then we will not rebuild it
+    file_status = []
+    updated_deps = []
+    try:
+        do_build = True
+        context_path_committed_date = _get_file_timestamp(context.path())
+        for path in all_paths:
+            path_committed_date = _get_file_timestamp(path)
+            time_diff = context_path_committed_date - path_committed_date
+            if time_diff < 0:
+                updated_deps.append(path)
+        if updated_deps == []:
+            file_status.append('up-to-date')
+            do_build = False
+            if overwrite:
+                file_status.append('overwrite')
+                do_build = True
+        else:
+            file_status.append('out-of-date')
+    except FileNotFoundError:
+        file_status.append('new')
+
     # NOTE:
     # sometimes it is not necessary to rebuild a file even if the dependencies have been updated;
     # this can occur, for example, when the prompt depends only on part of the dependencies;
@@ -1121,13 +1185,82 @@ Generate the file "{context.path()}" based on the information below.
         contents_changed = True
     encoded_prompt = json.dumps(data).encode('utf-8')
     hash_prompt_new = hashlib.sha256(encoded_prompt).hexdigest()
-    prompt_changed = hash_prompt_new != facjson.get('hash_prompt')
+    if facjson.get('hash_prompt'):
+        prompt_changed = hash_prompt_new != facjson.get('hash_prompt')
+        if prompt_changed:
+            file_status.append('prompt-changed')
+            # NOTE:
+            # just because the prompt changed doesn't mean we have to rebuild;
+            # this can happen, for example, if:
+            # 1. the user manually edited/committed a file
+            # 2. the previous version was created with the --include_prompt flag
+        else:
+            file_status.append('prompt-same')
+            do_build = False
 
-    # skip building file if not needed
-    if not (contents_changed or prompt_changed):
-        logger.info('content/prompts match, building not needed', submessage=True)
+    # log build
+    logger.info(f'{file_status} {context.path()}')
+    if do_build:
+        # sort portions of context for better logger output
+        context_dict = context.to_dict()
+        context_dict.get('dependencies_built', []).sort(key=lambda x: x.get('target'))
+        logger.info({'context': context_dict}, submessage=True)
 
-    # actually build the file
+        # possibly print prompt
+        if print_prompt:
+            logger.info('prompt: |', submessage=True)
+            for line in prompt.split('\n'):
+                logger.info(f'  {line}', submessage=True)
+
+    # early exit
+    if not do_build:
+        return
+
+    ########################################
+    # actually build the file!
+    ########################################
+
+    # create output directory if needed
+    dirname = os.path.dirname(context.path())
+    if len(dirname) > 0:
+        os.makedirs(dirname, exist_ok=True)
+
+    # build with shell command
+    if context.config.get('cmd'):
+        process = await asyncio.create_subprocess_shell(
+            context.config['cmd'],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, # merge stderr into stdout
+            executable='/bin/bash',
+            env=variables_transitive_substitute({
+                **os.environ,
+                **context.variables_resolved,
+                'FAC_DEPENDENCIES': context.FAC_DEPENDENCIES(),
+                }),
+            )
+        try:
+            first_line = True
+            while True:
+                line = await process.stdout.readline()
+                if not line:
+                    break
+                if first_line:
+                    logger.warning('build command output:', submessage=True)
+                    first_line = False
+                logger.warning(line.decode().rstrip(), submessage=True)
+        except UnicodeDecodeError:
+            logger.warning('cannot decode stdout: UnicodeDecodeError')
+        await process.wait()
+
+        if process.returncode != 0:
+            stdout = await process.stdout.read()
+            logger.error(f"error running the following build script:", submessage=True)
+            for i, line in enumerate(context.config['cmd'].split('\n')):
+                logger.error(f"line {i+1}: {line}", submessage=True)
+            logger.error(stdout.decode('ascii'), submessage=True)
+            raise CommandExecutionError(process.returncode, stdout)
+
+    # build with llm
     else:
         mode = 'wb'
         logger.info('building with LLM...', submessage=True)
@@ -1141,12 +1274,16 @@ Generate the file "{context.path()}" based on the information below.
             response_format=response_format,
             )
 
-        # record new hashes for future skip-tests
-        with open(context.path(), 'rb') as fin:
-            hash_contents = hashlib.sha256(fin.read()).hexdigest()
-            facjson.set('hash_contents', hash_contents)
-        facjson.set('hash_prompt', hash_prompt_new)
-        facjson.save()
+    ########################################
+    # post-build processing
+    ########################################
+
+    # record new hashes for future skip-tests
+    with open(context.path(), 'rb') as fin:
+        hash_contents = hashlib.sha256(fin.read()).hexdigest()
+        facjson.set('hash_contents', hash_contents)
+    facjson.set('hash_prompt', hash_prompt_new)
+    facjson.save()
 
     # validate file
     validate_file(context.path(), context.config.get('schema_file'))
