@@ -8,13 +8,17 @@ dynamic = ["version", "dependencies"]
 
 [project.scripts]
 fac = "fac.__main__:main"
+fac_server = "fac.server:main"
+
+[tool.setuptools.packages.find]
+include = ["fac", "fac.*"]
+
+[tool.setuptools.package-data]
+fac = ["templates/*", "static/*"]
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
 
-[tool.setuptools.packages.find]
-where = ["src"]
-
 [tool.setuptools_scm]
-version_file = "src/fac/_version.py"
+version_file = "fac/_version.py"
 local_scheme = "node-and-timestamp"

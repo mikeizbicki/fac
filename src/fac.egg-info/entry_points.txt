@@ -1,2 +1,0 @@
-[console_scripts]
-fac = fac.__main__:main

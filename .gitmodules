@@ -1,6 +1,3 @@
-[submodule "stories"]
-    path = stories
-    url = https://github.com/mikeizbicki/fabula-machina
 [submodule "tests/fac_test_project1"]
 	path = tests/fac_test1_basicproject
     url = https://github.com/mikeizbicki/fac_test_project1
@@ -13,12 +10,12 @@
 [submodule "tests/fac_test_greek"]
 	path = tests/greek
 	url = https://github.com/mikeizbicki/fac_test_greek
-[submodule "greek_story"]
-	path = greek
-	url = https://github.com/mikeizbicki/greek
 [submodule "fac_test_depvars"]
 	path = tests/fac_test4_dependency_only_variables
 	url = https://github.com/mikeizbicki/fac_test_depvars
 [submodule "fac_test6_recursive_dependencies"]
 	path = tests/fac_test6_recursive_dependencies
 	url = https://github.com/mikeizbicki/fac_test6_recursive_dependencies
+[submodule "tests/fac-video"]
+	path = tests/video
+	url = https://github.com/mikeizbicki/fac-video

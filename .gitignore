@@ -1,10 +1,31 @@
-.env
-venv
+# project specific
+fac/_version.py
 tmp
 
-*.png
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+
+# Environment variables
+.env
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Vim
 *.sw?
-*.text*
-__pycache__
-*.pyc
-.log*
+*~
+
+# pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# mypy
+.mypy_cache/

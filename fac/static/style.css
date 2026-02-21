@@ -1,0 +1,10 @@
+.tree-node {
+    margin-left: 20px;
+}
+.tree-label {
+    cursor: pointer;
+    user-select: none;
+}
+.tree-label:hover {
+    background-color: #eee;
+}
