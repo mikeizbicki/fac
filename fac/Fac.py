@@ -402,7 +402,6 @@ class BuildState(Routable):
     # sanity checking
     ########################################
 
-    @route('/assert_invariants', ['GET'])
     def assert_invariants(self):
         # no context can be in more than one state
         states = [

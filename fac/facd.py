@@ -77,17 +77,18 @@ async def stream_logs():
     )
 
 ################################################################################
-# other routes
+# run the server
 ################################################################################
 
-# register the BuildState routes
-targets_dict = load_config('fac.yaml')
-state = BuildState(targets_dict)
-app.include_router(state.router)
-
-# run the server
 def main():
+    # register the BuildState routes
+    targets_dict = load_config('fac.yaml')
+    state = BuildState(targets_dict)
+    app.include_router(state.router)
+    
+    # run the server
     uvicorn.run(app, host='localhost', port=8080)
+
 
 if __name__ == '__main__':
     main()
