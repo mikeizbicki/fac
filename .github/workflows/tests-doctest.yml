@@ -26,4 +26,4 @@ jobs:
         env:
           # hardcoded version number needed to fix a race condition in the automatic version numbering
           SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0"
-      - run: pytest --doctest-modules src/fac
+      - run: pytest --doctest-modules fac
