@@ -717,6 +717,7 @@ class BuildState(Routable):
 
                     if context.normalized_target not in self.targets_dict:
                         logger.debug(f'target not in self.target_dicts, cannot build', submessage=True)
+                        future = executor.submit(lambda: None)
                     else:
                         future = executor.submit(asyncio.run, build_context(context))
                     futures[future] = context
@@ -931,7 +932,7 @@ class BuildState(Routable):
                     dependencies_unresolved=context.dependencies_unresolved,
                     include_prompt=context.include_prompt,
                     include_old=context.include_old,
-                    include_files=context.include_files,
+                    include_paths=context.include_paths,
                     overwrite=context.overwrite,
                     )
             self.required_for[context1].append(context)
