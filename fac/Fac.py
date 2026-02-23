@@ -1,7 +1,7 @@
 # stdlib imports
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 import asyncio
 import glob
 import hashlib
@@ -118,8 +118,11 @@ class BuildContext(BaseModel):
     include_old: bool = False
     include_paths: list[str] | None = None
 
-    # set to True to overwrite the file even if it already exists
-    overwrite: bool = False
+    # possible values:
+    # - dryrun (never builds; used for checking what paths exist for a target)
+    # - build (builds only when needed; this is the typical case)
+    # - overwrite (always builds)
+    mode: Literal['dryrun', 'build', 'overwrite']
 
     ##############################
     # methods
@@ -238,6 +241,13 @@ class BuildContext(BaseModel):
                 })
             contexts1.append(context1)
         return contexts1
+
+    def dependencies_mode(self):
+        if self.mode in ['overwrite', 'build']:
+            return 'build'
+        elif self.mode in ['dryrun']:
+            return 'dryrun'
+        assert False
 
     def assert_invariants(self):
         try:
@@ -388,6 +398,7 @@ class BuildState(Routable):
         self.contexts_buildable = PrioritySet(priority_func=lambda x: x.build_priority())
         self.contexts_waiting = set()
         self.contexts_built = set()
+        self.contexts_notbuilt = set()
 
         # store the full dependency graph of BuildContext instances
         # keys: a BuildContext
@@ -440,12 +451,16 @@ class BuildState(Routable):
     ########################################
 
     @route('/get_states', ['GET'])
-    def get_states(self):
+    def get_states(self, show_len=False):
+        f = lambda x: x
+        if show_len:
+            f = len
         return {
-            'contexts_unresolved': self.contexts_unresolved,
-            'contexts_buildable': self.contexts_buildable.to_list(),
-            'contexts_waiting': self.contexts_waiting,
-            'contexts_built': self.contexts_built,
+            'contexts_unresolved': f(self.contexts_unresolved),
+            'contexts_buildable': f(self.contexts_buildable.to_list()),
+            'contexts_waiting': f(self.contexts_waiting),
+            'contexts_built': f(self.contexts_built),
+            'contexts_notbuilt': f(self.contexts_notbuilt),
             }
 
     def debug_short(self, submessage=False):
@@ -569,7 +584,19 @@ class BuildState(Routable):
                 # sanity infinite loop check
                 state = self._state_hash()
                 if state in states:
-                    logger.error('duplicate state detected --- this is a bug in fac')
+                    all_dryrun = True
+                    for context in itertools.chain(
+                            self.contexts_buildable.to_list(),
+                            self.contexts_waiting,
+                            self.contexts_unresolved,
+                            ):
+                        if context.mode != 'dryrun':
+                            all_dryrun = False
+                    if not all_dryrun:
+                        logger.error('duplicate state detected --- this is a bug in fac')
+                    else:
+                        logger.warning('evaluated as far as dryrun will allow')
+                        logger.warning(self.get_states(show_len=True), submessage=True)
                     break
                 states.add(state)
 
@@ -592,7 +619,7 @@ class BuildState(Routable):
             include_prompt=None,
             include_old=False,
             include_paths=None,
-            overwrite=False,
+            mode='build',
             ):
         print(f"target={target}")
         matches = match_pattern_starstar(self.targets_dict.keys(), target)
@@ -615,7 +642,7 @@ class BuildState(Routable):
                     include_prompt=include_prompt,
                     include_old=include_old,
                     include_paths=include_paths,
-                    overwrite=overwrite,
+                    mode=mode,
                     )
             self.required_for[context].append(required_for)
             self._add_context(context)
@@ -717,17 +744,20 @@ class BuildState(Routable):
 
                     if context.normalized_target not in self.targets_dict:
                         logger.debug(f'target not in self.target_dicts, cannot build', submessage=True)
-                        future = executor.submit(lambda: None)
+                        future = executor.submit(lambda: True)
                     else:
                         future = executor.submit(asyncio.run, build_context(context))
                     futures[future] = context
 
                 for future in as_completed(futures):
                     context = futures[future]
-                    future.result()
+                    path_valid = future.result()
                     path = context.path()
-                    self.contexts_built.add(context)
-                    self.built_paths.add(path)
+                    if path_valid:
+                        self.contexts_built.add(context)
+                        self.built_paths.add(path)
+                    else:
+                        self.contexts_notbuilt.add(context)
 
                     for postreq in context.config.get('postreqs', []):
                         self.add_target(postreq)
@@ -865,6 +895,7 @@ class BuildState(Routable):
                                     dependencies_built=[],
                                     dependencies_building=[],
                                     dependencies_unresolved=dependencies_unresolved,
+                                    mode=context.dependencies_mode(),
                                     )
                             self.required_for[context1].append(context)
                             self._add_context(context1)
@@ -933,7 +964,7 @@ class BuildState(Routable):
                     include_prompt=context.include_prompt,
                     include_old=context.include_old,
                     include_paths=context.include_paths,
-                    overwrite=context.overwrite,
+                    mode=context.mode,
                     )
             self.required_for[context1].append(context)
             self._add_context(context1)
@@ -949,6 +980,7 @@ class BuildSystem:
 
     # build settings
     overwrite: bool = False
+    dryrun: bool = False
     include_prompt: str = None
     include_old: bool = False
     include_paths: list[str] = None
@@ -977,12 +1009,17 @@ class BuildSystem:
 
         # actually build the targets
         for target in targets:
+            mode = 'build'
+            if self.overwrite:
+                mode = 'overwrite'
+            if self.dryrun:
+                mode = 'dryrun'
             self.build_state.add_target(
                     target,
                     include_prompt=self.include_prompt,
                     include_old=self.include_old,
                     include_paths=self.include_paths,
-                    overwrite=self.overwrite,
+                    mode=mode,
                     )
         self.build_state.build_all()
 
@@ -1067,6 +1104,15 @@ def _get_file_timestamp(path):
 
 
 async def build_context(context, print_prompt=False):
+    '''
+    Returns whether the context resolves to a valid path.
+    This can be true if either the path already existed and was up-to-date (i.e. a build was not needed),
+    or if the build completed and was successful.
+
+    Should only return False if context.dryrun and a build is needed.
+
+    If building fails, and exception is thrown.
+    '''
 
     # ensure sane
     context.assert_invariants_buildable()
@@ -1275,9 +1321,6 @@ Generate the file "{context.path()}" based on the information below.
         if updated_deps == []:
             file_status.append('up-to-date')
             do_build = False
-            if context.overwrite:
-                file_status.append('overwrite')
-                do_build = True
         else:
             file_status.append('out-of-date')
     except FileNotFoundError:
@@ -1309,6 +1352,16 @@ Generate the file "{context.path()}" based on the information below.
             file_status.append('prompt-same')
             do_build = False
 
+    # overwrite do_build based on mode
+    if context.mode == 'overwrite':
+        file_status.append('overwrite')
+        do_build = True
+
+    do_build_without_dryrun = do_build
+    if do_build and context.mode == 'dryrun':
+        file_status.append('dryrun')
+        do_build = False
+
     # log build
     logger.info(f'{file_status} {context.path()}')
     if do_build:
@@ -1325,7 +1378,7 @@ Generate the file "{context.path()}" based on the information below.
 
     # early exit
     if not do_build:
-        return
+        return not do_build_without_dryrun
 
     ########################################
     # actually build the file!
@@ -1398,6 +1451,8 @@ Generate the file "{context.path()}" based on the information below.
 
     # validate file
     validate_file(context.path(), context.config.get('schema_file'))
+
+    return True
 
 ################################################################################
 
