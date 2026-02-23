@@ -162,6 +162,7 @@ class BuildContext(BaseModel):
         ...     dependencies_built=[],
         ...     dependencies_building=[],
         ...     dependencies_unresolved=[],
+        ...     mode='build',
         ...     ).split())
         - normalized_target: example/$FOO/$BAR/outline.json
           variables_resolved:
@@ -203,6 +204,7 @@ class BuildContext(BaseModel):
         ...     dependencies_built=[],
         ...     dependencies_building=[],
         ...     dependencies_unresolved=[],
+        ...     mode='build',
         ...     ).split()
         []
 
@@ -219,6 +221,7 @@ class BuildContext(BaseModel):
         ... include_prompt=None,
         ... include_old=False,
         ... include_paths=None,
+        ... mode='build',
         ... ).split()) == 1
         True
         '''
