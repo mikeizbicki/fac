@@ -934,17 +934,47 @@ class BuildState(Routable):
                 self.contexts_unresolved.add(context)
                 continue
 
-            # process the next variable and process context
-            var = next(iter(context.variables_unresolved))
+            # do not process if dependencies not yet built
+            # NOTE:
+            # we use a janky system to track dependencies of variables that has two key parts:
+            # 1) the variables are guaranteed to appear in "sorted" order;
+            #    so the next variable is guaranteed not to depend on any subsequent vars
+            # 2) if a variable requires one of the dependencies to already be built,
+            #    it must contain the dependency string exactly inside of it
+            # if either of these two conditions are met,
+            # we are not ready to process the context and so we re-add it
+            # FIXME:
+            # there's lots of non-intuitive behavior here;
+            # at the very least, it needs better documentation;
+            # I think it is likely possible to construct a fac.yaml that will lead to cyclcal dependencies,
+            # and we should figure out a way to check for for those
+            var, expr = next(iter(context.variables_unresolved.items()))
+            has_dependencies = True
+            for dep in context.dependencies_unresolved:
+                if dep['target'] in expr:
+                    has_dependencies = False
+            if not has_dependencies:
+                self._add_context(context)
+                continue
+
+            # actually evaluate the variable
             try:
                 value = eval_var(
                         var,
-                        context.variables_unresolved[var],
+                        expr,
                         context.variables_resolved,
                         )
-            except VariableEvaluationError:
-                self._add_context(context)
-                continue
+            except VariableEvaluationError as e:
+                logger.error(f'Error evaluating variable ${var} in target {context.normalized_target}')
+                logger.error('stderr: |', submessage=True)
+                for line in (e.cmd.stderr.strip()).strip().split('\n'):
+                    logger.error('  ' + line, submessage=True)
+                if len(e.cmd.stdout.strip()) > 0:
+                    logger.error('stdout: |', submessage=True)
+                    for line in (e.cmd.stdout).strip().split('\n'):
+                        logger.error('  ' + line, submessage=True)
+                logger.error({'context': context.to_dict()}, submessage=True)
+                raise e
 
             # create new dictionaries for the resolved/unresolved variables;
             # then transfer the variable from unresolved to resolved;
@@ -2012,19 +2042,19 @@ def eval_var(var, expr, env):
         env=env,
         )
     if cmd.returncode != 0:
-        logger.error(f'Failed to evaluate variable {var}')
-        lines = expr.split('\n')
-        if len(lines) == 1:
-            logger.error(f'build command: {expr}', submessage=True)
-        else:
-            logger.error(f'build command:', submessage=True)
-            for line in lines:
-                logger.error(line, submessage=True)
-        for line in (cmd.stderr.strip() + '\n' + cmd.stdout).strip().split('\n'):
-            logger.error(line, submessage=True)
-        logger.error('env:', submessage=True)
-        for var in env:
-            logger.error(f' - {var}: "{env[var].replace("\n", "\\n")}"', submessage=True)
+        #logger.error(f'Failed to evaluate variable {var}')
+        #lines = expr.split('\n')
+        #if len(lines) == 1:
+            #logger.error(f'build command: {expr}', submessage=True)
+        #else:
+            #logger.error(f'build command:', submessage=True)
+            #for line in lines:
+                #logger.error(line, submessage=True)
+        #for line in (cmd.stderr.strip() + '\n' + cmd.stdout).strip().split('\n'):
+            #logger.error(line, submessage=True)
+        #logger.error('env:', submessage=True)
+        #for var in env:
+            #logger.error(f' - {var}: "{env[var].replace("\n", "\\n")}"', submessage=True)
         raise VariableEvaluationError(var, expr, env, cmd)
     stdout = cmd.stdout.strip()
 
@@ -2047,6 +2077,7 @@ def eval_var(var, expr, env):
 
 class VariableEvaluationError(FACError):
     def __init__(self, var, expr, context, result):
+        self.cmd = result
         errorstrs = [
             f'error evaluating {var}=$({expr})',
             f'context={context}',

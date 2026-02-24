@@ -22,6 +22,7 @@ def str2bool(v):
 
 
 def main():
+    from fac.Errors import FACError
     import fac.Config
     import fac.Fac
     import argcomplete
@@ -69,7 +70,10 @@ def main():
     del bs_args['dev']
     build_system = fac.Fac.BuildSystem(**bs_args)
 
-    build_system.build_targets(args.targets)
+    try:
+        build_system.build_targets(args.targets)
+    except FACError:
+        pass
 
 if __name__ == '__main__':
     main()
