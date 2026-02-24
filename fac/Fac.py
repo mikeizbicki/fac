@@ -624,8 +624,12 @@ class BuildState(Routable):
             include_paths=None,
             mode='build',
             ):
-        print(f"target={target}")
         matches = match_pattern_starstar(self.targets_dict.keys(), target)
+
+        if len(matches) == 0:
+            logger.error(f'target {target} has no match in fac.yaml')
+            raise FACError()
+
         for normalized_target, target_env in matches:
             # build variables_unresolved
             variables_unresolved = copy.deepcopy(self.targets_dict[normalized_target]['variables'])
