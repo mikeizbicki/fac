@@ -68,7 +68,7 @@ async def log_generator():
     finally:
         log_queues.discard(queue)
 
-@app.get("/logs/stream")
+@app.get("/logs_stream")
 async def stream_logs():
     return StreamingResponse(
         log_generator(),
@@ -85,6 +85,11 @@ def main():
     targets_dict = load_config('fac.yaml')
     state = BuildState(targets_dict)
     app.include_router(state.router)
+    app.include_router(state.built_paths.router)
+
+    # pre-run certain commands
+    state.full_dryrun()
+    state.build_daemon()
     
     # run the server
     uvicorn.run(app, host='localhost', port=8080)

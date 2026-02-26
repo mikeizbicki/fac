@@ -1,0 +1,125 @@
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: system-ui, -apple-system, sans-serif;
+    margin: 20px;
+    background: #fafafa;
+}
+
+#targets-container {
+    max-width: 900px;
+}
+
+.tree-node {
+    margin: 4px 0;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #fff;
+}
+
+.tree-node.intermediate {
+    border-color: #a0a0a0;
+    background: #fafafa;
+}
+
+.tree-node.target {
+    border-color: #a0a0a0;
+    background: #f5f5f5;
+}
+
+.tree-node.path {
+    border-color: #4a90d9;
+    background: #fff;
+}
+
+.tree-header {
+    display: flex;
+    align-items: center;
+    padding: 6px 10px;
+    cursor: pointer;
+}
+
+.tree-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 10px;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    margin-right: 6px;
+    color: #666;
+    transition: transform 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tree-toggle:hover {
+    color: #333;
+}
+
+.tree-node.expanded > .tree-header > .tree-toggle {
+    transform: rotate(90deg);
+}
+
+.tree-label {
+    font-weight: 500;
+}
+
+.tree-node.intermediate > .tree-header > .tree-label {
+    font-weight: 600;
+    color: #333;
+}
+
+.tree-children {
+    margin-left: 20px;
+    padding-left: 12px;
+    padding-bottom: 8px;
+    border-left: 1px solid #ddd;
+    display: none;
+}
+
+.tree-node.expanded > .tree-children {
+    display: block;
+}
+
+.metadata {
+    margin: 0 10px 10px 36px;
+    display: none;
+}
+
+.tree-node.leaf.expanded > .metadata {
+    display: block;
+}
+
+.metadata > div {
+    font-size: 0.8em;
+    color: #666;
+    margin: 2px 0;
+}
+
+.metadata > div::before {
+    content: attr(data-label) ": ";
+    font-weight: 600;
+    color: #888;
+}
+
+.meta-content {
+    white-space: pre-wrap;
+    font-family: monospace;
+    background: #f8f8f8;
+    padding: 4px 6px;
+    border-radius: 3px;
+    margin-top: 4px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.meta-status {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+}

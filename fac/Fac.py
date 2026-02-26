@@ -7,6 +7,8 @@ import glob
 import hashlib
 import itertools
 import subprocess
+import threading
+import time
 
 # external imports
 from deepdiff import DeepDiff
@@ -20,6 +22,7 @@ import yaml
 # project imports
 from fac.Config import *
 from fac.Errors import *
+from fac.FileManager import FileManager
 from fac.LLM import LLM, LLMError
 from fac.io_utils import *
 from fac.util.FastAPI import *
@@ -393,8 +396,8 @@ class BuildState(Routable):
     def __init__(self, targets_dict):
         super().__init__()
 
-        self.built_paths = set()
         self.targets_dict = targets_dict
+        self.built_paths = FileManager(targets_dict) # basically a set() plus FastAPI endpoints
 
         # the states
         self.contexts_unresolved = set()
@@ -408,8 +411,33 @@ class BuildState(Routable):
         # values: a list of BuildContext instances that require the key
         self.required_for = defaultdict(lambda: [])
 
-    @route('/list_targets', ['GET'])
+    @route('/list_targets', ['GET'], response_model=dict[str, Any])
     def list_targets(self):
+        '''
+        Returns a dictionary of targets defined in the 'fac.yaml' file.
+        The keys are targets and values are config information describing how to build the targets.
+
+        ---
+
+        A target is a string that may contain shell-like variables
+        that describes a formula for generating paths.
+
+        For example:
+
+        1. The target "example.json" contains no variables and will always resolve to path "example.json".
+
+        2. The target "chapters/$CHAPTER/outline.json" with CHAPTER=['0001', '0002', '0003']
+            will resolve to the three paths:
+            - 'chapters/0001/outline.json'
+            - 'chapters/0002/outline.json'
+            - 'chapters/0003/outline.json'
+
+        The web API exposes methods for working with targets and their corresponding paths,
+        but does not expose an interface for working with the variables.
+        The variable definitions are exposed in the config values returned by this endpoint for debug purposes,
+        but they are processed internally by the webserver and shouldn't be used in the web app.
+        Any web applications must be built to handle arbitrary paths existing for each target.
+        '''
         return self.targets_dict
 
     ########################################
@@ -433,7 +461,7 @@ class BuildState(Routable):
         # every built_path has a corresponding context
         # (and vice versa)
         context_paths = set([context.path() for context in self.contexts_built])
-        assert context_paths == self.built_paths
+        assert context_paths == set(self.built_paths)
 
         # all BuildContexts must satisfy their invariants
         for context in itertools.chain(
@@ -455,6 +483,10 @@ class BuildState(Routable):
 
     @route('/get_states', ['GET'])
     def get_states(self, show_len=False):
+        '''
+        Returns the internal state of the build system.
+        This is for debugging purposes only and no web service should rely on this endpoint.
+        '''
         f = lambda x: x
         if show_len:
             f = len
@@ -556,7 +588,29 @@ class BuildState(Routable):
     # build files
     ########################################
 
-    @route('/build_all', ['POST'])
+    def build_daemon(self):
+        '''
+        Creates a daemon thread that will continuously build any targets added with `add_target`.
+        This method is used by facd to ensure that the /add_targets endpoint results in builds.
+
+        FIXME:
+        It is not safe to run build_all manually after build_daemon has been called.
+        We should probably add a lock to the build_all function to prevent this from happening.
+        '''
+        # to make this method idempotent,
+        # we will store the daemon thread as an attribute;
+        # then we only create the daemon thread if this attr doesn't exist
+        if hasattr(self, '_daemon_thread') and self._daemon_thread.is_alive():
+            return self._daemon_thread
+
+        def daemon_loop():
+            while True:
+                self.build_all()
+                time.sleep(1)
+        self._daemon_thread = threading.Thread(target=daemon_loop, daemon=True)
+        self._daemon_thread.start()
+        return self._daemon_thread
+
     def build_all(self):
         with logger.make_subtree():
             # states will store a hash of BuildState at every iteration;
@@ -598,8 +652,9 @@ class BuildState(Routable):
                     if not all_dryrun:
                         logger.error('duplicate state detected --- this is a bug in fac')
                     else:
-                        logger.warning('evaluated as far as dryrun will allow')
-                        logger.warning(self.get_states(show_len=True), submessage=True)
+                        pass
+                        #logger.warning('evaluated as far as dryrun will allow')
+                        #logger.warning(self.get_states(show_len=True), submessage=True)
                     break
                 states.add(state)
 
@@ -614,6 +669,18 @@ class BuildState(Routable):
     # state transition methods
     ########################################
 
+    def full_dryrun(self):
+        '''
+        Perform a dryrun on all targets in the fac.yaml.
+        The dryrun lets fac know which files are already built.
+
+        FIXME:
+        This should probably be done automatically on facd startup.
+        '''
+        for target in self.targets_dict:
+            self.add_target(target, mode='dryrun')
+        self.build_all()
+
     @route('/add_target', ['POST'])
     def add_target(
             self,
@@ -624,6 +691,12 @@ class BuildState(Routable):
             include_paths=None,
             mode='build',
             ):
+        '''
+        Registers a target with the build system,
+        but does not directly build it.
+        The next time the build_all function is called,
+        all pending targets will be built.
+        '''
         matches = match_pattern_starstar(self.targets_dict.keys(), target)
 
         if len(matches) == 0:
