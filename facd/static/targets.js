@@ -12,12 +12,21 @@
 // - deleted: shows a red flash overlay, then fades out and removes the node
 // - stale/building/queued: shows a persistent gray overlay with status text
 //   and a spinner for building/queued states
+//
+// File editing:
+// - Text files can be edited inline by clicking the edit button
+// - Shows a textarea with submit/cancel buttons
+// - Submitting shows a spinner overlay until the file update is confirmed
+//
+// File deletion:
+// - Files can be deleted via the delete button in the content menu
 
 let targets = {};
 let treeRoot = {};
 let targetOrder = [];
 let knownPaths = new Set();
 let nodeElements = {};
+let pendingEdits = new Set();
 
 function insertIntoTree(path, isTarget, metadata = null) {
     const parts = path.split('/');
@@ -137,6 +146,10 @@ function updateNodeStatus(path, status, isNew) {
         setTimeout(() => {
             overlay.remove();
         }, 1000);
+
+        if (pendingEdits.has(path)) {
+            pendingEdits.delete(path);
+        }
     } else if (status === 'stale' || status === 'building' || status === 'queued') {
         const overlay = createStatusOverlay(status, false);
         nodeEl.appendChild(overlay);
@@ -173,6 +186,148 @@ function removePathFromTree(path) {
             }
         }
     }
+}
+
+function createContentMenu(path, mimeType, contentWrapper, originalContent) {
+    const menu = document.createElement('div');
+    menu.className = 'content-menu';
+
+    const isTextFile = mimeType && mimeType.startsWith('text/');
+
+    if (isTextFile) {
+        const editBtn = document.createElement('button');
+        editBtn.innerHTML = '✏️';
+        editBtn.title = 'Edit';
+        editBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            startEditing(path, contentWrapper, originalContent);
+        });
+        menu.appendChild(editBtn);
+    }
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.innerHTML = '🗑️';
+    deleteBtn.title = 'Delete';
+    deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteFile(path);
+    });
+    menu.appendChild(deleteBtn);
+
+    return menu;
+}
+
+function startEditing(path, contentWrapper, originalContent) {
+    const contentDiv = contentWrapper.querySelector('.content');
+    const menuDiv = contentWrapper.querySelector('.content-menu');
+    
+    if (!contentDiv) return;
+
+    if (menuDiv) {
+        menuDiv.style.display = 'none';
+    }
+
+    const textarea = document.createElement('textarea');
+    textarea.className = 'content-editor';
+    textarea.value = originalContent || '';
+    
+    const actions = document.createElement('div');
+    actions.className = 'content-actions';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'cancel-btn';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        cancelEditing(path, contentWrapper, originalContent);
+    });
+
+    const submitBtn = document.createElement('button');
+    submitBtn.className = 'submit-btn';
+    submitBtn.textContent = 'Submit';
+    submitBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        submitEdit(path, textarea.value, contentWrapper);
+    });
+
+    actions.appendChild(cancelBtn);
+    actions.appendChild(submitBtn);
+
+    contentDiv.style.display = 'none';
+    contentWrapper.appendChild(textarea);
+    contentWrapper.appendChild(actions);
+    textarea.focus();
+}
+
+function cancelEditing(path, contentWrapper, originalContent) {
+    const textarea = contentWrapper.querySelector('.content-editor');
+    const actions = contentWrapper.querySelector('.content-actions');
+    const contentDiv = contentWrapper.querySelector('.content');
+    const menuDiv = contentWrapper.querySelector('.content-menu');
+
+    if (textarea) textarea.remove();
+    if (actions) actions.remove();
+    if (contentDiv) contentDiv.style.display = 'block';
+    if (menuDiv) menuDiv.style.display = 'flex';
+}
+
+function submitEdit(path, newContent, contentWrapper) {
+    const textarea = contentWrapper.querySelector('.content-editor');
+    const actions = contentWrapper.querySelector('.content-actions');
+
+    if (textarea) textarea.disabled = true;
+    if (actions) actions.style.display = 'none';
+
+    const overlay = document.createElement('div');
+    overlay.className = 'submitting-overlay';
+    const spinner = document.createElement('div');
+    spinner.className = 'status-spinner';
+    overlay.appendChild(spinner);
+    contentWrapper.appendChild(overlay);
+
+    pendingEdits.add(path);
+
+    fetch(`/edit_file/${encodeURIComponent(path)}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ content: newContent })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Failed to edit file');
+        }
+        return response.json();
+    })
+    .catch(error => {
+        console.error('Error editing file:', error);
+        pendingEdits.delete(path);
+        overlay.remove();
+        if (textarea) textarea.disabled = false;
+        if (actions) actions.style.display = 'flex';
+        alert('Failed to edit file: ' + error.message);
+    });
+}
+
+function deleteFile(path) {
+    if (!confirm(`Are you sure you want to delete "${path}"?`)) {
+        return;
+    }
+
+    fetch(`/delete_file/${encodeURIComponent(path)}`, {
+        method: 'DELETE'
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Failed to delete file');
+        }
+        return response.json();
+    })
+    .catch(error => {
+        console.error('Error deleting file:', error);
+        alert('Failed to delete file: ' + error.message);
+    });
 }
 
 function renderTree(node, container, pathParts = []) {
@@ -228,18 +383,52 @@ function renderTree(node, container, pathParts = []) {
             metadataContainer.className = 'metadata';
 
             const mimeType = child._metadata['mime-type'] || '';
-            const showContent = mimeType.includes('text');
+            const showContent = mimeType.startsWith('text/');
 
             for (const [metaKey, metaValue] of Object.entries(child._metadata)) {
-                if (metaKey === 'content' && !showContent) {
+                if (metaKey === 'content') {
                     continue;
                 }
                 const metaDiv = document.createElement('div');
-                metaDiv.className = `meta-${metaKey}`;
+                metaDiv.className = 'meta-info';
                 metaDiv.setAttribute('data-label', metaKey);
                 metaDiv.textContent = metaValue;
                 metadataContainer.appendChild(metaDiv);
             }
+
+            if (showContent && child._metadata.content !== undefined) {
+                const contentWrapper = document.createElement('div');
+                contentWrapper.className = 'content-wrapper';
+
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'content';
+                contentDiv.textContent = child._metadata.content;
+                contentWrapper.appendChild(contentDiv);
+
+                const contentMenu = createContentMenu(
+                    child._fullPath,
+                    mimeType,
+                    contentWrapper,
+                    child._metadata.content
+                );
+                contentWrapper.appendChild(contentMenu);
+
+                metadataContainer.appendChild(contentWrapper);
+            } else if (!showContent) {
+                const contentWrapper = document.createElement('div');
+                contentWrapper.className = 'content-wrapper';
+
+                const contentMenu = createContentMenu(
+                    child._fullPath,
+                    mimeType,
+                    contentWrapper,
+                    null
+                );
+                contentWrapper.appendChild(contentMenu);
+
+                metadataContainer.appendChild(contentWrapper);
+            }
+
             div.appendChild(metadataContainer);
 
             const status = child._metadata.status;
@@ -309,9 +498,16 @@ function monitorFiles() {
         } else {
             insertIntoTree(path, false, metadata);
             knownPaths.add(path);
-            refreshDisplay();
+            
+            if (!pendingEdits.has(path)) {
+                refreshDisplay();
+            }
 
             if (status === 'fresh') {
+                if (pendingEdits.has(path)) {
+                    pendingEdits.delete(path);
+                    refreshDisplay();
+                }
                 updateNodeStatus(path, status, isNew);
             } else if (status === 'stale' || status === 'building' || status === 'queued') {
                 updateNodeStatus(path, status, false);
