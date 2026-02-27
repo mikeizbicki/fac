@@ -11,7 +11,7 @@ fac = "fac.__main__:main"
 facd = "facd.__main__:main"
 
 [tool.setuptools.packages.find]
-include = ["fac", "fac.*"]
+include = ["fac", "fac.*", "facd"]
 
 [tool.setuptools.package-data]
 fac = ["templates/*", "static/*"]

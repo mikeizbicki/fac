@@ -23,11 +23,11 @@ from fac.Fac import BuildState
 app = FastAPI(title="fac build server")
 
 # prepare /static mount point
-static_path = files("fac") / "static"
+static_path = files("facd") / "static"
 app.mount("/static", StaticFiles(directory=static_path), name="static")
 
 # preparte templates
-templates_path = files("fac") / "templates"
+templates_path = files("facd") / "templates"
 templates = Jinja2Templates(directory=str(templates_path))
 
 
