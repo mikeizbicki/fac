@@ -8,7 +8,7 @@ dynamic = ["version", "dependencies"]
 
 [project.scripts]
 fac = "fac.__main__:main"
-facd = "fac.facd:main"
+facd = "fac.__main__:facd_main"
 
 [tool.setuptools.packages.find]
 include = ["fac", "fac.*"]
