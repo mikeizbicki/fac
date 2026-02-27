@@ -5,7 +5,7 @@
 // via Server-Sent Events from /monitor_files. The tree displays both targets
 // (build recipes with potential variables like $CHAPTER) and paths (actual
 // files generated from those targets). Nodes are expandable/collapsible,
-// with internal nodes expanded by default and leaf nodes collapsed by default.
+// with all nodes expanded by default.
 
 let targets = {};
 let treeRoot = {};
@@ -32,7 +32,7 @@ function insertIntoTree(path, isTarget, metadata = null) {
                     _isPath: !isTarget,
                     _metadata: metadata,
                     _order: isTarget ? targetOrder.indexOf(path) : null,
-                    _expanded: false
+                    _expanded: true
                 };
             } else if (!isTarget && metadata) {
                 current._children[nodeKey]._metadata = metadata;
