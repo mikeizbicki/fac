@@ -19,7 +19,7 @@
 // - Submitting shows a spinner overlay until the file update is confirmed
 //
 // File deletion:
-// - Files can be deleted via the delete button in the content menu
+// - Files can be deleted via the delete button in the header menu
 
 let targets = {};
 let treeRoot = {};
@@ -188,44 +188,61 @@ function removePathFromTree(path) {
     }
 }
 
-function createContentMenu(path, mimeType, contentWrapper, originalContent) {
+function createHeaderMenu(path, mimeType, isTarget, originalContent) {
     const menu = document.createElement('div');
-    menu.className = 'content-menu';
+    menu.className = 'header-menu';
 
     const isTextFile = mimeType && mimeType.startsWith('text/');
 
-    if (isTextFile) {
-        const editBtn = document.createElement('button');
-        editBtn.innerHTML = '✏️';
-        editBtn.title = 'Edit';
-        editBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            startEditing(path, contentWrapper, originalContent);
-        });
-        menu.appendChild(editBtn);
-    }
-
-    const deleteBtn = document.createElement('button');
-    deleteBtn.innerHTML = '🗑️';
-    deleteBtn.title = 'Delete';
-    deleteBtn.addEventListener('click', (e) => {
+    // Build button
+    const buildBtn = document.createElement('button');
+    buildBtn.innerHTML = '🔨';
+    buildBtn.title = 'Build';
+    buildBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        deleteFile(path);
+        if (isTarget) {
+            window.buildTarget(path, '');
+        } else {
+            window.buildTarget(path, '');
+        }
     });
-    menu.appendChild(deleteBtn);
+    menu.appendChild(buildBtn);
+
+    if (!isTarget) {
+        if (isTextFile) {
+            const editBtn = document.createElement('button');
+            editBtn.innerHTML = '✏️';
+            editBtn.title = 'Edit';
+            editBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const nodeEl = nodeElements[path];
+                if (nodeEl) {
+                    const contentWrapper = nodeEl.querySelector('.content-wrapper');
+                    if (contentWrapper) {
+                        startEditing(path, contentWrapper, originalContent);
+                    }
+                }
+            });
+            menu.appendChild(editBtn);
+        }
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.innerHTML = '🗑️';
+        deleteBtn.title = 'Delete';
+        deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteFile(path);
+        });
+        menu.appendChild(deleteBtn);
+    }
 
     return menu;
 }
 
 function startEditing(path, contentWrapper, originalContent) {
     const contentDiv = contentWrapper.querySelector('.content');
-    const menuDiv = contentWrapper.querySelector('.content-menu');
     
     if (!contentDiv) return;
-
-    if (menuDiv) {
-        menuDiv.style.display = 'none';
-    }
 
     const textarea = document.createElement('textarea');
     textarea.className = 'content-editor';
@@ -263,12 +280,10 @@ function cancelEditing(path, contentWrapper, originalContent) {
     const textarea = contentWrapper.querySelector('.content-editor');
     const actions = contentWrapper.querySelector('.content-actions');
     const contentDiv = contentWrapper.querySelector('.content');
-    const menuDiv = contentWrapper.querySelector('.content-menu');
 
     if (textarea) textarea.remove();
     if (actions) actions.remove();
     if (contentDiv) contentDiv.style.display = 'block';
-    if (menuDiv) menuDiv.style.display = 'flex';
 }
 
 function submitEdit(path, newContent, contentWrapper) {
@@ -330,6 +345,27 @@ function deleteFile(path) {
     });
 }
 
+function createTargetBuildMenu(fullPath) {
+    const buildMenu = document.createElement('div');
+    buildMenu.className = 'target-build-menu';
+
+    const textarea = document.createElement('textarea');
+    textarea.className = 'build-prompt-input';
+    textarea.placeholder = 'Enter build prompt (optional)...';
+    buildMenu.appendChild(textarea);
+
+    const submitBtn = document.createElement('button');
+    submitBtn.className = 'build-submit-btn';
+    submitBtn.textContent = 'Build';
+    submitBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.buildTarget(fullPath, textarea.value);
+    });
+    buildMenu.appendChild(submitBtn);
+
+    return buildMenu;
+}
+
 function renderTree(node, container, pathParts = []) {
     if (!node._children) return;
 
@@ -376,6 +412,29 @@ function renderTree(node, container, pathParts = []) {
         label.textContent = child._name;
         header.appendChild(label);
 
+        // Add header menu for paths (with build, edit, delete buttons)
+        if (child._isPath && child._metadata) {
+            const mimeType = child._metadata['mime-type'] || '';
+            const headerMenu = createHeaderMenu(
+                child._fullPath,
+                mimeType,
+                false,
+                child._metadata.content
+            );
+            header.appendChild(headerMenu);
+        }
+
+        // Add header menu for targets (with just build button)
+        if (child._isTarget) {
+            const headerMenu = createHeaderMenu(
+                child._fullPath,
+                null,
+                true,
+                null
+            );
+            header.appendChild(headerMenu);
+        }
+
         div.appendChild(header);
 
         if (child._isPath && child._metadata) {
@@ -405,27 +464,6 @@ function renderTree(node, container, pathParts = []) {
                 contentDiv.textContent = child._metadata.content;
                 contentWrapper.appendChild(contentDiv);
 
-                const contentMenu = createContentMenu(
-                    child._fullPath,
-                    mimeType,
-                    contentWrapper,
-                    child._metadata.content
-                );
-                contentWrapper.appendChild(contentMenu);
-
-                metadataContainer.appendChild(contentWrapper);
-            } else if (!showContent) {
-                const contentWrapper = document.createElement('div');
-                contentWrapper.className = 'content-wrapper';
-
-                const contentMenu = createContentMenu(
-                    child._fullPath,
-                    mimeType,
-                    contentWrapper,
-                    null
-                );
-                contentWrapper.appendChild(contentMenu);
-
                 metadataContainer.appendChild(contentWrapper);
             }
 
@@ -438,9 +476,9 @@ function renderTree(node, container, pathParts = []) {
             }
         }
 
-        if (child._isTarget || child._isPath) {
-            const fullPath = child._fullPath;
-            const buildMenu = window.createBuildMenu(child, fullPath, child._isTarget);
+        // Add target build menu (textarea + build button) for targets
+        if (child._isTarget) {
+            const buildMenu = createTargetBuildMenu(child._fullPath);
             div.appendChild(buildMenu);
         }
 
