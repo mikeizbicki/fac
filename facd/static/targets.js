@@ -32,7 +32,8 @@ function insertIntoTree(path, isTarget, metadata = null) {
                     _isPath: !isTarget,
                     _metadata: metadata,
                     _order: isTarget ? targetOrder.indexOf(path) : null,
-                    _expanded: true
+                    _expanded: true,
+                    _fullPath: path
                 };
             } else if (!isTarget && metadata) {
                 current._children[nodeKey]._metadata = metadata;
@@ -138,6 +139,13 @@ function renderTree(node, container, pathParts = []) {
                 metadataContainer.appendChild(metaDiv);
             }
             div.appendChild(metadataContainer);
+        }
+
+        // Add build menu for leaf nodes (targets and paths)
+        if (child._isTarget || child._isPath) {
+            const fullPath = child._fullPath;
+            const buildMenu = window.createBuildMenu(child, fullPath, child._isTarget);
+            div.appendChild(buildMenu);
         }
 
         if (child._children) {

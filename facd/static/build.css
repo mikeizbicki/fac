@@ -1,0 +1,161 @@
+/* build.css
+ * Styles for the build action menu on leaf nodes.
+ * Provides buttons for build, build with prompt, edit, and delete actions.
+ */
+
+.build-menu {
+    margin: 8px 10px 10px 36px;
+    padding: 10px;
+    background: #f0f4f8;
+    border-radius: 4px;
+    border: 1px solid #d0d8e0;
+    display: none;
+}
+
+.tree-node.leaf.expanded > .build-menu {
+    display: block;
+}
+
+.build-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.build-btn {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85em;
+    font-weight: 500;
+    transition: background-color 0.15s ease;
+}
+
+.build-btn.build {
+    background: #4a90d9;
+    color: white;
+}
+
+.build-btn.build:hover {
+    background: #3a7bc8;
+}
+
+.build-btn.build-prompt {
+    background: #6b5b95;
+    color: white;
+}
+
+.build-btn.build-prompt:hover {
+    background: #5a4a84;
+}
+
+.build-btn.edit {
+    background: #f5a623;
+    color: white;
+}
+
+.build-btn.edit:hover {
+    background: #e09512;
+}
+
+.build-btn.delete {
+    background: #d9534f;
+    color: white;
+}
+
+.build-btn.delete:hover {
+    background: #c9433f;
+}
+
+.build-btn:disabled {
+    background: #ccc;
+    color: #888;
+    cursor: not-allowed;
+}
+
+.build-variables {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #d0d8e0;
+}
+
+.build-variables-title {
+    font-size: 0.8em;
+    font-weight: 600;
+    color: #666;
+    margin-bottom: 8px;
+}
+
+.build-variable-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.build-variable-label {
+    font-size: 0.8em;
+    font-weight: 500;
+    color: #444;
+    min-width: 80px;
+}
+
+.build-variable-input {
+    flex: 1;
+    padding: 4px 8px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    font-size: 0.85em;
+}
+
+.build-variable-input:focus {
+    outline: none;
+    border-color: #4a90d9;
+}
+
+.build-prompt-container {
+    margin-top: 10px;
+    display: none;
+}
+
+.build-prompt-container.visible {
+    display: block;
+}
+
+.build-prompt-label {
+    font-size: 0.8em;
+    font-weight: 600;
+    color: #666;
+    margin-bottom: 4px;
+}
+
+.build-prompt-input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    font-size: 0.85em;
+    resize: vertical;
+    min-height: 60px;
+}
+
+.build-prompt-input:focus {
+    outline: none;
+    border-color: #6b5b95;
+}
+
+.build-status {
+    margin-top: 8px;
+    font-size: 0.8em;
+    color: #666;
+}
+
+.build-status.success {
+    color: #5cb85c;
+}
+
+.build-status.error {
+    color: #d9534f;
+}
