@@ -1,13 +1,19 @@
 import asyncio
 import json
+import os
 from typing import AsyncGenerator
 
 from fac.util.FastAPI import *
 from fac.util.targets import *
 
-from fastapi import Request
+from fastapi import Request, HTTPException
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from watchfiles import awatch, Change
+
+
+class EditFileRequest(BaseModel):
+    content: str
 
 
 class FileManager(Routable):
@@ -50,6 +56,16 @@ class FileManager(Routable):
         self.files[path]["status"] = "stale"
         self._notify(path)
 
+    def _validate_path(self, path: str) -> None:
+        """Validate that path is safe (no directory traversal, no absolute paths)."""
+        if os.path.isabs(path):
+            raise HTTPException(status_code=400, detail="Absolute paths are not allowed")
+        if ".." in path.split(os.sep):
+            raise HTTPException(status_code=400, detail="Directory traversal is not allowed")
+        normalized = os.path.normpath(path)
+        if normalized.startswith(".."):
+            raise HTTPException(status_code=400, detail="Directory traversal is not allowed")
+
     ##############################
     # set interface
     ##############################
@@ -88,11 +104,11 @@ class FileManager(Routable):
 
     def _file_event(self, path: str) -> dict:
         info = self.files[path]
-        if info['status'] == 'deleted':
-            content = None
-        else:
+        try:
             with open(path, "r") as f:
                 content = f.read()
+        except FileNotFoundError:
+            content = None
         return {
             "path": path,
             "content": content,
@@ -141,6 +157,8 @@ class FileManager(Routable):
         - target: the target in 'fac.yaml' that the specified path was generated from
         - status:
             - "fresh": the file exists and is up-to-date
+            - "building": the file is currently being built
+            - "queued": the file is queued to be built in the future
             - "stale": the file exists but needs to be rebuilt because dependencies have been modified
             - "deleted": the file has been deleted
         ```
@@ -152,3 +170,69 @@ class FileManager(Routable):
             self._event_stream(request),
             media_type="text/event-stream",
         )
+
+    @route("/edit_file/{path:path}", methods=["PUT"])
+    async def edit_file(self, path: str, body: EditFileRequest) -> dict:
+        '''
+        Edit a file's contents.
+
+        Only works for files with mime-types starting with "text/".
+        The file must already be tracked by the FileManager.
+
+        Args:
+            path: The relative path to the file
+            body: JSON body with "content" field containing the new file contents
+
+        Returns:
+            {"status": "ok", "path": path}
+        '''
+        self._validate_path(path)
+
+        if path not in self.files:
+            raise HTTPException(status_code=404, detail=f"File not tracked: {path}")
+
+        mime_type = self.files[path].get("mime-type", "")
+        if not mime_type.startswith("text/"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot edit file with mime-type '{mime_type}'. Only text/* files are editable."
+            )
+
+        # Ensure parent directory exists
+        parent_dir = os.path.dirname(path)
+        if parent_dir and not os.path.exists(parent_dir):
+            os.makedirs(parent_dir, exist_ok=True)
+
+        with open(path, "w") as f:
+            f.write(body.content)
+
+        self.files[path]["status"] = "fresh"
+        self._notify(path)
+
+        return {"status": "ok", "path": path}
+
+    @route("/delete_file/{path:path}", methods=["DELETE"])
+    async def delete_file(self, path: str) -> dict:
+        '''
+        Delete a file.
+
+        The file must already be tracked by the FileManager.
+
+        Args:
+            path: The relative path to the file
+
+        Returns:
+            {"status": "ok", "path": path}
+        '''
+        self._validate_path(path)
+
+        if path not in self.files:
+            raise HTTPException(status_code=404, detail=f"File not tracked: {path}")
+
+        if os.path.exists(path):
+            os.remove(path)
+
+        self.files[path]["status"] = "deleted"
+        self._notify(path)
+
+        return {"status": "ok", "path": path}
