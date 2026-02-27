@@ -1,11 +1,6 @@
+from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse
-from fastapi.responses import StreamingResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from importlib.resources import files
-from pydantic import BaseModel
 from typing import Optional, Set
 import asyncio
 import logging
@@ -15,12 +10,39 @@ from fac.Logging import *
 from fac.Config import load_config
 from fac.Fac import BuildState
 
+from fastapi import FastAPI, APIRouter, HTTPException, Request
+from fastapi.responses import HTMLResponse
+from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 
 ################################################################################
 # FastAPI setup
 ################################################################################
 
-app = FastAPI(title="fac build server")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # the lifespan function allows us to create/destroy variables
+    # that will be used when running FastAPI
+    # but not when the file is loaded in other contexts (e.g. doctests)
+
+    # register routes state routes
+    targets_dict = load_config('fac.yaml')
+    state = BuildState(targets_dict)
+    app.include_router(state.router)
+    app.include_router(state.built_paths.router)
+
+    # pre-run certain commands
+    state.full_dryrun()
+    state.build_daemon()
+
+    yield
+
+    # cleanup code here
+    await state.built_paths.shutdown()
+
+app = FastAPI(title="fac build server", lifespan=lifespan)
 
 # prepare /static mount point
 static_path = files("facd") / "static"
@@ -81,19 +103,7 @@ async def stream_logs():
 ################################################################################
 
 def main():
-    # register the BuildState routes
-    targets_dict = load_config('fac.yaml')
-    state = BuildState(targets_dict)
-    app.include_router(state.router)
-    app.include_router(state.built_paths.router)
-
-    # pre-run certain commands
-    state.full_dryrun()
-    state.build_daemon()
-    
-    # run the server
-    uvicorn.run(app, host='localhost', port=8080)
-
+    uvicorn.run(app, host='localhost', port=8080, timeout_graceful_shutdown=1)
 
 if __name__ == '__main__':
     main()

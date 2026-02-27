@@ -104,14 +104,14 @@ function renderTree(node, container, pathParts = []) {
 
         const header = document.createElement('div');
         header.className = 'tree-header';
+        header.addEventListener('click', () => {
+            const currentPath = [...pathParts];
+            toggleNode(key, currentPath);
+        });
 
         const toggle = document.createElement('button');
         toggle.className = 'tree-toggle';
         toggle.innerHTML = '&#9654;';
-        toggle.addEventListener('click', () => {
-            const currentPath = [...pathParts];
-            toggleNode(key, currentPath);
-        });
         header.appendChild(toggle);
 
         const label = document.createElement('span');
