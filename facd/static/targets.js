@@ -6,10 +6,18 @@
 // (build recipes with potential variables like $CHAPTER) and paths (actual
 // files generated from those targets). Nodes are expandable/collapsible,
 // with all nodes expanded by default.
+//
+// Status handling:
+// - fresh: shows a flash overlay ("new" or "modified") that fades after 1s
+// - deleted: shows a red flash overlay, then fades out and removes the node
+// - stale/building/queued: shows a persistent gray overlay with status text
+//   and a spinner for building/queued states
 
 let targets = {};
 let treeRoot = {};
 let targetOrder = [];
+let knownPaths = new Set();
+let nodeElements = {};
 
 function insertIntoTree(path, isTarget, metadata = null) {
     const parts = path.split('/');
@@ -74,6 +82,99 @@ function toggleNode(nodeKey, pathParts) {
     }
 }
 
+function createStatusOverlay(status, isNew) {
+    const overlay = document.createElement('div');
+    overlay.className = 'status-overlay';
+
+    const textSpan = document.createElement('span');
+    textSpan.className = 'status-overlay-text';
+
+    if (status === 'fresh') {
+        overlay.classList.add('flash-overlay');
+        textSpan.textContent = isNew ? 'new' : 'modified';
+    } else if (status === 'deleted') {
+        overlay.classList.add('flash-overlay', 'deleted');
+        textSpan.textContent = 'deleted';
+    } else if (status === 'stale' || status === 'building' || status === 'queued') {
+        overlay.classList.add('persistent-overlay');
+        textSpan.textContent = status;
+
+        if (status === 'building' || status === 'queued') {
+            const spinner = document.createElement('div');
+            spinner.className = 'status-spinner';
+            overlay.appendChild(textSpan);
+            overlay.appendChild(spinner);
+            return overlay;
+        }
+    }
+
+    overlay.appendChild(textSpan);
+    return overlay;
+}
+
+function updateNodeStatus(path, status, isNew) {
+    const nodeEl = nodeElements[path];
+    if (!nodeEl) return;
+
+    const existingOverlay = nodeEl.querySelector('.status-overlay');
+    if (existingOverlay) {
+        existingOverlay.remove();
+    }
+
+    if (status === 'deleted') {
+        const overlay = createStatusOverlay(status, false);
+        nodeEl.appendChild(overlay);
+        nodeEl.classList.add('fading-out');
+        setTimeout(() => {
+            removePathFromTree(path);
+            delete nodeElements[path];
+            knownPaths.delete(path);
+            refreshDisplay();
+        }, 1500);
+    } else if (status === 'fresh') {
+        const overlay = createStatusOverlay(status, isNew);
+        nodeEl.appendChild(overlay);
+        setTimeout(() => {
+            overlay.remove();
+        }, 1000);
+    } else if (status === 'stale' || status === 'building' || status === 'queued') {
+        const overlay = createStatusOverlay(status, false);
+        nodeEl.appendChild(overlay);
+    }
+}
+
+function removePathFromTree(path) {
+    const parts = path.split('/');
+    let current = treeRoot;
+    const stack = [{ node: treeRoot, key: null }];
+
+    for (let i = 0; i < parts.length - 1; i++) {
+        const part = parts[i];
+        if (current._children && current._children[part]) {
+            current = current._children[part];
+            stack.push({ node: current, key: part });
+        } else {
+            return;
+        }
+    }
+
+    const lastPart = parts[parts.length - 1];
+    const nodeKey = `path:${lastPart}`;
+    if (current._children && current._children[nodeKey]) {
+        delete current._children[nodeKey];
+    }
+
+    for (let i = stack.length - 1; i >= 0; i--) {
+        const { node, key } = stack[i];
+        if (node._children && Object.keys(node._children).length === 0 && node._isIntermediate) {
+            if (i > 0) {
+                const parent = stack[i - 1].node;
+                delete parent._children[key];
+            }
+        }
+    }
+}
+
 function renderTree(node, container, pathParts = []) {
     if (!node._children) return;
 
@@ -94,6 +195,7 @@ function renderTree(node, container, pathParts = []) {
         } else if (child._isPath) {
             div.classList.add('path');
             div.classList.add('leaf');
+            nodeElements[child._fullPath] = div;
         } else if (child._isIntermediate) {
             div.classList.add('intermediate');
         }
@@ -139,9 +241,14 @@ function renderTree(node, container, pathParts = []) {
                 metadataContainer.appendChild(metaDiv);
             }
             div.appendChild(metadataContainer);
+
+            const status = child._metadata.status;
+            if (status && status !== 'fresh') {
+                const overlay = createStatusOverlay(status, false);
+                div.appendChild(overlay);
+            }
         }
 
-        // Add build menu for leaf nodes (targets and paths)
         if (child._isTarget || child._isPath) {
             const fullPath = child._fullPath;
             const buildMenu = window.createBuildMenu(child, fullPath, child._isTarget);
@@ -162,6 +269,7 @@ function renderTree(node, container, pathParts = []) {
 function refreshDisplay() {
     const container = document.getElementById('targets-container');
     container.innerHTML = '';
+    nodeElements = {};
     renderTree(treeRoot, container);
 }
 
@@ -183,14 +291,32 @@ function monitorFiles() {
 
     eventSource.onmessage = (event) => {
         const data = JSON.parse(event.data);
+        const path = data.path;
+        const status = data.status;
+        const isNew = !knownPaths.has(path);
+
         const metadata = {
             target: data.target,
             status: data.status,
             'mime-type': data['mime-type'],
             content: data.content
         };
-        insertIntoTree(data.path, false, metadata);
-        refreshDisplay();
+
+        if (status === 'deleted') {
+            if (knownPaths.has(path)) {
+                updateNodeStatus(path, status, false);
+            }
+        } else {
+            insertIntoTree(path, false, metadata);
+            knownPaths.add(path);
+            refreshDisplay();
+
+            if (status === 'fresh') {
+                updateNodeStatus(path, status, isNew);
+            } else if (status === 'stale' || status === 'building' || status === 'queued') {
+                updateNodeStatus(path, status, false);
+            }
+        }
     };
 }
 
