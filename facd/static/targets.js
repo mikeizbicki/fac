@@ -7,32 +7,22 @@
 // files generated from those targets). Nodes are expandable/collapsible,
 // with all nodes expanded by default.
 //
-// Status handling:
-// - fresh: shows a flash overlay ("new" or "modified") that fades after 1s
-// - deleted: shows a red flash overlay, then fades out and removes the node
-// - stale/building/queued: shows a persistent gray overlay with status text
-//   and a spinner for building/queued states
-//
 // Component System API:
 // ---------------------
-// Other JavaScript files can register components to extend the tree view
-// functionality without modifying this file.
+// window.registerComponent(action, callback) - Register a callback for an action:
+//   - "addNode": callback(nodeElement) called when a node is added to the DOM
+//   - "statusChange": callback(nodeElement, status, isNew) called on status updates
 //
-// window.registerTargetsComponent(component) - Register a component object with:
-//   - name: string - Unique identifier for the component
-//   - renderHeaderButtons(ctx): Returns array of button elements for the header menu
-//     ctx = { path, isTarget, mimeType, metadata, nodeElement }
-//   - renderNodeContent(ctx): Returns DOM element to append inside the tree node
-//     ctx = { path, isTarget, mimeType, metadata, nodeElement, contentWrapper }
-//   - onStatusChange(ctx): Called when a node's status changes
-//     ctx = { path, status, isNew, nodeElement }
+// Node elements have data attributes:
+//   - data-path: full path of the target/file
+//   - data-is-target: "true" if this is a target, absent for paths
+//   - data-mime-type: MIME type (paths only)
+//   - data-status: current status (paths only)
+//   - data-content: file content for text files (paths only)
 //
 // window.getNodeElement(path) - Get the DOM element for a path
 // window.refreshTargetsDisplay() - Force a re-render of the entire tree
-// window.pendingEdits - Set of paths currently being edited (add path to prevent
-//   refresh during edits, component should remove when edit completes)
-//
-// All component methods are optional. Components are called in registration order.
+// window.pendingEdits - Set of paths currently being edited
 
 let targets = {};
 let treeRoot = {};
@@ -40,10 +30,16 @@ let targetOrder = [];
 let knownPaths = new Set();
 let nodeElements = {};
 window.pendingEdits = new Set();
-let registeredComponents = [];
 
-window.registerTargetsComponent = function(component) {
-    registeredComponents.push(component);
+let componentCallbacks = {
+    addNode: [],
+    statusChange: []
+};
+
+window.registerComponent = function(action, callback) {
+    if (componentCallbacks[action]) {
+        componentCallbacks[action].push(callback);
+    }
 };
 
 window.getNodeElement = function(path) {
@@ -117,48 +113,13 @@ function toggleNode(nodeKey, pathParts) {
     }
 }
 
-function createStatusOverlay(status, isNew) {
-    const overlay = document.createElement('div');
-    overlay.className = 'status-overlay';
-
-    const textSpan = document.createElement('span');
-    textSpan.className = 'status-overlay-text';
-
-    if (status === 'fresh') {
-        overlay.classList.add('flash-overlay');
-        textSpan.textContent = isNew ? 'new' : 'modified';
-    } else if (status === 'deleted') {
-        overlay.classList.add('flash-overlay', 'deleted');
-        textSpan.textContent = 'deleted';
-    } else if (status === 'stale' || status === 'building' || status === 'queued') {
-        overlay.classList.add('persistent-overlay');
-        textSpan.textContent = status;
-
-        if (status === 'building' || status === 'queued') {
-            const spinner = document.createElement('div');
-            spinner.className = 'status-spinner';
-            overlay.appendChild(textSpan);
-            overlay.appendChild(spinner);
-            return overlay;
-        }
-    }
-
-    overlay.appendChild(textSpan);
-    return overlay;
-}
-
 function updateNodeStatus(path, status, isNew) {
     const nodeEl = nodeElements[path];
     if (!nodeEl) return;
 
-    const existingOverlay = nodeEl.querySelector('.status-overlay');
-    if (existingOverlay) {
-        existingOverlay.remove();
-    }
+    nodeEl.dataset.status = status;
 
     if (status === 'deleted') {
-        const overlay = createStatusOverlay(status, false);
-        nodeEl.appendChild(overlay);
         nodeEl.classList.add('fading-out');
         setTimeout(() => {
             removePathFromTree(path);
@@ -166,27 +127,14 @@ function updateNodeStatus(path, status, isNew) {
             knownPaths.delete(path);
             refreshDisplay();
         }, 1500);
-    } else if (status === 'fresh') {
-        const overlay = createStatusOverlay(status, isNew);
-        nodeEl.appendChild(overlay);
-        setTimeout(() => {
-            overlay.remove();
-        }, 1000);
-
-        if (window.pendingEdits.has(path)) {
-            window.pendingEdits.delete(path);
-        }
-    } else if (status === 'stale' || status === 'building' || status === 'queued') {
-        const overlay = createStatusOverlay(status, false);
-        nodeEl.appendChild(overlay);
     }
 
-    // Notify components of status change
-    const ctx = { path, status, isNew, nodeElement: nodeEl };
-    for (const component of registeredComponents) {
-        if (component.onStatusChange) {
-            component.onStatusChange(ctx);
-        }
+    if (status === 'fresh' && window.pendingEdits.has(path)) {
+        window.pendingEdits.delete(path);
+    }
+
+    for (const callback of componentCallbacks.statusChange) {
+        callback(nodeEl, status, isNew);
     }
 }
 
@@ -222,33 +170,6 @@ function removePathFromTree(path) {
     }
 }
 
-function createHeaderMenu(path, mimeType, isTarget, metadata) {
-    const menu = document.createElement('div');
-    menu.className = 'header-menu';
-
-    const ctx = {
-        path,
-        isTarget,
-        mimeType,
-        metadata,
-        nodeElement: null  // Will be set after node creation
-    };
-
-    // Collect buttons from all registered components
-    for (const component of registeredComponents) {
-        if (component.renderHeaderButtons) {
-            const buttons = component.renderHeaderButtons(ctx);
-            if (buttons) {
-                for (const btn of buttons) {
-                    menu.appendChild(btn);
-                }
-            }
-        }
-    }
-
-    return menu;
-}
-
 function renderTree(node, container, pathParts = []) {
     if (!node._children) return;
 
@@ -263,13 +184,25 @@ function renderTree(node, container, pathParts = []) {
         const div = document.createElement('div');
         div.className = 'tree-node';
 
+        div.dataset.path = child._fullPath || '';
+
         if (child._isTarget) {
-            div.classList.add('target');
-            div.classList.add('leaf');
+            div.classList.add('target', 'leaf');
+            div.dataset.isTarget = 'true';
         } else if (child._isPath) {
-            div.classList.add('path');
-            div.classList.add('leaf');
+            div.classList.add('path', 'leaf');
             nodeElements[child._fullPath] = div;
+            if (child._metadata) {
+                if (child._metadata['mime-type']) {
+                    div.dataset.mimeType = child._metadata['mime-type'];
+                }
+                if (child._metadata.status) {
+                    div.dataset.status = child._metadata.status;
+                }
+                if (child._metadata.content !== undefined) {
+                    div.dataset.content = child._metadata.content;
+                }
+            }
         } else if (child._isIntermediate) {
             div.classList.add('intermediate');
         }
@@ -281,8 +214,7 @@ function renderTree(node, container, pathParts = []) {
         const header = document.createElement('div');
         header.className = 'tree-header';
         header.addEventListener('click', () => {
-            const currentPath = [...pathParts];
-            toggleNode(key, currentPath);
+            toggleNode(key, [...pathParts]);
         });
 
         const toggle = document.createElement('button');
@@ -295,43 +227,17 @@ function renderTree(node, container, pathParts = []) {
         label.textContent = child._name;
         header.appendChild(label);
 
-        const mimeType = child._metadata ? (child._metadata['mime-type'] || '') : null;
-
-        // Add header menu for paths
-        if (child._isPath && child._metadata) {
-            const headerMenu = createHeaderMenu(
-                child._fullPath,
-                mimeType,
-                false,
-                child._metadata
-            );
-            header.appendChild(headerMenu);
-        }
-
-        // Add header menu for targets
-        if (child._isTarget) {
-            const headerMenu = createHeaderMenu(
-                child._fullPath,
-                null,
-                true,
-                null
-            );
-            header.appendChild(headerMenu);
-        }
-
         div.appendChild(header);
 
-        // Render metadata for paths
         if (child._isPath && child._metadata) {
             const metadataContainer = document.createElement('div');
             metadataContainer.className = 'metadata';
 
-            const showContent = mimeType && mimeType.startsWith('text/');
+            const mimeType = child._metadata['mime-type'] || '';
+            const showContent = mimeType.startsWith('text/');
 
             for (const [metaKey, metaValue] of Object.entries(child._metadata)) {
-                if (metaKey === 'content') {
-                    continue;
-                }
+                if (metaKey === 'content') continue;
                 const metaDiv = document.createElement('div');
                 metaDiv.className = 'meta-info';
                 metaDiv.setAttribute('data-label', metaKey);
@@ -342,41 +248,19 @@ function renderTree(node, container, pathParts = []) {
             if (showContent && child._metadata.content !== undefined) {
                 const contentWrapper = document.createElement('div');
                 contentWrapper.className = 'content-wrapper';
-
                 const contentDiv = document.createElement('div');
                 contentDiv.className = 'content';
                 contentDiv.textContent = child._metadata.content;
                 contentWrapper.appendChild(contentDiv);
-
                 metadataContainer.appendChild(contentWrapper);
             }
 
             div.appendChild(metadataContainer);
-
-            const status = child._metadata.status;
-            if (status && status !== 'fresh') {
-                const overlay = createStatusOverlay(status, false);
-                div.appendChild(overlay);
-            }
         }
 
-        // Let components render additional content
-        const ctx = {
-            path: child._fullPath,
-            isTarget: child._isTarget,
-            mimeType,
-            metadata: child._metadata,
-            nodeElement: div,
-            contentWrapper: div.querySelector('.content-wrapper')
-        };
-
-        for (const component of registeredComponents) {
-            if (component.renderNodeContent) {
-                const content = component.renderNodeContent(ctx);
-                if (content) {
-                    div.appendChild(content);
-                }
-            }
+        // Notify components
+        for (const callback of componentCallbacks.addNode) {
+            callback(div);
         }
 
         if (child._children) {
