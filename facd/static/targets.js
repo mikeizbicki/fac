@@ -552,15 +552,14 @@ function createVariableScopeForm(node, container, pathParts) {
         
         const targetPath = pathPrefix + '/**';
         
-        const body = { target: targetPath };
+        const params = new URLSearchParams();
+        params.set('target', targetPath);
         if (promptInput.value.trim()) {
-            body.prompt = promptInput.value.trim();
+            params.set('include_prompt', promptInput.value.trim());
         }
         
-        fetch('/add_target', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
+        fetch('/add_target?' + params.toString(), {
+            method: 'POST'
         })
         .then(response => {
             if (!response.ok) throw new Error('Failed to queue build');
