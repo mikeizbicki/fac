@@ -29,7 +29,8 @@ class FileManager(Routable):
 
     async def _watch_files(self):
         async for changes in awatch(".", stop_event=self._stop_event):
-            for change_type, path in changes:
+            for change_type, abs_path in changes:
+                path = os.path.relpath(abs_path)
                 if path not in self.files:
                     continue
                 if change_type == Change.deleted:
