@@ -24,17 +24,20 @@ class FileManager(Routable):
         self._shutdown = False
         super().__init__()
 
-    async def start(self):
         self._watch_task = asyncio.create_task(self._watch_files())
 
     async def _watch_files(self):
         async for changes in awatch(".", stop_event=self._stop_event):
             for change_type, abs_path in changes:
                 path = os.path.relpath(abs_path)
-                if path not in self.files:
+                targets = match_pattern_starstar(self.targets_dict, path)
+                path_matches_target = len(targets) > 0
+                if path not in self.files and not path_matches_target:
                     continue
                 if change_type == Change.deleted:
                     self.files[path]['status'] = 'deleted'
+                else:
+                    self.files[path]['status'] = 'fresh'
                 self._notify(path)
 
     async def shutdown(self):
@@ -156,7 +159,7 @@ class FileManager(Routable):
         - content (may be None for large files) 
         - target: the target in 'fac.yaml' that the specified path was generated from
         - status:
-            - "fresh": the file exists and is up-to-date
+            - "fresh": the file exists and is up-to-date (all newly created/edited/built files will have a fresh status)
             - "building": the file is currently being built
             - "queued": the file is queued to be built in the future
             - "stale": the file exists but needs to be rebuilt because dependencies have been modified
