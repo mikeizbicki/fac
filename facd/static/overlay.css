@@ -1,0 +1,114 @@
+/* overlay.css
+ *
+ * Styles for status overlays on tree nodes:
+ * - Flash overlays for new/modified/deleted states
+ * - Persistent overlays for stale/building/queued states
+ * - Spinner animation for building/queued
+ * - Fade out animation for deleted nodes
+ */
+
+/* Status overlays */
+.status-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    pointer-events: none;
+    z-index: 10;
+}
+
+.status-overlay-text {
+    font-weight: 600;
+    font-size: 0.9em;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Flash overlays for new/modified */
+.flash-overlay {
+    background: rgba(76, 175, 80, 0.3);
+    animation: flash-fade 1s ease-out forwards;
+}
+
+.flash-overlay .status-overlay-text {
+    color: #2e7d32;
+}
+
+/* Flash overlay for deleted */
+.flash-overlay.deleted {
+    background: rgba(244, 67, 54, 0.3);
+    animation: flash-fade-delete 1s ease-out forwards;
+}
+
+.flash-overlay.deleted .status-overlay-text {
+    color: #c62828;
+}
+
+@keyframes flash-fade {
+    0% {
+        background: rgba(76, 175, 80, 0.4);
+    }
+    100% {
+        background: rgba(76, 175, 80, 0);
+    }
+}
+
+@keyframes flash-fade-delete {
+    0% {
+        background: rgba(244, 67, 54, 0.4);
+    }
+    100% {
+        background: rgba(244, 67, 54, 0);
+    }
+}
+
+/* Fade out animation for deleted nodes */
+.tree-node.fading-out {
+    animation: node-fade-out 0.5s ease-out forwards;
+    animation-delay: 1s;
+}
+
+@keyframes node-fade-out {
+    0% {
+        opacity: 1;
+        max-height: 200px;
+    }
+    100% {
+        opacity: 0;
+        max-height: 0;
+        margin: 0;
+        padding: 0;
+        border-width: 0;
+    }
+}
+
+/* Persistent overlays for stale/building/queued */
+.persistent-overlay {
+    background: rgba(158, 158, 158, 0.4);
+}
+
+.persistent-overlay .status-overlay-text {
+    color: #424242;
+}
+
+/* Spinner */
+.status-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #9e9e9e;
+    border-top-color: #424242;
+    border-radius: 50%;
+    margin-left: 8px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
