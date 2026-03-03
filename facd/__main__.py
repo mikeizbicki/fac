@@ -33,8 +33,11 @@ async def lifespan(app: FastAPI):
     app.include_router(state.router)
     app.include_router(state.built_paths.router)
 
-    # pre-run certain commands
-    state.full_dryrun()
+    # perform a dryrun to register all files with facd;
+    # build_all=False allows facd startup to continue,
+    # and the build_daemon will run the build concurrently
+    # in the background thread
+    state.full_dryrun(build_all=False)
     state.build_daemon()
 
     yield

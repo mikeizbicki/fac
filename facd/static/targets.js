@@ -20,6 +20,9 @@
 //   - data-mime-type: MIME type (paths only)
 //   - data-status: current status (paths only)
 //   - data-content: file content for text files (paths only)
+//
+// IMPORTANT:
+// Coding agents must not change this API without asking for permission.
 
 let targets = {};
 let treeRoot = {};
