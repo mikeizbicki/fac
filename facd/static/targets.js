@@ -13,20 +13,46 @@
 // - stale/building/queued: shows a persistent gray overlay with status text
 //   and a spinner for building/queued states
 //
-// File editing:
-// - Text files can be edited inline by clicking the edit button
-// - Shows a textarea with submit/cancel buttons
-// - Submitting shows a spinner overlay until the file update is confirmed
+// Component System API:
+// ---------------------
+// Other JavaScript files can register components to extend the tree view
+// functionality without modifying this file.
 //
-// File deletion:
-// - Files can be deleted via the delete button in the header menu
+// window.registerTargetsComponent(component) - Register a component object with:
+//   - name: string - Unique identifier for the component
+//   - renderHeaderButtons(ctx): Returns array of button elements for the header menu
+//     ctx = { path, isTarget, mimeType, metadata, nodeElement }
+//   - renderNodeContent(ctx): Returns DOM element to append inside the tree node
+//     ctx = { path, isTarget, mimeType, metadata, nodeElement, contentWrapper }
+//   - onStatusChange(ctx): Called when a node's status changes
+//     ctx = { path, status, isNew, nodeElement }
+//
+// window.getNodeElement(path) - Get the DOM element for a path
+// window.refreshTargetsDisplay() - Force a re-render of the entire tree
+// window.pendingEdits - Set of paths currently being edited (add path to prevent
+//   refresh during edits, component should remove when edit completes)
+//
+// All component methods are optional. Components are called in registration order.
 
 let targets = {};
 let treeRoot = {};
 let targetOrder = [];
 let knownPaths = new Set();
 let nodeElements = {};
-let pendingEdits = new Set();
+window.pendingEdits = new Set();
+let registeredComponents = [];
+
+window.registerTargetsComponent = function(component) {
+    registeredComponents.push(component);
+};
+
+window.getNodeElement = function(path) {
+    return nodeElements[path];
+};
+
+window.refreshTargetsDisplay = function() {
+    refreshDisplay();
+};
 
 function insertIntoTree(path, isTarget, metadata = null) {
     const parts = path.split('/');
@@ -147,12 +173,20 @@ function updateNodeStatus(path, status, isNew) {
             overlay.remove();
         }, 1000);
 
-        if (pendingEdits.has(path)) {
-            pendingEdits.delete(path);
+        if (window.pendingEdits.has(path)) {
+            window.pendingEdits.delete(path);
         }
     } else if (status === 'stale' || status === 'building' || status === 'queued') {
         const overlay = createStatusOverlay(status, false);
         nodeEl.appendChild(overlay);
+    }
+
+    // Notify components of status change
+    const ctx = { path, status, isNew, nodeElement: nodeEl };
+    for (const component of registeredComponents) {
+        if (component.onStatusChange) {
+            component.onStatusChange(ctx);
+        }
     }
 }
 
@@ -188,182 +222,31 @@ function removePathFromTree(path) {
     }
 }
 
-function createHeaderMenu(path, mimeType, isTarget, originalContent) {
+function createHeaderMenu(path, mimeType, isTarget, metadata) {
     const menu = document.createElement('div');
     menu.className = 'header-menu';
 
-    const isTextFile = mimeType && mimeType.startsWith('text/');
+    const ctx = {
+        path,
+        isTarget,
+        mimeType,
+        metadata,
+        nodeElement: null  // Will be set after node creation
+    };
 
-    // Build button
-    const buildBtn = document.createElement('button');
-    buildBtn.innerHTML = '🔨';
-    buildBtn.title = 'Build';
-    buildBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (isTarget) {
-            window.buildTarget(path, '');
-        } else {
-            window.buildTarget(path, '');
-        }
-    });
-    menu.appendChild(buildBtn);
-
-    if (!isTarget) {
-        if (isTextFile) {
-            const editBtn = document.createElement('button');
-            editBtn.innerHTML = '✏️';
-            editBtn.title = 'Edit';
-            editBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const nodeEl = nodeElements[path];
-                if (nodeEl) {
-                    const contentWrapper = nodeEl.querySelector('.content-wrapper');
-                    if (contentWrapper) {
-                        startEditing(path, contentWrapper, originalContent);
-                    }
+    // Collect buttons from all registered components
+    for (const component of registeredComponents) {
+        if (component.renderHeaderButtons) {
+            const buttons = component.renderHeaderButtons(ctx);
+            if (buttons) {
+                for (const btn of buttons) {
+                    menu.appendChild(btn);
                 }
-            });
-            menu.appendChild(editBtn);
+            }
         }
-
-        const deleteBtn = document.createElement('button');
-        deleteBtn.innerHTML = '🗑️';
-        deleteBtn.title = 'Delete';
-        deleteBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            deleteFile(path);
-        });
-        menu.appendChild(deleteBtn);
     }
 
     return menu;
-}
-
-function startEditing(path, contentWrapper, originalContent) {
-    const contentDiv = contentWrapper.querySelector('.content');
-    
-    if (!contentDiv) return;
-
-    const textarea = document.createElement('textarea');
-    textarea.className = 'content-editor';
-    textarea.value = originalContent || '';
-    
-    const actions = document.createElement('div');
-    actions.className = 'content-actions';
-
-    const cancelBtn = document.createElement('button');
-    cancelBtn.className = 'cancel-btn';
-    cancelBtn.textContent = 'Cancel';
-    cancelBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        cancelEditing(path, contentWrapper, originalContent);
-    });
-
-    const submitBtn = document.createElement('button');
-    submitBtn.className = 'submit-btn';
-    submitBtn.textContent = 'Submit';
-    submitBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        submitEdit(path, textarea.value, contentWrapper);
-    });
-
-    actions.appendChild(cancelBtn);
-    actions.appendChild(submitBtn);
-
-    contentDiv.style.display = 'none';
-    contentWrapper.appendChild(textarea);
-    contentWrapper.appendChild(actions);
-    textarea.focus();
-}
-
-function cancelEditing(path, contentWrapper, originalContent) {
-    const textarea = contentWrapper.querySelector('.content-editor');
-    const actions = contentWrapper.querySelector('.content-actions');
-    const contentDiv = contentWrapper.querySelector('.content');
-
-    if (textarea) textarea.remove();
-    if (actions) actions.remove();
-    if (contentDiv) contentDiv.style.display = 'block';
-}
-
-function submitEdit(path, newContent, contentWrapper) {
-    const textarea = contentWrapper.querySelector('.content-editor');
-    const actions = contentWrapper.querySelector('.content-actions');
-
-    if (textarea) textarea.disabled = true;
-    if (actions) actions.style.display = 'none';
-
-    const overlay = document.createElement('div');
-    overlay.className = 'submitting-overlay';
-    const spinner = document.createElement('div');
-    spinner.className = 'status-spinner';
-    overlay.appendChild(spinner);
-    contentWrapper.appendChild(overlay);
-
-    pendingEdits.add(path);
-
-    fetch(`/edit_file/${encodeURIComponent(path)}`, {
-        method: 'PUT',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ content: newContent })
-    })
-    .then(response => {
-        if (!response.ok) {
-            throw new Error('Failed to edit file');
-        }
-        return response.json();
-    })
-    .catch(error => {
-        console.error('Error editing file:', error);
-        pendingEdits.delete(path);
-        overlay.remove();
-        if (textarea) textarea.disabled = false;
-        if (actions) actions.style.display = 'flex';
-        alert('Failed to edit file: ' + error.message);
-    });
-}
-
-function deleteFile(path) {
-    if (!confirm(`Are you sure you want to delete "${path}"?`)) {
-        return;
-    }
-
-    fetch(`/delete_file/${encodeURIComponent(path)}`, {
-        method: 'DELETE'
-    })
-    .then(response => {
-        if (!response.ok) {
-            throw new Error('Failed to delete file');
-        }
-        return response.json();
-    })
-    .catch(error => {
-        console.error('Error deleting file:', error);
-        alert('Failed to delete file: ' + error.message);
-    });
-}
-
-function createTargetBuildMenu(fullPath) {
-    const buildMenu = document.createElement('div');
-    buildMenu.className = 'target-build-menu';
-
-    const textarea = document.createElement('textarea');
-    textarea.className = 'build-prompt-input';
-    textarea.placeholder = 'Enter build prompt (optional)...';
-    buildMenu.appendChild(textarea);
-
-    const submitBtn = document.createElement('button');
-    submitBtn.className = 'build-submit-btn';
-    submitBtn.textContent = 'Build';
-    submitBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        window.buildTarget(fullPath, textarea.value);
-    });
-    buildMenu.appendChild(submitBtn);
-
-    return buildMenu;
 }
 
 function renderTree(node, container, pathParts = []) {
@@ -412,19 +295,20 @@ function renderTree(node, container, pathParts = []) {
         label.textContent = child._name;
         header.appendChild(label);
 
-        // Add header menu for paths (with build, edit, delete buttons)
+        const mimeType = child._metadata ? (child._metadata['mime-type'] || '') : null;
+
+        // Add header menu for paths
         if (child._isPath && child._metadata) {
-            const mimeType = child._metadata['mime-type'] || '';
             const headerMenu = createHeaderMenu(
                 child._fullPath,
                 mimeType,
                 false,
-                child._metadata.content
+                child._metadata
             );
             header.appendChild(headerMenu);
         }
 
-        // Add header menu for targets (with just build button)
+        // Add header menu for targets
         if (child._isTarget) {
             const headerMenu = createHeaderMenu(
                 child._fullPath,
@@ -437,12 +321,12 @@ function renderTree(node, container, pathParts = []) {
 
         div.appendChild(header);
 
+        // Render metadata for paths
         if (child._isPath && child._metadata) {
             const metadataContainer = document.createElement('div');
             metadataContainer.className = 'metadata';
 
-            const mimeType = child._metadata['mime-type'] || '';
-            const showContent = mimeType.startsWith('text/');
+            const showContent = mimeType && mimeType.startsWith('text/');
 
             for (const [metaKey, metaValue] of Object.entries(child._metadata)) {
                 if (metaKey === 'content') {
@@ -476,10 +360,23 @@ function renderTree(node, container, pathParts = []) {
             }
         }
 
-        // Add target build menu (textarea + build button) for targets
-        if (child._isTarget) {
-            const buildMenu = createTargetBuildMenu(child._fullPath);
-            div.appendChild(buildMenu);
+        // Let components render additional content
+        const ctx = {
+            path: child._fullPath,
+            isTarget: child._isTarget,
+            mimeType,
+            metadata: child._metadata,
+            nodeElement: div,
+            contentWrapper: div.querySelector('.content-wrapper')
+        };
+
+        for (const component of registeredComponents) {
+            if (component.renderNodeContent) {
+                const content = component.renderNodeContent(ctx);
+                if (content) {
+                    div.appendChild(content);
+                }
+            }
         }
 
         if (child._children) {
@@ -536,14 +433,14 @@ function monitorFiles() {
         } else {
             insertIntoTree(path, false, metadata);
             knownPaths.add(path);
-            
-            if (!pendingEdits.has(path)) {
+
+            if (!window.pendingEdits.has(path)) {
                 refreshDisplay();
             }
 
             if (status === 'fresh') {
-                if (pendingEdits.has(path)) {
-                    pendingEdits.delete(path);
+                if (window.pendingEdits.has(path)) {
+                    window.pendingEdits.delete(path);
                     refreshDisplay();
                 }
                 updateNodeStatus(path, status, isNew);

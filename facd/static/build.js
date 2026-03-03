@@ -1,201 +1,224 @@
 // build.js
 //
-// This component adds a build action menu to each leaf node in the target tree.
-// It provides buttons for: build, build with prompt, edit, and delete.
-// Edit and delete are only available for path nodes.
-// For target nodes, a form is displayed to specify variables used in the target.
-// Build actions call the /add_target endpoint with appropriate parameters.
+// This component handles build-related functionality for the targets tree.
+// It provides:
+// - Build button (🔨) in the header menu for both targets and paths
+// - Edit button (✏️) for text files to enable inline editing
+// - Delete button (🗑️) for paths to remove files
+// - Target build menu with optional prompt textarea
+//
+// File editing:
+// - Text files can be edited inline by clicking the edit button
+// - Shows a textarea with submit/cancel buttons
+// - Submitting shows a spinner overlay until the file update is confirmed
+//
+// This component registers with targets.js via window.registerTargetsComponent()
 
-function extractVariables(targetName) {
-    const regex = /\$([A-Z_][A-Z0-9_]*)/g;
-    const variables = [];
-    let match;
-    while ((match = regex.exec(targetName)) !== null) {
-        if (!variables.includes(match[1])) {
-            variables.push(match[1]);
+(function() {
+    function createBuildButton(path) {
+        const btn = document.createElement('button');
+        btn.innerHTML = '🔨';
+        btn.title = 'Build';
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            window.buildTarget(path, '');
+        });
+        return btn;
+    }
+
+    function createEditButton(path, metadata) {
+        const btn = document.createElement('button');
+        btn.innerHTML = '✏️';
+        btn.title = 'Edit';
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const nodeEl = window.getNodeElement(path);
+            if (nodeEl) {
+                const contentWrapper = nodeEl.querySelector('.content-wrapper');
+                if (contentWrapper) {
+                    startEditing(path, contentWrapper, metadata.content);
+                }
+            }
+        });
+        return btn;
+    }
+
+    function createDeleteButton(path) {
+        const btn = document.createElement('button');
+        btn.innerHTML = '🗑️';
+        btn.title = 'Delete';
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteFile(path);
+        });
+        return btn;
+    }
+
+    function startEditing(path, contentWrapper, originalContent) {
+        const contentDiv = contentWrapper.querySelector('.content');
+        if (!contentDiv) return;
+
+        const textarea = document.createElement('textarea');
+        textarea.className = 'content-editor';
+        textarea.value = originalContent || '';
+
+        const actions = document.createElement('div');
+        actions.className = 'content-actions';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'cancel-btn';
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            cancelEditing(contentWrapper);
+        });
+
+        const submitBtn = document.createElement('button');
+        submitBtn.className = 'submit-btn';
+        submitBtn.textContent = 'Submit';
+        submitBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            submitEdit(path, textarea.value, contentWrapper);
+        });
+
+        actions.appendChild(cancelBtn);
+        actions.appendChild(submitBtn);
+
+        contentDiv.style.display = 'none';
+        contentWrapper.appendChild(textarea);
+        contentWrapper.appendChild(actions);
+        textarea.focus();
+    }
+
+    function cancelEditing(contentWrapper) {
+        const textarea = contentWrapper.querySelector('.content-editor');
+        const actions = contentWrapper.querySelector('.content-actions');
+        const contentDiv = contentWrapper.querySelector('.content');
+
+        if (textarea) textarea.remove();
+        if (actions) actions.remove();
+        if (contentDiv) contentDiv.style.display = 'block';
+    }
+
+    function submitEdit(path, newContent, contentWrapper) {
+        const textarea = contentWrapper.querySelector('.content-editor');
+        const actions = contentWrapper.querySelector('.content-actions');
+
+        if (textarea) textarea.disabled = true;
+        if (actions) actions.style.display = 'none';
+
+        const overlay = document.createElement('div');
+        overlay.className = 'submitting-overlay';
+        const spinner = document.createElement('div');
+        spinner.className = 'status-spinner';
+        overlay.appendChild(spinner);
+        contentWrapper.appendChild(overlay);
+
+        window.pendingEdits.add(path);
+
+        fetch(`/edit_file/${encodeURIComponent(path)}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ content: newContent })
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to edit file');
+            }
+            return response.json();
+        })
+        .catch(error => {
+            console.error('Error editing file:', error);
+            window.pendingEdits.delete(path);
+            overlay.remove();
+            if (textarea) textarea.disabled = false;
+            if (actions) actions.style.display = 'flex';
+            alert('Failed to edit file: ' + error.message);
+        });
+    }
+
+    function deleteFile(path) {
+        if (!confirm(`Are you sure you want to delete "${path}"?`)) {
+            return;
         }
+
+        fetch(`/delete_file/${encodeURIComponent(path)}`, {
+            method: 'DELETE'
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to delete file');
+            }
+            return response.json();
+        })
+        .catch(error => {
+            console.error('Error deleting file:', error);
+            alert('Failed to delete file: ' + error.message);
+        });
     }
-    return variables;
-}
 
-function createBuildMenu(node, fullPath, isTarget) {
-    const menu = document.createElement('div');
-    menu.className = 'build-menu';
+    function createTargetBuildMenu(fullPath) {
+        const buildMenu = document.createElement('div');
+        buildMenu.className = 'target-build-menu';
 
-    const actions = document.createElement('div');
-    actions.className = 'build-actions';
+        const textarea = document.createElement('textarea');
+        textarea.className = 'build-prompt-input';
+        textarea.placeholder = 'Enter build prompt (optional)...';
+        buildMenu.appendChild(textarea);
 
-    // Build button
-    const buildBtn = document.createElement('button');
-    buildBtn.className = 'build-btn build';
-    buildBtn.textContent = 'Build';
-    buildBtn.addEventListener('click', () => handleBuild(menu, fullPath, isTarget, false));
-    actions.appendChild(buildBtn);
+        const submitBtn = document.createElement('button');
+        submitBtn.className = 'build-submit-btn';
+        submitBtn.textContent = 'Build';
+        submitBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            window.buildTarget(fullPath, textarea.value);
+        });
+        buildMenu.appendChild(submitBtn);
 
-    // Build with prompt button
-    const buildPromptBtn = document.createElement('button');
-    buildPromptBtn.className = 'build-btn build-prompt';
-    buildPromptBtn.textContent = 'Build with Prompt';
-    buildPromptBtn.addEventListener('click', () => togglePromptInput(menu));
-    actions.appendChild(buildPromptBtn);
-
-    // Edit button (path only)
-    const editBtn = document.createElement('button');
-    editBtn.className = 'build-btn edit';
-    editBtn.textContent = 'Edit';
-    if (!isTarget) {
-        editBtn.addEventListener('click', () => handleEdit(fullPath));
-    } else {
-        editBtn.disabled = true;
+        return buildMenu;
     }
-    actions.appendChild(editBtn);
 
-    // Delete button (path only)
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'build-btn delete';
-    deleteBtn.textContent = 'Delete';
-    if (!isTarget) {
-        deleteBtn.addEventListener('click', () => handleDelete(fullPath));
-    } else {
-        deleteBtn.disabled = true;
-    }
-    actions.appendChild(deleteBtn);
+    // Register the build component
+    window.registerTargetsComponent({
+        name: 'build',
 
-    menu.appendChild(actions);
+        renderHeaderButtons: function(ctx) {
+            const buttons = [];
+            const { path, isTarget, mimeType, metadata } = ctx;
 
-    // Variables form for targets
-    if (isTarget) {
-        const variables = extractVariables(fullPath);
-        if (variables.length > 0) {
-            const varsContainer = document.createElement('div');
-            varsContainer.className = 'build-variables';
+            // Build button for both targets and paths
+            buttons.push(createBuildButton(path));
 
-            const varsTitle = document.createElement('div');
-            varsTitle.className = 'build-variables-title';
-            varsTitle.textContent = 'Variables';
-            varsContainer.appendChild(varsTitle);
+            if (!isTarget && metadata) {
+                const isTextFile = mimeType && mimeType.startsWith('text/');
 
-            for (const varName of variables) {
-                const row = document.createElement('div');
-                row.className = 'build-variable-row';
+                // Edit button for text files
+                if (isTextFile) {
+                    buttons.push(createEditButton(path, metadata));
+                }
 
-                const label = document.createElement('label');
-                label.className = 'build-variable-label';
-                label.textContent = '$' + varName;
-                row.appendChild(label);
-
-                const input = document.createElement('input');
-                input.type = 'text';
-                input.className = 'build-variable-input';
-                input.dataset.variable = varName;
-                input.placeholder = 'Enter value...';
-                row.appendChild(input);
-
-                varsContainer.appendChild(row);
+                // Delete button for all paths
+                buttons.push(createDeleteButton(path));
             }
 
-            menu.appendChild(varsContainer);
+            return buttons;
+        },
+
+        renderNodeContent: function(ctx) {
+            const { isTarget, path } = ctx;
+
+            // Add build menu only for targets
+            if (isTarget) {
+                return createTargetBuildMenu(path);
+            }
+
+            return null;
+        },
+
+        onStatusChange: function(ctx) {
+            // Currently no special handling needed
         }
-    }
-
-    // Prompt input container
-    const promptContainer = document.createElement('div');
-    promptContainer.className = 'build-prompt-container';
-
-    const promptLabel = document.createElement('div');
-    promptLabel.className = 'build-prompt-label';
-    promptLabel.textContent = 'Build Prompt';
-    promptContainer.appendChild(promptLabel);
-
-    const promptInput = document.createElement('textarea');
-    promptInput.className = 'build-prompt-input';
-    promptInput.placeholder = 'Enter additional prompt...';
-    promptContainer.appendChild(promptInput);
-
-    const submitPromptBtn = document.createElement('button');
-    submitPromptBtn.className = 'build-btn build-prompt';
-    submitPromptBtn.textContent = 'Submit';
-    submitPromptBtn.style.marginTop = '8px';
-    submitPromptBtn.addEventListener('click', () => handleBuild(menu, fullPath, isTarget, true));
-    promptContainer.appendChild(submitPromptBtn);
-
-    menu.appendChild(promptContainer);
-
-    // Status message area
-    const status = document.createElement('div');
-    status.className = 'build-status';
-    menu.appendChild(status);
-
-    return menu;
-}
-
-function togglePromptInput(menu) {
-    const promptContainer = menu.querySelector('.build-prompt-container');
-    promptContainer.classList.toggle('visible');
-}
-
-function resolveTargetPath(menu, targetPath) {
-    const variables = extractVariables(targetPath);
-    let resolvedPath = targetPath;
-
-    for (const varName of variables) {
-        const input = menu.querySelector(`input[data-variable="${varName}"]`);
-        if (input && input.value) {
-            resolvedPath = resolvedPath.replace(new RegExp('\\$' + varName, 'g'), input.value);
-        }
-    }
-
-    return resolvedPath;
-}
-
-function handleBuild(menu, fullPath, isTarget, withPrompt) {
-    const status = menu.querySelector('.build-status');
-    status.textContent = 'Building...';
-    status.className = 'build-status';
-
-    let targetToUse = fullPath;
-
-    // For targets, resolve any variable values
-    if (isTarget) {
-        targetToUse = resolveTargetPath(menu, fullPath);
-    }
-
-    const params = new URLSearchParams();
-    params.append('target', targetToUse);
-
-    if (withPrompt) {
-        const promptInput = menu.querySelector('.build-prompt-input');
-        if (promptInput && promptInput.value) {
-            params.append('include_prompt', promptInput.value);
-        }
-    }
-
-    fetch('/add_target?' + params.toString(), {
-        method: 'POST'
-    })
-    .then(response => {
-        if (response.ok) {
-            return response.json();
-        }
-        throw new Error('Build request failed');
-    })
-    .then(data => {
-        status.textContent = 'Build request submitted successfully';
-        status.className = 'build-status success';
-    })
-    .catch(error => {
-        status.textContent = 'Error: ' + error.message;
-        status.className = 'build-status error';
     });
-}
-
-function handleEdit(path) {
-    alert('Edit feature is not yet implemented.\n\nPath: ' + path);
-}
-
-function handleDelete(path) {
-    alert('Delete feature is not yet implemented.\n\nPath: ' + path);
-}
-
-// Export function for use by targets.js
-window.createBuildMenu = createBuildMenu;
+})();
