@@ -1,0 +1,33 @@
+/* images.css - Styles for image display in the target tree */
+
+.image-container {
+    margin-top: 8px;
+}
+
+.leaf-image {
+    max-width: 100%;
+    max-height: 400px;
+    display: block;
+}
+
+.collapsed-image-preview {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 8px;
+    padding: 4px 0;
+    margin-left: 24px;
+}
+
+.preview-image {
+    max-width: 2in;
+    max-height: 2in;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+/* Hide image container when leaf node is collapsed */
+.tree-node.leaf:not(.expanded) .image-container {
+    display: none;
+}
