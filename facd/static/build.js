@@ -7,6 +7,27 @@
 // - Target build menu with optional prompt textarea
 
 (function() {
+    function buildTarget(path, prompt) {
+        const body = { target: path };
+        if (prompt && prompt.trim()) {
+            body.prompt = prompt.trim();
+        }
+
+        fetch('/add_target', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('Failed to queue build');
+            return response.json();
+        })
+        .catch(error => {
+            console.error('Error queuing build:', error);
+            alert('Failed to queue build: ' + error.message);
+        });
+    }
+
     function addHeaderMenu(nodeEl) {
         const header = nodeEl.querySelector('.tree-header');
         if (!header) return;
@@ -25,7 +46,7 @@
         buildBtn.title = 'Build';
         buildBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            window.buildTarget(path, '');
+            buildTarget(path, '');
         });
         menu.appendChild(buildBtn);
 
@@ -72,7 +93,7 @@
         submitBtn.textContent = 'Build';
         submitBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            window.buildTarget(path, textarea.value);
+            buildTarget(path, textarea.value);
         });
         buildMenu.appendChild(submitBtn);
 

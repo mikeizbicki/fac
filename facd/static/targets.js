@@ -482,7 +482,7 @@ function insertTargetPattern(pattern) {
     }
 }
 
-function createVariableScopeForm(node, container) {
+function createVariableScopeForm(node, container, pathParts) {
     // Find all variables used in targets under this scope
     const allVars = new Set();
     for (const target of targetOrder) {
@@ -542,9 +542,15 @@ function createVariableScopeForm(node, container) {
     const buildAllBtn = document.createElement('button');
     buildAllBtn.textContent = 'Build All';
     buildAllBtn.addEventListener('click', () => {
-        // Get the path prefix for this scope
-        const pathPrefix = getPathPrefix(node);
-        const targetPath = pathPrefix + '**';
+        // Reconstruct the path prefix from pathParts
+        const pathPrefix = pathParts.map(p => {
+            if (p.startsWith('targetvar:')) {
+                return p.substring('targetvar:'.length);
+            }
+            return p;
+        }).join('/');
+        
+        const targetPath = pathPrefix + '/**';
         
         const body = { target: targetPath };
         if (promptInput.value.trim()) {
@@ -555,6 +561,14 @@ function createVariableScopeForm(node, container) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('Failed to queue build');
+            return response.json();
+        })
+        .catch(error => {
+            console.error('Error queuing build:', error);
+            alert('Failed to queue build: ' + error.message);
         });
     });
     buttonsDiv.appendChild(buildAllBtn);
@@ -633,7 +647,7 @@ function renderTree(node, container, pathParts = []) {
 
         // Add variable scope form if this is a variable scope node
         if (child._isVariableScope) {
-            createVariableScopeForm(child, div);
+            createVariableScopeForm(child, div, [...pathParts, key]);
         }
 
         if (child._isPath && child._metadata) {
