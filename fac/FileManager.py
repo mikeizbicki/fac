@@ -7,7 +7,7 @@ from fac.util.FastAPI import *
 from fac.util.targets import *
 
 from fastapi import Request, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
 from watchfiles import awatch, Change
 
@@ -50,14 +50,10 @@ class FileManager(Routable):
             self._stop_event_obj = asyncio.Event()
         return self._stop_event_obj
 
-    def make_stale(self, path: str) -> None:
-        if path not in self.files or self.files[path]["status"] == "stale":
-            return
-        self.files[path]["status"] = "stale"
-        self._notify(path)
-
     def _validate_path(self, path: str) -> None:
-        """Validate that path is safe (no directory traversal, no absolute paths)."""
+        '''
+        Validate that path is safe (no directory traversal, no absolute paths).
+        '''
         if os.path.isabs(path):
             raise HTTPException(status_code=400, detail="Absolute paths are not allowed")
         if ".." in path.split(os.sep):
@@ -99,15 +95,18 @@ class FileManager(Routable):
         return iter(self.files)
 
     ##############################
-    # FastAPI
+    # FastAPI endpoints
     ##############################
 
     def _file_event(self, path: str) -> dict:
         info = self.files[path]
-        try:
-            with open(path, "r") as f:
-                content = f.read()
-        except FileNotFoundError:
+        if info['mime-type'].startswith('text'):
+            try:
+                with open(path, "r") as f:
+                    content = f.read()
+            except FileNotFoundError:
+                content = None
+        else:
             content = None
         return {
             "path": path,
@@ -170,6 +169,15 @@ class FileManager(Routable):
             self._event_stream(request),
             media_type="text/event-stream",
         )
+
+    @route("/contents", methods=["GET"])
+    async def contents(self, path):
+        '''
+        Get the contents of a file.
+        Primarily useful for downloading large binary files whose contents are not returned with the /monitor_files route.
+        '''
+        self._validate_path(path)
+        return FileResponse(path)
 
     @route("/edit_file/{path:path}", methods=["PUT"])
     async def edit_file(self, path: str, body: EditFileRequest) -> dict:

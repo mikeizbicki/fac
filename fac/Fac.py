@@ -669,17 +669,15 @@ class BuildState(Routable):
     # state transition methods
     ########################################
 
-    def full_dryrun(self):
+    def full_dryrun(self, build_all=True):
         '''
         Perform a dryrun on all targets in the fac.yaml.
         The dryrun lets fac know which files are already built.
-
-        FIXME:
-        This should probably be done automatically on facd startup.
         '''
         for target in self.targets_dict:
             self.add_target(target, mode='dryrun')
-        self.build_all()
+        if build_all:
+            self.build_all()
 
     @route('/add_target', ['POST'])
     def add_target(
@@ -1088,6 +1086,9 @@ class BuildSystem:
     trace: bool = False
     jobs: int = 1
 
+    # debug actions
+    print_config: bool = False
+
     # build settings
     overwrite: bool = False
     dryrun: bool = False
@@ -1100,6 +1101,9 @@ class BuildSystem:
     def __post_init__(self):
         self.targets_dict = load_config(self.config_file)
         self.build_state = BuildState(self.targets_dict)
+
+        if self.print_config:
+            pprint_targets(self.targets_dict)
 
     def build_targets(self, targets):
         '''
@@ -1172,6 +1176,7 @@ def _get_file_timestamp(path):
     the results of the build are never committed to the git repo,
     but the results of our build are always committed to the git repo.
     '''
+    repo = git.Repo('.')
 
     if not os.path.isfile(path):
         raise FileNotFoundError
@@ -1183,14 +1188,14 @@ def _get_file_timestamp(path):
         # Git status returns empty if file is clean
         result = repo.git.status('--porcelain', path)
         is_file_dirty = len(result.strip()) > 0
-    except:
+    except git.exc.GitCommandError:
         is_file_dirty = False
 
     try:
         # If file is tracked, this won't raise an exception
         repo.git.ls_files('--error-unmatch', path)
         is_path_untracked = False
-    except:
+    except git.exc.GitCommandError:
         # File is untracked if it exists but ls-files fails
         is_path_untracked = os.path.exists(path)
 
@@ -1226,6 +1231,34 @@ async def build_context(context, print_prompt=False):
 
     # ensure sane
     context.assert_invariants_buildable()
+
+    # process options
+    # NOTE:
+    # options can be specified as either a string or dictionary;
+    # if specified as a string, any shell commands must be run and then it should be converted into a dictionary
+    if type(context.config.get('options')) == frozendict:
+        context_options = {
+            option: process_template(
+                value,
+                env_vars=context.variables_resolved,
+                print_function=logger.error,
+                template_name=f'options.{option}',
+                )
+            for option, value in context.config['options'].items()
+            }
+    elif type(context.config.get('options')) == str:
+        options_str = process_template(
+                context.config['options'],
+                env_vars=context.variables_resolved,
+                print_function=logger.error,
+                template_name='options',
+                )
+        context_options = yaml.safe_load(options_str)
+        assert type(context_options) == dict
+    elif context.config.get('options') is None:
+        context_options = {}
+    else:
+        assert False
 
     ########################################
     # generate prompt
@@ -1479,6 +1512,7 @@ Generate the file "{context.path()}" based on the information below.
         context_dict = context.to_dict()
         context_dict.get('dependencies_built', []).sort(key=lambda x: x.get('target'))
         logger.info({'context': context_dict}, submessage=True)
+        logger.info({'options': context_options}, submessage=True)
 
         # possibly print prompt
         if print_prompt:
