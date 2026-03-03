@@ -132,8 +132,6 @@
         overlay.appendChild(spinner);
         contentWrapper.appendChild(overlay);
 
-        window.pendingEdits.add(path);
-
         fetch(`/edit_file/${encodeURIComponent(path)}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -145,7 +143,6 @@
         })
         .catch(error => {
             console.error('Error editing file:', error);
-            window.pendingEdits.delete(path);
             overlay.remove();
             textarea.disabled = false;
             actions.style.display = 'flex';
@@ -167,7 +164,9 @@
         });
     }
 
-    window.registerComponent('addNode', function(nodeEl) {
+    window.registerComponent(function(nodeEl, status, isNew) {
+        if (!isNew) return;
+
         const isTarget = nodeEl.dataset.isTarget === 'true';
         const isPath = nodeEl.classList.contains('path');
 

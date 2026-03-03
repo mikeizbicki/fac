@@ -9,9 +9,10 @@
 //
 // Component System API:
 // ---------------------
-// window.registerComponent(action, callback) - Register a callback for an action:
-//   - "addNode": callback(nodeElement) called when a node is added to the DOM
-//   - "statusChange": callback(nodeElement, status, isNew) called on status updates
+// window.registerComponent(callback) - Register a callback for status changes:
+//   callback(nodeElement, status, isNew) called on status updates
+//   - isNew=true when a node is first added to the DOM
+//   - status values: "fresh", "stale", "building", "queued", "deleted", or initial status
 //
 // Node elements have data attributes:
 //   - data-path: full path of the target/file
@@ -19,35 +20,17 @@
 //   - data-mime-type: MIME type (paths only)
 //   - data-status: current status (paths only)
 //   - data-content: file content for text files (paths only)
-//
-// window.getNodeElement(path) - Get the DOM element for a path
-// window.refreshTargetsDisplay() - Force a re-render of the entire tree
-// window.pendingEdits - Set of paths currently being edited
 
 let targets = {};
 let treeRoot = {};
 let targetOrder = [];
 let knownPaths = new Set();
 let nodeElements = {};
-window.pendingEdits = new Set();
 
-let componentCallbacks = {
-    addNode: [],
-    statusChange: []
-};
+let componentCallbacks = [];
 
-window.registerComponent = function(action, callback) {
-    if (componentCallbacks[action]) {
-        componentCallbacks[action].push(callback);
-    }
-};
-
-window.getNodeElement = function(path) {
-    return nodeElements[path];
-};
-
-window.refreshTargetsDisplay = function() {
-    refreshDisplay();
+window.registerComponent = function(callback) {
+    componentCallbacks.push(callback);
 };
 
 function insertIntoTree(path, isTarget, metadata = null) {
@@ -129,11 +112,7 @@ function updateNodeStatus(path, status, isNew) {
         }, 1500);
     }
 
-    if (status === 'fresh' && window.pendingEdits.has(path)) {
-        window.pendingEdits.delete(path);
-    }
-
-    for (const callback of componentCallbacks.statusChange) {
+    for (const callback of componentCallbacks) {
         callback(nodeEl, status, isNew);
     }
 }
@@ -258,9 +237,10 @@ function renderTree(node, container, pathParts = []) {
             div.appendChild(metadataContainer);
         }
 
-        // Notify components
-        for (const callback of componentCallbacks.addNode) {
-            callback(div);
+        // Notify components about new node
+        const status = child._metadata?.status || (child._isTarget ? 'target' : null);
+        for (const callback of componentCallbacks) {
+            callback(div, status, true);
         }
 
         if (child._children) {
@@ -318,15 +298,7 @@ function monitorFiles() {
             insertIntoTree(path, false, metadata);
             knownPaths.add(path);
 
-            if (!window.pendingEdits.has(path)) {
-                refreshDisplay();
-            }
-
             if (status === 'fresh') {
-                if (window.pendingEdits.has(path)) {
-                    window.pendingEdits.delete(path);
-                    refreshDisplay();
-                }
                 updateNodeStatus(path, status, isNew);
             } else if (status === 'stale' || status === 'building' || status === 'queued') {
                 updateNodeStatus(path, status, false);

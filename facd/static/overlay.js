@@ -1,5 +1,3 @@
-// overlay.js
-//
 // This component manages status overlays on tree nodes.
 // - fresh: shows a flash overlay ("new" or "modified") that fades after 1s
 // - deleted: shows a red flash overlay
@@ -42,25 +40,26 @@
         if (existing) existing.remove();
     }
 
-    window.registerComponent('statusChange', function(nodeEl, status, isNew) {
-        removeExistingOverlay(nodeEl);
-
-        if (status === 'deleted' || status === 'fresh' ||
-            status === 'stale' || status === 'building' || status === 'queued') {
-            const overlay = createOverlay(status, isNew);
-            nodeEl.appendChild(overlay);
-
-            if (status === 'fresh') {
-                setTimeout(() => overlay.remove(), 1000);
+    window.registerComponent(function(nodeEl, status, isNew) {
+        if (isNew) {
+            // Initial render - only show overlay for non-fresh statuses
+            if (status && status !== 'fresh') {
+                const overlay = createOverlay(status, false);
+                nodeEl.appendChild(overlay);
             }
-        }
-    });
+        } else {
+            // Status change
+            removeExistingOverlay(nodeEl);
 
-    window.registerComponent('addNode', function(nodeEl) {
-        const status = nodeEl.dataset.status;
-        if (status && status !== 'fresh') {
-            const overlay = createOverlay(status, false);
-            nodeEl.appendChild(overlay);
+            if (status === 'deleted' || status === 'fresh' ||
+                status === 'stale' || status === 'building' || status === 'queued') {
+                const overlay = createOverlay(status, isNew);
+                nodeEl.appendChild(overlay);
+
+                if (status === 'fresh') {
+                    setTimeout(() => overlay.remove(), 1000);
+                }
+            }
         }
     });
 })();
