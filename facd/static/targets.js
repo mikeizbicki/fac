@@ -32,6 +32,10 @@ let nodeElements = {};
 
 let componentCallbacks = [];
 
+// Pending operations queue per path to handle race conditions
+let pendingOperations = {};
+let processingPaths = new Set();
+
 window.registerComponent = function(callback) {
     componentCallbacks.push(callback);
 };
@@ -99,25 +103,78 @@ function toggleNode(nodeKey, pathParts) {
     }
 }
 
+function processNextOperation(path) {
+    if (!pendingOperations[path] || pendingOperations[path].length === 0) {
+        processingPaths.delete(path);
+        delete pendingOperations[path];
+        return;
+    }
+
+    processingPaths.add(path);
+    const operation = pendingOperations[path].shift();
+    operation(() => processNextOperation(path));
+}
+
+function queueOperation(path, operation) {
+    if (!pendingOperations[path]) {
+        pendingOperations[path] = [];
+    }
+    pendingOperations[path].push(operation);
+
+    if (!processingPaths.has(path)) {
+        processNextOperation(path);
+    }
+}
+
 function updateNodeStatus(path, status, isNew) {
     const nodeEl = nodeElements[path];
     if (!nodeEl) return;
 
     nodeEl.dataset.status = status;
 
-    if (status === 'deleted') {
-        nodeEl.classList.add('fading-out');
-        setTimeout(() => {
-            removePathFromTree(path);
-            delete nodeElements[path];
-            knownPaths.delete(path);
-            refreshDisplay();
-        }, 1500);
-    }
-
     for (const callback of componentCallbacks) {
         callback(nodeEl, status, isNew);
     }
+}
+
+function handleDeleteOperation(path, onComplete) {
+    const nodeEl = nodeElements[path];
+    if (!nodeEl) {
+        onComplete();
+        return;
+    }
+
+    nodeEl.dataset.status = 'deleted';
+
+    for (const callback of componentCallbacks) {
+        callback(nodeEl, 'deleted', false);
+    }
+
+    nodeEl.classList.add('fading-out');
+    setTimeout(() => {
+        // Check if a newer operation has re-added this path
+        if (pendingOperations[path] && pendingOperations[path].length > 0) {
+            // There's a pending operation, skip the actual deletion
+            nodeEl.classList.remove('fading-out');
+            onComplete();
+            return;
+        }
+
+        removePathFromTree(path);
+        delete nodeElements[path];
+        knownPaths.delete(path);
+        refreshDisplay();
+        onComplete();
+    }, 1500);
+}
+
+function handleCreateOrUpdateOperation(path, metadata, isNew, onComplete) {
+    insertIntoTree(path, false, metadata);
+    knownPaths.add(path);
+
+    refreshDisplay();
+    updateNodeStatus(path, metadata.status, isNew);
+    onComplete();
 }
 
 function removePathFromTree(path) {
@@ -295,17 +352,10 @@ function monitorFiles() {
 
         if (status === 'deleted') {
             if (knownPaths.has(path)) {
-                updateNodeStatus(path, status, false);
+                queueOperation(path, (onComplete) => handleDeleteOperation(path, onComplete));
             }
         } else {
-            insertIntoTree(path, false, metadata);
-            knownPaths.add(path);
-
-            if (isNew) {
-                refreshDisplay();
-            }
-
-            updateNodeStatus(path, status, isNew);
+            queueOperation(path, (onComplete) => handleCreateOrUpdateOperation(path, metadata, isNew, onComplete));
         }
     };
 }
