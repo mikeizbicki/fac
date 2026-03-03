@@ -301,11 +301,11 @@ function monitorFiles() {
             insertIntoTree(path, false, metadata);
             knownPaths.add(path);
 
-            if (status === 'fresh') {
-                updateNodeStatus(path, status, isNew);
-            } else if (status === 'stale' || status === 'building' || status === 'queued') {
-                updateNodeStatus(path, status, false);
+            if (isNew) {
+                refreshDisplay();
             }
+
+            updateNodeStatus(path, status, isNew);
         }
     };
 }
