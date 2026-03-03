@@ -40,6 +40,138 @@ window.registerComponent = function(callback) {
     componentCallbacks.push(callback);
 };
 
+// Extract variable names from a target pattern
+function extractVariables(pattern) {
+    const regex = /\$([A-Z_][A-Z0-9_]*)/g;
+    const vars = [];
+    let match;
+    while ((match = regex.exec(pattern)) !== null) {
+        if (!vars.includes(match[1])) {
+            vars.push(match[1]);
+        }
+    }
+    return vars;
+}
+
+// Check if a target pattern has variables
+function hasVariables(pattern) {
+    return /\$[A-Z_][A-Z0-9_]*/.test(pattern);
+}
+
+// Convert a target pattern to a regex for matching paths
+function targetToRegex(pattern) {
+    let regexStr = pattern
+        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        .replace(/\\\$[A-Z_][A-Z0-9_]*/g, '([^/]+)');
+    return new RegExp('^' + regexStr + '$');
+}
+
+// Extract variable values from a path given a target pattern
+function extractVariableValues(pattern, path) {
+    const vars = extractVariables(pattern);
+    if (vars.length === 0) return null;
+    
+    const regex = targetToRegex(pattern);
+    const match = path.match(regex);
+    if (!match) return null;
+    
+    const values = {};
+    for (let i = 0; i < vars.length; i++) {
+        values[vars[i]] = match[i + 1];
+    }
+    return values;
+}
+
+// Find which target pattern matches a given path
+function findMatchingTarget(path) {
+    for (const target of targetOrder) {
+        const regex = targetToRegex(target);
+        if (regex.test(path)) {
+            return target;
+        }
+    }
+    return null;
+}
+
+// Get all known variable value combinations for a target pattern
+function getKnownVariableCombinations(targetPattern) {
+    const vars = extractVariables(targetPattern);
+    if (vars.length === 0) return [];
+    
+    const combinations = [];
+    for (const path of knownPaths) {
+        const values = extractVariableValues(targetPattern, path);
+        if (values) {
+            // Check if this combination already exists
+            const exists = combinations.some(combo => 
+                vars.every(v => combo[v] === values[v])
+            );
+            if (!exists) {
+                combinations.push(values);
+            }
+        }
+    }
+    return combinations;
+}
+
+// Generate all possible paths for a target given known variable combinations
+function generatePossiblePaths(targetPattern, combinations) {
+    const paths = [];
+    for (const combo of combinations) {
+        let path = targetPattern;
+        for (const [varName, value] of Object.entries(combo)) {
+            path = path.replace(new RegExp('\\$' + varName, 'g'), value);
+        }
+        paths.push(path);
+    }
+    return paths;
+}
+
+// Check if a path exists in knownPaths
+function pathExists(path) {
+    return knownPaths.has(path);
+}
+
+// Get targets that share variables with the given target (same variable scope)
+function getRelatedTargets(targetPattern) {
+    const vars = extractVariables(targetPattern);
+    if (vars.length === 0) return [targetPattern];
+    
+    const related = [];
+    for (const target of targetOrder) {
+        const targetVars = extractVariables(target);
+        // Check if they share at least one variable
+        if (vars.some(v => targetVars.includes(v))) {
+            related.push(target);
+        }
+    }
+    return related;
+}
+
+// Get all variable combinations across related targets
+function getAllVariableCombinations(targetPattern) {
+    const relatedTargets = getRelatedTargets(targetPattern);
+    const allVars = new Set();
+    for (const target of relatedTargets) {
+        for (const v of extractVariables(target)) {
+            allVars.add(v);
+        }
+    }
+    
+    const combinations = [];
+    for (const target of relatedTargets) {
+        for (const combo of getKnownVariableCombinations(target)) {
+            const exists = combinations.some(existing => 
+                [...allVars].every(v => existing[v] === combo[v])
+            );
+            if (!exists) {
+                combinations.push(combo);
+            }
+        }
+    }
+    return combinations;
+}
+
 function insertIntoTree(path, isTarget, metadata = null) {
     const parts = path.split('/');
     let current = treeRoot;
@@ -68,14 +200,66 @@ function insertIntoTree(path, isTarget, metadata = null) {
                 current._children[nodeKey]._metadata = metadata;
             }
         } else {
-            if (!current._children[part]) {
-                current._children[part] = {
+            // Check if this is a variable segment in a target
+            const isVariableSegment = isTarget && part.includes('$');
+            const nodeKey = isVariableSegment ? `targetvar:${part}` : part;
+            
+            if (!current._children[nodeKey]) {
+                current._children[nodeKey] = {
                     _name: part,
                     _isIntermediate: true,
+                    _isVariableScope: isVariableSegment,
                     _expanded: true
                 };
             }
-            current = current._children[part];
+            current = current._children[nodeKey];
+        }
+    }
+}
+
+function removeFromTree(path, isTarget) {
+    const parts = path.split('/');
+    let current = treeRoot;
+    const stack = [{ node: treeRoot, key: null }];
+
+    for (let i = 0; i < parts.length - 1; i++) {
+        const part = parts[i];
+        let found = false;
+        if (current._children) {
+            // Try exact match first
+            if (current._children[part]) {
+                current = current._children[part];
+                stack.push({ node: current, key: part });
+                found = true;
+            } else {
+                // Try targetvar match
+                for (const key of Object.keys(current._children)) {
+                    if (key.startsWith('targetvar:') || key === part) {
+                        current = current._children[key];
+                        stack.push({ node: current, key: key });
+                        found = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if (!found) return;
+    }
+
+    const lastPart = parts[parts.length - 1];
+    const nodeKey = isTarget ? `target:${lastPart}` : `path:${lastPart}`;
+    if (current._children && current._children[nodeKey]) {
+        delete current._children[nodeKey];
+    }
+
+    // Clean up empty intermediate nodes
+    for (let i = stack.length - 1; i >= 0; i--) {
+        const { node, key } = stack[i];
+        if (node._children && Object.keys(node._children).length === 0 && node._isIntermediate) {
+            if (i > 0) {
+                const parent = stack[i - 1].node;
+                delete parent._children[key];
+            }
         }
     }
 }
@@ -163,15 +347,15 @@ function handleDeleteOperation(path, onComplete) {
         removePathFromTree(path);
         delete nodeElements[path];
         knownPaths.delete(path);
+        rebuildTree();
         refreshDisplay();
         onComplete();
     }, 1500);
 }
 
 function handleCreateOrUpdateOperation(path, metadata, isNew, onComplete) {
-    insertIntoTree(path, false, metadata);
     knownPaths.add(path);
-
+    rebuildTree();
     refreshDisplay();
     updateNodeStatus(path, metadata.status, isNew);
     onComplete();
@@ -209,6 +393,182 @@ function removePathFromTree(path) {
     }
 }
 
+// Rebuild the entire tree based on current targets and known paths
+function rebuildTree() {
+    treeRoot = {};
+    
+    // For each target, determine what should be displayed
+    for (const target of targetOrder) {
+        const vars = extractVariables(target);
+        
+        if (vars.length === 0) {
+            // No variables - show target only if path doesn't exist
+            if (!pathExists(target)) {
+                insertIntoTree(target, true);
+            }
+        } else {
+            // Has variables - need to show target nodes for missing paths
+            const combinations = getAllVariableCombinations(target);
+            
+            for (const combo of combinations) {
+                let path = target;
+                for (const [varName, value] of Object.entries(combo)) {
+                    path = path.replace(new RegExp('\\$' + varName, 'g'), value);
+                }
+                
+                if (!pathExists(path)) {
+                    // Insert as a "virtual target" - a target with variables filled in
+                    insertIntoTree(path, true, { _isVirtualTarget: true, _sourceTarget: target });
+                }
+            }
+            
+            // Also insert the original target pattern for the variable scope form
+            insertTargetPattern(target);
+        }
+    }
+    
+    // Insert all known paths
+    for (const path of knownPaths) {
+        const metadata = getPathMetadata(path);
+        insertIntoTree(path, false, metadata);
+    }
+}
+
+// Store metadata for paths
+let pathMetadata = {};
+
+function getPathMetadata(path) {
+    return pathMetadata[path] || {};
+}
+
+function setPathMetadata(path, metadata) {
+    pathMetadata[path] = metadata;
+}
+
+// Insert a target pattern into the tree (for variable scope forms)
+function insertTargetPattern(pattern) {
+    const parts = pattern.split('/');
+    let current = treeRoot;
+
+    for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        const isLeaf = i === parts.length - 1;
+
+        if (!current._children) {
+            current._children = {};
+        }
+
+        const isVariableSegment = part.includes('$');
+        
+        if (isLeaf) {
+            // Don't add leaf target patterns, they're handled by rebuildTree
+        } else {
+            const nodeKey = isVariableSegment ? `targetvar:${part}` : part;
+            
+            if (!current._children[nodeKey]) {
+                current._children[nodeKey] = {
+                    _name: part,
+                    _isIntermediate: true,
+                    _isVariableScope: isVariableSegment,
+                    _targetPattern: pattern,
+                    _expanded: true
+                };
+            } else if (isVariableSegment) {
+                current._children[nodeKey]._isVariableScope = true;
+                current._children[nodeKey]._targetPattern = pattern;
+            }
+            current = current._children[nodeKey];
+        }
+    }
+}
+
+function createVariableScopeForm(node, container) {
+    // Find all variables used in targets under this scope
+    const allVars = new Set();
+    for (const target of targetOrder) {
+        if (target.includes(node._name)) {
+            for (const v of extractVariables(target)) {
+                allVars.add(v);
+            }
+        }
+    }
+    
+    if (allVars.size === 0) return;
+    
+    const formDiv = document.createElement('div');
+    formDiv.className = 'variable-scope-form';
+    
+    const varsContainer = document.createElement('div');
+    varsContainer.className = 'variable-inputs';
+    
+    const inputs = {};
+    for (const varName of allVars) {
+        const varDiv = document.createElement('div');
+        varDiv.className = 'variable-input';
+        
+        const label = document.createElement('label');
+        label.textContent = '$' + varName + ':';
+        varDiv.appendChild(label);
+        
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = varName;
+        input.dataset.varName = varName;
+        inputs[varName] = input;
+        varDiv.appendChild(input);
+        
+        varsContainer.appendChild(varDiv);
+    }
+    
+    formDiv.appendChild(varsContainer);
+    
+    const promptDiv = document.createElement('div');
+    promptDiv.className = 'prompt-input';
+    
+    const promptLabel = document.createElement('label');
+    promptLabel.textContent = 'Prompt (optional):';
+    promptDiv.appendChild(promptLabel);
+    
+    const promptInput = document.createElement('textarea');
+    promptInput.placeholder = 'Enter build prompt...';
+    promptInput.rows = 2;
+    promptDiv.appendChild(promptInput);
+    
+    formDiv.appendChild(promptDiv);
+    
+    const buttonsDiv = document.createElement('div');
+    buttonsDiv.className = 'form-buttons';
+    
+    const buildAllBtn = document.createElement('button');
+    buildAllBtn.textContent = 'Build All';
+    buildAllBtn.addEventListener('click', () => {
+        // Get the path prefix for this scope
+        const pathPrefix = getPathPrefix(node);
+        const targetPath = pathPrefix + '**';
+        
+        const body = { target: targetPath };
+        if (promptInput.value.trim()) {
+            body.prompt = promptInput.value.trim();
+        }
+        
+        fetch('/add_target', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+    });
+    buttonsDiv.appendChild(buildAllBtn);
+    
+    formDiv.appendChild(buttonsDiv);
+    container.appendChild(formDiv);
+}
+
+function getPathPrefix(node) {
+    // This is simplified; in practice we'd track the full path
+    // For now, return the node name with a trailing slash
+    return node._name.replace(/\$[A-Z_][A-Z0-9_]*/g, '**') + '/';
+}
+
 function renderTree(node, container, pathParts = []) {
     if (!node._children) return;
 
@@ -244,6 +604,9 @@ function renderTree(node, container, pathParts = []) {
             }
         } else if (child._isIntermediate) {
             div.classList.add('intermediate');
+            if (child._isVariableScope) {
+                div.classList.add('variable-scope');
+            }
         }
 
         if (child._expanded) {
@@ -268,6 +631,11 @@ function renderTree(node, container, pathParts = []) {
 
         div.appendChild(header);
 
+        // Add variable scope form if this is a variable scope node
+        if (child._isVariableScope) {
+            createVariableScopeForm(child, div);
+        }
+
         if (child._isPath && child._metadata) {
             const metadataContainer = document.createElement('div');
             metadataContainer.className = 'metadata';
@@ -277,6 +645,7 @@ function renderTree(node, container, pathParts = []) {
 
             for (const [metaKey, metaValue] of Object.entries(child._metadata)) {
                 if (metaKey === 'content') continue;
+                if (metaKey.startsWith('_')) continue;
                 const metaDiv = document.createElement('div');
                 metaDiv.className = 'meta-info';
                 metaDiv.setAttribute('data-label', metaKey);
@@ -327,9 +696,7 @@ function loadTargets() {
         .then(data => {
             targets = data;
             targetOrder = Object.keys(data);
-            for (const target of targetOrder) {
-                insertIntoTree(target, true);
-            }
+            rebuildTree();
             refreshDisplay();
         });
 }
@@ -349,6 +716,8 @@ function monitorFiles() {
             'mime-type': data['mime-type'],
             content: data.content
         };
+
+        setPathMetadata(path, metadata);
 
         if (status === 'deleted') {
             if (knownPaths.has(path)) {
