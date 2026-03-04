@@ -690,10 +690,18 @@ class BuildState(Routable):
             mode='build',
             ):
         '''
-        Registers a target with the build system,
-        but does not directly build it.
-        The next time the build_all function is called,
-        all pending targets will be built.
+        Registers a target with the build system.
+
+        Arguments:
+        - target (str): the target to be built; all variables must be specified; suppo
+   globstar (**)-style pattern matching
+        - include_prompt (str): allows specifying additional build instructions for th
+  arget
+        - include_old (bool): should the old file be included if rebuilding?
+        - mode (str):
+            - "build": (default) build the file only if needed
+            - "overwrite": always build the file, overwriting existing contents
+            - "dryrun": register the file with the build system, but do not build
         '''
         matches = match_pattern_starstar(self.targets_dict.keys(), target)
 
