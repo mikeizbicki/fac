@@ -213,6 +213,7 @@ body {
 
 .form-buttons {
     display: flex;
+    align-items: center;
     gap: 8px;
 }
 
@@ -236,4 +237,16 @@ body {
 .form-buttons button:active {
     background: #2a6fb9;
     border-color: #2a6fb9;
+}
+
+.build-confirmation {
+    color: #28a745;
+    font-size: 0.85em;
+    font-weight: 500;
+    opacity: 1;
+    transition: opacity 0.5s ease;
+}
+
+.build-confirmation.fading {
+    opacity: 0;
 }

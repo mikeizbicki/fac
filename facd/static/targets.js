@@ -542,10 +542,18 @@ function createVariableScopeForm(node, container, pathParts) {
     const buildAllBtn = document.createElement('button');
     buildAllBtn.textContent = 'Build All';
     buildAllBtn.addEventListener('click', () => {
-        // Reconstruct the path prefix from pathParts
+        // Reconstruct the path prefix from pathParts, substituting variables
         const pathPrefix = pathParts.map(p => {
             if (p.startsWith('targetvar:')) {
-                return p.substring('targetvar:'.length);
+                let segment = p.substring('targetvar:'.length);
+                // Substitute variables in this segment
+                for (const [varName, input] of Object.entries(inputs)) {
+                    const value = input.value.trim();
+                    if (value) {
+                        segment = segment.replace(new RegExp('\\$' + varName, 'g'), value);
+                    }
+                }
+                return segment;
             }
             return p;
         }).join('/');
@@ -564,6 +572,32 @@ function createVariableScopeForm(node, container, pathParts) {
         .then(response => {
             if (!response.ok) throw new Error('Failed to queue build');
             return response.json();
+        })
+        .then(() => {
+            // Reset form fields
+            for (const input of Object.values(inputs)) {
+                input.value = '';
+            }
+            promptInput.value = '';
+            
+            // Show confirmation message
+            const existingConfirmation = buttonsDiv.querySelector('.build-confirmation');
+            if (existingConfirmation) {
+                existingConfirmation.remove();
+            }
+            
+            const confirmation = document.createElement('span');
+            confirmation.className = 'build-confirmation';
+            confirmation.textContent = 'Build command sent';
+            buttonsDiv.appendChild(confirmation);
+            
+            // Fade out after 3 seconds
+            setTimeout(() => {
+                confirmation.classList.add('fading');
+                setTimeout(() => {
+                    confirmation.remove();
+                }, 500);
+            }, 3000);
         })
         .catch(error => {
             console.error('Error queuing build:', error);
