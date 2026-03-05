@@ -193,7 +193,7 @@ function insertIntoTree(path, isTarget, metadata = null) {
                     _isPath: !isTarget,
                     _metadata: metadata,
                     _order: isTarget ? targetOrder.indexOf(path) : null,
-                    _expanded: true,
+                    _expanded: false,
                     _fullPath: path
                 };
             } else if (!isTarget && metadata) {
