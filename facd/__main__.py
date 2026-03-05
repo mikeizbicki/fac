@@ -27,11 +27,12 @@ async def lifespan(app: FastAPI):
     # that will be used when running FastAPI
     # but not when the file is loaded in other contexts (e.g. doctests)
 
-    # register routes state routes
+    # register state routes
     targets_dict = load_config('fac.yaml')
     state = BuildState(targets_dict)
+    state.file_manager.start()
     app.include_router(state.router)
-    app.include_router(state.built_paths.router)
+    app.include_router(state.file_manager.router)
 
     # perform a dryrun to register all files with facd;
     # build_all=False allows facd startup to continue,

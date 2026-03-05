@@ -24,21 +24,67 @@ class FileManager(Routable):
         self._shutdown = False
         super().__init__()
 
-        self._watch_task = asyncio.create_task(self._watch_files())
+    def get_fresh_paths(self):
+        return [path for path, metainfo in self.files.items() if metainfo['status'] == 'fresh']
 
-    async def _watch_files(self):
-        async for changes in awatch(".", stop_event=self._stop_event):
-            for change_type, abs_path in changes:
-                path = os.path.relpath(abs_path)
-                targets = match_pattern_starstar(self.targets_dict, path)
-                path_matches_target = len(targets) > 0
-                if path not in self.files and not path_matches_target:
-                    continue
-                if change_type == Change.deleted:
-                    self.files[path]['status'] = 'deleted'
-                else:
-                    self.files[path]['status'] = 'fresh'
-                self._notify(path)
+    def add(self, path, status):
+        self._validate_path(path)
+
+        # compute meta-info for path
+        targets = match_pattern_starstar(self.targets_dict, path)
+        if len(targets) == 0: # happens when path doesn't correspond
+            target = path
+            mime = 'unknown'
+        elif len(targets) == 1:
+            target, variables = targets[0]
+            mime = self.targets_dict[target]['mime-type']
+        else:
+            raise ValueError('path corresponds to multiple targets; this should never happen with a correct fac.yaml file')
+
+        # actually add path
+        if path in self.files and self.files[path]['status'] == 'fresh' and status == 'queued':
+            # do not overwrite fresh status with queued status
+            pass
+        else:
+            self.files[path] = {
+                    'status': status,
+                    'target': target,
+                    'mime-type': mime,
+                    }
+            self._notify(path)
+
+    def _validate_path(self, path: str) -> None:
+        '''
+        Validate that path is safe (no directory traversal, no absolute paths).
+        '''
+        if os.path.isabs(path):
+            raise HTTPException(status_code=400, detail="Absolute paths are not allowed")
+        if ".." in path.split(os.sep):
+            raise HTTPException(status_code=400, detail="Directory traversal is not allowed")
+        normalized = os.path.normpath(path)
+        if normalized.startswith(".."):
+            raise HTTPException(status_code=400, detail="Directory traversal is not allowed")
+
+    '''
+    FIXME:
+    add/remove?
+
+    def __contains__(self, path: str) -> bool:
+        return path in self.files
+
+    def __len__(self) -> int:
+        return len(self.files)
+
+    def __iter__(self):
+        return iter(self.files)
+    '''
+
+    ##############################
+    # async helpers
+    ##############################
+
+    def start(self):
+        self._watch_task = asyncio.create_task(self._watch_files())
 
     async def shutdown(self):
         self._shutdown = True
@@ -54,49 +100,19 @@ class FileManager(Routable):
             self._stop_event_obj = asyncio.Event()
         return self._stop_event_obj
 
-    def _validate_path(self, path: str) -> None:
-        '''
-        Validate that path is safe (no directory traversal, no absolute paths).
-        '''
-        if os.path.isabs(path):
-            raise HTTPException(status_code=400, detail="Absolute paths are not allowed")
-        if ".." in path.split(os.sep):
-            raise HTTPException(status_code=400, detail="Directory traversal is not allowed")
-        normalized = os.path.normpath(path)
-        if normalized.startswith(".."):
-            raise HTTPException(status_code=400, detail="Directory traversal is not allowed")
-
-    ##############################
-    # set interface
-    ##############################
-
-    def add(self, path: str) -> None:
-        if path in self.files:
-            return
-        targets = match_pattern_starstar(self.targets_dict, path)
-        if len(targets) == 0: # happens when path doesn't correspond
-            target = path
-            mime = 'unknown'
-        elif len(targets) == 1:
-            target, variables = targets[0]
-            mime = self.targets_dict[target]['mime-type']
-        else:
-            raise ValueError('path corresponds to multiple targets; this should never happen with a correct fac.yaml file')
-        self.files[path] = {
-                'status': 'fresh',
-                'target': target,
-                'mime-type': mime,
-                }
-        self._notify(path)
-
-    def __contains__(self, path: str) -> bool:
-        return path in self.files
-
-    def __len__(self) -> int:
-        return len(self.files)
-
-    def __iter__(self):
-        return iter(self.files)
+    async def _watch_files(self):
+        async for changes in awatch(".", stop_event=self._stop_event):
+            for change_type, abs_path in changes:
+                path = os.path.relpath(abs_path)
+                targets = match_pattern_starstar(self.targets_dict, path)
+                path_matches_target = len(targets) > 0
+                if path not in self.files and not path_matches_target:
+                    continue
+                if change_type == Change.deleted:
+                    self.files[path]['status'] = 'deleted'
+                else:
+                    self.files[path]['status'] = 'fresh'
+                self._notify(path)
 
     ##############################
     # FastAPI endpoints

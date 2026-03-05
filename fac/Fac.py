@@ -348,6 +348,15 @@ class BuildContext(BaseModel):
         assert '$' not in paths[0]
         return paths[0]
 
+    def path_safe(self):
+        '''
+        Like .path(), but catches any errors and returns None if there is no unique path.
+        '''
+        try:
+            return self.path()
+        except AssertionError:
+            return None
+
     def FAC_DEPENDENCIES(self):
         '''
         Whenever a target is built, the environment variable FAC_DEPENDENCIES contains a newline delimited list of files that the target depends on.
@@ -397,7 +406,7 @@ class BuildState(Routable):
         super().__init__()
 
         self.targets_dict = targets_dict
-        self.built_paths = FileManager(targets_dict) # basically a set() plus FastAPI endpoints
+        self.file_manager = FileManager(targets_dict)
 
         # the states
         self.contexts_unresolved = set()
@@ -461,7 +470,7 @@ class BuildState(Routable):
         # every built_path has a corresponding context
         # (and vice versa)
         context_paths = set([context.path() for context in self.contexts_built])
-        assert context_paths == set(self.built_paths)
+        assert context_paths == set(self.file_manager.get_fresh_paths())
 
         # all BuildContexts must satisfy their invariants
         for context in itertools.chain(
@@ -513,14 +522,12 @@ class BuildState(Routable):
         '''
         if longform:
             yaml_dict = {
-                'built_paths': sorted([path for path in self.built_paths]),
                 'buildable(long)': [context.to_dict() for priority, context in self.contexts_buildable.to_list()],
                 'waiting(long)': [context.to_dict() for context in self.contexts_waiting],
                 'unresolved(long)': [context.to_dict() for  context in self.contexts_unresolved],
                 }
         else:
             yaml_dict = {
-                'built_paths': sorted([path for path in self.built_paths]),
                 'buildable': sorted([context.denormalized_target() for priority, context in self.contexts_buildable.to_list()]),
                 'waiting': sorted([context.denormalized_target() for context in self.contexts_waiting]),
                 'unresolved': sorted([context.denormalized_target() for  context in self.contexts_unresolved]),
@@ -540,7 +547,7 @@ class BuildState(Routable):
         print(f'|| BuildState diff {msg_str} ||')
         print(10 * '-')
         output = {}
-        states = ['built_paths', 'buildable', 'waiting', 'unresolved']
+        states = ['buildable', 'waiting', 'unresolved']
         for state in states:
             print(f'{state} (diff)')
             for k in diff.get('iterable_item_removed', []):
@@ -755,6 +762,12 @@ class BuildState(Routable):
                 else:
                     self.contexts_unresolved.add(context)
 
+            # if the context has been resolved to a path,
+            # register it as queued
+            path = context.path_safe()
+            if path and context.mode != 'dryrun':
+                self.file_manager.add(path, 'queued')
+
     def process_all_waiting(self):
         logger.debug(f'process_all_waiting()')
         self.debug_short(submessage=True)
@@ -777,7 +790,7 @@ class BuildState(Routable):
                 # paths and targets must be handled differently
                 if '$' not in denormalized_target:
                     path = denormalized_target
-                    if path in self.built_paths:
+                    if path in self.file_manager.get_fresh_paths():
                         dep1 = dict(dep)
                         dep1['target'] = path
                         dependencies_built1.append(dep1)
@@ -832,7 +845,7 @@ class BuildState(Routable):
                         logger.debug(f'target not in self.target_dicts, cannot build', submessage=True)
                         future = executor.submit(lambda: True)
                     else:
-                        future = executor.submit(asyncio.run, build_context(context))
+                        future = executor.submit(asyncio.run, build_context(context, self.file_manager))
                     futures[future] = context
 
                 for future in as_completed(futures):
@@ -841,7 +854,7 @@ class BuildState(Routable):
                     path = context.path()
                     if path_valid:
                         self.contexts_built.add(context)
-                        self.built_paths.add(path)
+                        self.file_manager.add(path, status='fresh')
                     else:
                         self.contexts_notbuilt.add(context)
 
@@ -877,7 +890,7 @@ class BuildState(Routable):
             future = build_context(context)
             asyncio.run(future)
         self.contexts_built.add(context)
-        self.built_paths.add(path)
+        self.file_manager.add(path, status='fresh')
 
         for postreq in context.config.get('postreqs', []):
             self.add_target(
@@ -1154,7 +1167,7 @@ class BuildSystem:
         if self.auto_commit:
             try_add('fac.yaml')
             try_add('.fac.jsonl')
-            for path in self.build_state.built_paths:
+            for path in self.build_state.file_manager.get_fresh_paths():
                 dirname = os.path.dirname(path)
                 filename = os.path.basename(path)
                 try_add(path)
@@ -1226,7 +1239,7 @@ def _get_file_timestamp(path):
     assert False
 
 
-async def build_context(context, print_prompt=False):
+async def build_context(context, file_manager=None, print_prompt=False):
     '''
     Returns whether the context resolves to a valid path.
     This can be true if either the path already existed and was up-to-date (i.e. a build was not needed),
@@ -1474,6 +1487,8 @@ Generate the file "{context.path()}" based on the information below.
             do_build = False
         else:
             file_status.append('out-of-date')
+            if file_manager:
+                file_manager.add(context.path(), 'stale')
     except FileNotFoundError:
         file_status.append('new')
 
@@ -1516,6 +1531,9 @@ Generate the file "{context.path()}" based on the information below.
     # log build
     logger.info(f'{file_status} {context.path()}')
     if do_build:
+        if file_manager:
+            file_manager.add(context.path(), 'building')
+
         # sort portions of context for better logger output
         context_dict = context.to_dict()
         context_dict.get('dependencies_built', []).sort(key=lambda x: x.get('target'))
@@ -1603,6 +1621,8 @@ Generate the file "{context.path()}" based on the information below.
 
     # validate file
     validate_file(context.path(), context.config.get('schema_file'))
+    if file_manager:
+        file_manager.add(context.path(), 'fresh')
 
     return True
 
