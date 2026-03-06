@@ -93,6 +93,21 @@ function findMatchingTarget(path) {
     return null;
 }
 
+// Get the order index for a target pattern
+function getTargetOrderIndex(target) {
+    const index = targetOrder.indexOf(target);
+    return index >= 0 ? index : targetOrder.length;
+}
+
+// Get the order index for a path based on its matching target
+function getPathOrderIndex(path) {
+    const matchingTarget = findMatchingTarget(path);
+    if (matchingTarget) {
+        return getTargetOrderIndex(matchingTarget);
+    }
+    return targetOrder.length;
+}
+
 // Get all known variable value combinations for a target pattern
 function getKnownVariableCombinations(targetPattern) {
     const vars = extractVariables(targetPattern);
@@ -176,6 +191,14 @@ function insertIntoTree(path, isTarget, metadata = null) {
     const parts = path.split('/');
     let current = treeRoot;
 
+    // Calculate order based on target order
+    let orderIndex;
+    if (isTarget) {
+        orderIndex = getTargetOrderIndex(path);
+    } else {
+        orderIndex = getPathOrderIndex(path);
+    }
+
     for (let i = 0; i < parts.length; i++) {
         const part = parts[i];
         const isLeaf = i === parts.length - 1;
@@ -192,12 +215,16 @@ function insertIntoTree(path, isTarget, metadata = null) {
                     _isTarget: isTarget,
                     _isPath: !isTarget,
                     _metadata: metadata,
-                    _order: isTarget ? targetOrder.indexOf(path) : null,
+                    _order: orderIndex,
                     _expanded: false,
                     _fullPath: path
                 };
-            } else if (!isTarget && metadata) {
-                current._children[nodeKey]._metadata = metadata;
+            } else {
+                // Update order if needed
+                current._children[nodeKey]._order = orderIndex;
+                if (!isTarget && metadata) {
+                    current._children[nodeKey]._metadata = metadata;
+                }
             }
         } else {
             // Check if this is a variable segment in a target
@@ -209,8 +236,15 @@ function insertIntoTree(path, isTarget, metadata = null) {
                     _name: part,
                     _isIntermediate: true,
                     _isVariableScope: isVariableSegment,
-                    _expanded: true
+                    _expanded: true,
+                    _order: orderIndex
                 };
+            } else {
+                // Update order to be the minimum (earliest) of all children
+                if (current._children[nodeKey]._order === undefined || 
+                    orderIndex < current._children[nodeKey]._order) {
+                    current._children[nodeKey]._order = orderIndex;
+                }
             }
             current = current._children[nodeKey];
         }
@@ -265,11 +299,15 @@ function removeFromTree(path, isTarget) {
 }
 
 function getOrderKey(key, child) {
-    if (child._isTarget && child._order !== null) {
-        return String(child._order).padStart(10, '0');
+    // Use the _order field which is based on target order
+    if (child._order !== undefined && child._order !== null) {
+        // Pad with zeros for proper string sorting, then append name for stable sort
+        const name = key.includes(':') ? key.split(':')[1] : key;
+        return String(child._order).padStart(10, '0') + ':' + name;
     }
+    // Fallback to name-based sorting for nodes without order
     const name = key.includes(':') ? key.split(':')[1] : key;
-    return name;
+    return '9999999999:' + name;
 }
 
 function toggleNode(nodeKey, pathParts) {
@@ -449,6 +487,7 @@ function setPathMetadata(path, metadata) {
 function insertTargetPattern(pattern) {
     const parts = pattern.split('/');
     let current = treeRoot;
+    const orderIndex = getTargetOrderIndex(pattern);
 
     for (let i = 0; i < parts.length; i++) {
         const part = parts[i];
@@ -471,11 +510,19 @@ function insertTargetPattern(pattern) {
                     _isIntermediate: true,
                     _isVariableScope: isVariableSegment,
                     _targetPattern: pattern,
-                    _expanded: true
+                    _expanded: true,
+                    _order: orderIndex
                 };
-            } else if (isVariableSegment) {
-                current._children[nodeKey]._isVariableScope = true;
-                current._children[nodeKey]._targetPattern = pattern;
+            } else {
+                if (isVariableSegment) {
+                    current._children[nodeKey]._isVariableScope = true;
+                    current._children[nodeKey]._targetPattern = pattern;
+                }
+                // Update order to be the minimum (earliest) of all children
+                if (current._children[nodeKey]._order === undefined || 
+                    orderIndex < current._children[nodeKey]._order) {
+                    current._children[nodeKey]._order = orderIndex;
+                }
             }
             current = current._children[nodeKey];
         }
