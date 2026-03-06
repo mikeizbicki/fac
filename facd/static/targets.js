@@ -187,117 +187,6 @@ function getAllVariableCombinations(targetPattern) {
     return combinations;
 }
 
-function insertIntoTree(path, isTarget, metadata = null) {
-    const parts = path.split('/');
-    let current = treeRoot;
-
-    // Calculate order based on target order
-    let orderIndex;
-    if (isTarget) {
-        orderIndex = getTargetOrderIndex(path);
-    } else {
-        orderIndex = getPathOrderIndex(path);
-    }
-
-    for (let i = 0; i < parts.length; i++) {
-        const part = parts[i];
-        const isLeaf = i === parts.length - 1;
-
-        if (!current._children) {
-            current._children = {};
-        }
-
-        if (isLeaf) {
-            const nodeKey = isTarget ? `target:${part}` : `path:${part}`;
-            if (!current._children[nodeKey]) {
-                current._children[nodeKey] = {
-                    _name: part,
-                    _isTarget: isTarget,
-                    _isPath: !isTarget,
-                    _metadata: metadata,
-                    _order: orderIndex,
-                    _expanded: false,
-                    _fullPath: path
-                };
-            } else {
-                // Update order if needed
-                current._children[nodeKey]._order = orderIndex;
-                if (!isTarget && metadata) {
-                    current._children[nodeKey]._metadata = metadata;
-                }
-            }
-        } else {
-            // Check if this is a variable segment in a target
-            const isVariableSegment = isTarget && part.includes('$');
-            const nodeKey = isVariableSegment ? `targetvar:${part}` : part;
-            
-            if (!current._children[nodeKey]) {
-                current._children[nodeKey] = {
-                    _name: part,
-                    _isIntermediate: true,
-                    _isVariableScope: isVariableSegment,
-                    _expanded: true,
-                    _order: orderIndex
-                };
-            } else {
-                // Update order to be the minimum (earliest) of all children
-                if (current._children[nodeKey]._order === undefined || 
-                    orderIndex < current._children[nodeKey]._order) {
-                    current._children[nodeKey]._order = orderIndex;
-                }
-            }
-            current = current._children[nodeKey];
-        }
-    }
-}
-
-function removeFromTree(path, isTarget) {
-    const parts = path.split('/');
-    let current = treeRoot;
-    const stack = [{ node: treeRoot, key: null }];
-
-    for (let i = 0; i < parts.length - 1; i++) {
-        const part = parts[i];
-        let found = false;
-        if (current._children) {
-            // Try exact match first
-            if (current._children[part]) {
-                current = current._children[part];
-                stack.push({ node: current, key: part });
-                found = true;
-            } else {
-                // Try targetvar match
-                for (const key of Object.keys(current._children)) {
-                    if (key.startsWith('targetvar:') || key === part) {
-                        current = current._children[key];
-                        stack.push({ node: current, key: key });
-                        found = true;
-                        break;
-                    }
-                }
-            }
-        }
-        if (!found) return;
-    }
-
-    const lastPart = parts[parts.length - 1];
-    const nodeKey = isTarget ? `target:${lastPart}` : `path:${lastPart}`;
-    if (current._children && current._children[nodeKey]) {
-        delete current._children[nodeKey];
-    }
-
-    // Clean up empty intermediate nodes
-    for (let i = stack.length - 1; i >= 0; i--) {
-        const { node, key } = stack[i];
-        if (node._children && Object.keys(node._children).length === 0 && node._isIntermediate) {
-            if (i > 0) {
-                const parent = stack[i - 1].node;
-                delete parent._children[key];
-            }
-        }
-    }
-}
-
 function getOrderKey(key, child) {
     // Use the _order field which is based on target order
     if (child._order !== undefined && child._order !== null) {
@@ -320,9 +209,47 @@ function toggleNode(nodeKey, pathParts) {
         }
     }
     if (current._children && current._children[nodeKey]) {
-        current._children[nodeKey]._expanded = !current._children[nodeKey]._expanded;
-        refreshDisplay();
+        const node = current._children[nodeKey];
+        node._expanded = !node._expanded;
+        
+        // Find the DOM element and toggle its expanded class
+        const fullPath = node._fullPath || [...pathParts, nodeKey].join('/');
+        const nodeEl = findDomNodeByTreePath([...pathParts, nodeKey]);
+        if (nodeEl) {
+            nodeEl.classList.toggle('expanded', node._expanded);
+        }
     }
+}
+
+// Find a DOM node by its tree path (array of keys)
+function findDomNodeByTreePath(pathParts) {
+    const container = document.getElementById('targets-container');
+    let current = container;
+    
+    for (const part of pathParts) {
+        if (!current) return null;
+        const children = current.querySelectorAll(':scope > .tree-node');
+        let found = false;
+        for (const child of children) {
+            const label = child.querySelector(':scope > .tree-header > .tree-label');
+            if (label) {
+                // Match by the actual text or by key pattern
+                const expectedName = part.includes(':') ? part.split(':').slice(1).join(':') : part;
+                if (label.textContent === expectedName) {
+                    current = child.querySelector(':scope > .tree-children') || child;
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if (!found) return null;
+    }
+    
+    // Return the parent tree-node if we ended up in tree-children
+    if (current && current.classList.contains('tree-children')) {
+        return current.parentElement;
+    }
+    return current;
 }
 
 function processNextOperation(path) {
@@ -382,21 +309,111 @@ function handleDeleteOperation(path, onComplete) {
             return;
         }
 
-        removePathFromTree(path);
-        delete nodeElements[path];
-        knownPaths.delete(path);
-        rebuildTree();
-        refreshDisplay();
+        removeNodeFromDomAndTree(path);
         onComplete();
     }, 1500);
 }
 
 function handleCreateOrUpdateOperation(path, metadata, isNew, onComplete) {
     knownPaths.add(path);
-    rebuildTree();
-    refreshDisplay();
+    setPathMetadata(path, metadata);
+    
+    if (isNew) {
+        // Insert into tree data structure
+        insertPathIntoTree(path, metadata);
+        // Insert into DOM
+        insertNodeIntoDom(path, metadata);
+    } else {
+        // Just update the existing node's metadata
+        updateExistingNode(path, metadata);
+    }
+    
     updateNodeStatus(path, metadata.status, isNew);
     onComplete();
+}
+
+// Insert a path into the tree data structure
+function insertPathIntoTree(path, metadata) {
+    const parts = path.split('/');
+    let current = treeRoot;
+    const orderIndex = getPathOrderIndex(path);
+
+    for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        const isLeaf = i === parts.length - 1;
+
+        if (!current._children) {
+            current._children = {};
+        }
+
+        if (isLeaf) {
+            const nodeKey = `path:${part}`;
+            current._children[nodeKey] = {
+                _name: part,
+                _isPath: true,
+                _metadata: metadata,
+                _order: orderIndex,
+                _expanded: false,
+                _fullPath: path
+            };
+        } else {
+            if (!current._children[part]) {
+                current._children[part] = {
+                    _name: part,
+                    _isIntermediate: true,
+                    _expanded: true,
+                    _order: orderIndex
+                };
+            } else {
+                // Update order to be the minimum (earliest) of all children
+                if (current._children[part]._order === undefined || 
+                    orderIndex < current._children[part]._order) {
+                    current._children[part]._order = orderIndex;
+                }
+            }
+            current = current._children[part];
+        }
+    }
+}
+
+// Remove a node from both DOM and tree data structure
+function removeNodeFromDomAndTree(path) {
+    // Remove from DOM
+    const nodeEl = nodeElements[path];
+    if (nodeEl) {
+        const parent = nodeEl.parentElement;
+        nodeEl.remove();
+        
+        // Clean up empty parent containers
+        cleanupEmptyContainers(parent);
+    }
+    
+    // Remove from tree data structure
+    removePathFromTree(path);
+    
+    // Clean up tracking
+    delete nodeElements[path];
+    knownPaths.delete(path);
+    delete pathMetadata[path];
+}
+
+// Clean up empty tree-children containers after node removal
+function cleanupEmptyContainers(container) {
+    while (container && container.classList.contains('tree-children')) {
+        if (container.children.length === 0) {
+            const parentNode = container.parentElement;
+            if (parentNode && parentNode.classList.contains('tree-node') && 
+                parentNode.classList.contains('intermediate')) {
+                const grandParent = parentNode.parentElement;
+                parentNode.remove();
+                container = grandParent;
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
 }
 
 function removePathFromTree(path) {
@@ -420,6 +437,7 @@ function removePathFromTree(path) {
         delete current._children[nodeKey];
     }
 
+    // Clean up empty intermediate nodes in tree data
     for (let i = stack.length - 1; i >= 0; i--) {
         const { node, key } = stack[i];
         if (node._children && Object.keys(node._children).length === 0 && node._isIntermediate) {
@@ -431,44 +449,318 @@ function removePathFromTree(path) {
     }
 }
 
-// Rebuild the entire tree based on current targets and known paths
-function rebuildTree() {
-    treeRoot = {};
-    
-    // For each target, determine what should be displayed
-    for (const target of targetOrder) {
-        const vars = extractVariables(target);
+// Insert a new node into the DOM at the correct position
+function insertNodeIntoDom(path, metadata) {
+    const parts = path.split('/');
+    const container = document.getElementById('targets-container');
+    let currentContainer = container;
+    let currentTreeNode = treeRoot;
+    const pathParts = [];
+
+    // Navigate/create intermediate nodes
+    for (let i = 0; i < parts.length - 1; i++) {
+        const part = parts[i];
+        pathParts.push(part);
         
-        if (vars.length === 0) {
-            // No variables - show target only if path doesn't exist
-            if (!pathExists(target)) {
-                insertIntoTree(target, true);
-            }
-        } else {
-            // Has variables - need to show target nodes for missing paths
-            const combinations = getAllVariableCombinations(target);
-            
-            for (const combo of combinations) {
-                let path = target;
-                for (const [varName, value] of Object.entries(combo)) {
-                    path = path.replace(new RegExp('\\$' + varName, 'g'), value);
+        if (!currentTreeNode._children || !currentTreeNode._children[part]) {
+            // This shouldn't happen if insertPathIntoTree was called first
+            return;
+        }
+        
+        const treeNode = currentTreeNode._children[part];
+        let domNode = findChildByName(currentContainer, part);
+        
+        if (!domNode) {
+            // Create intermediate node
+            domNode = createIntermediateNode(treeNode, pathParts.slice());
+            insertNodeInOrder(currentContainer, domNode, treeNode, currentTreeNode);
+        }
+        
+        let childContainer = domNode.querySelector(':scope > .tree-children');
+        if (!childContainer) {
+            childContainer = document.createElement('div');
+            childContainer.className = 'tree-children';
+            domNode.appendChild(childContainer);
+        }
+        
+        currentContainer = childContainer;
+        currentTreeNode = treeNode;
+    }
+
+    // Create the leaf node
+    const lastPart = parts[parts.length - 1];
+    const nodeKey = `path:${lastPart}`;
+    const treeNode = currentTreeNode._children[nodeKey];
+    
+    const leafNode = createPathNode(treeNode, path, metadata);
+    nodeElements[path] = leafNode;
+    
+    insertNodeInOrder(currentContainer, leafNode, treeNode, currentTreeNode);
+    
+    // Notify components about new node
+    const status = metadata?.status || null;
+    for (const callback of componentCallbacks) {
+        callback(leafNode, status, true);
+    }
+}
+
+// Find a child node by its display name
+function findChildByName(container, name) {
+    const children = container.querySelectorAll(':scope > .tree-node');
+    for (const child of children) {
+        const label = child.querySelector(':scope > .tree-header > .tree-label');
+        if (label && label.textContent === name) {
+            return child;
+        }
+    }
+    return null;
+}
+
+// Insert a node in the correct order within a container
+function insertNodeInOrder(container, newNode, newTreeNode, parentTreeNode) {
+    const newOrderKey = getOrderKey('', newTreeNode);
+    const children = container.querySelectorAll(':scope > .tree-node');
+    
+    for (const child of children) {
+        const childLabel = child.querySelector(':scope > .tree-header > .tree-label');
+        if (childLabel) {
+            const childName = childLabel.textContent;
+            // Find the corresponding tree node to get its order
+            let childTreeNode = null;
+            if (parentTreeNode._children) {
+                for (const [key, node] of Object.entries(parentTreeNode._children)) {
+                    if (node._name === childName) {
+                        childTreeNode = node;
+                        break;
+                    }
                 }
-                
-                if (!pathExists(path)) {
-                    // Insert as a "virtual target" - a target with variables filled in
-                    insertIntoTree(path, true, { _isVirtualTarget: true, _sourceTarget: target });
-                }
             }
             
-            // Also insert the original target pattern for the variable scope form
-            insertTargetPattern(target);
+            if (childTreeNode) {
+                const childOrderKey = getOrderKey('', childTreeNode);
+                if (newOrderKey < childOrderKey) {
+                    container.insertBefore(newNode, child);
+                    return;
+                }
+            }
         }
     }
     
-    // Insert all known paths
-    for (const path of knownPaths) {
-        const metadata = getPathMetadata(path);
-        insertIntoTree(path, false, metadata);
+    // Append at end if no insertion point found
+    container.appendChild(newNode);
+}
+
+// Create an intermediate (directory) node
+function createIntermediateNode(treeNode, pathParts) {
+    const div = document.createElement('div');
+    div.className = 'tree-node intermediate';
+    
+    if (treeNode._isVariableScope) {
+        div.classList.add('variable-scope');
+    }
+    
+    if (treeNode._expanded) {
+        div.classList.add('expanded');
+    }
+
+    const header = document.createElement('div');
+    header.className = 'tree-header';
+    
+    const nodeKey = treeNode._isVariableScope ? `targetvar:${treeNode._name}` : treeNode._name;
+    header.addEventListener('click', () => {
+        toggleNode(nodeKey, pathParts.slice(0, -1));
+    });
+
+    const toggle = document.createElement('button');
+    toggle.className = 'tree-toggle';
+    toggle.innerHTML = '&#9654;';
+    header.appendChild(toggle);
+
+    const label = document.createElement('span');
+    label.className = 'tree-label';
+    label.textContent = treeNode._name;
+    header.appendChild(label);
+
+    div.appendChild(header);
+
+    // Add variable scope form if this is a variable scope node
+    if (treeNode._isVariableScope) {
+        createVariableScopeForm(treeNode, div, pathParts);
+    }
+
+    return div;
+}
+
+// Create a path (file) leaf node
+function createPathNode(treeNode, path, metadata) {
+    const div = document.createElement('div');
+    div.className = 'tree-node path leaf';
+    div.dataset.path = path;
+
+    if (metadata) {
+        if (metadata['mime-type']) {
+            div.dataset.mimeType = metadata['mime-type'];
+        }
+        if (metadata.status) {
+            div.dataset.status = metadata.status;
+        }
+        if (metadata.content !== undefined) {
+            div.dataset.content = metadata.content;
+        }
+    }
+
+    const header = document.createElement('div');
+    header.className = 'tree-header';
+
+    const toggle = document.createElement('button');
+    toggle.className = 'tree-toggle';
+    toggle.innerHTML = '&#9654;';
+    header.appendChild(toggle);
+
+    const label = document.createElement('span');
+    label.className = 'tree-label';
+    label.textContent = treeNode._name;
+    header.appendChild(label);
+
+    div.appendChild(header);
+
+    // Add metadata display
+    if (metadata) {
+        const metadataContainer = createMetadataContainer(metadata);
+        div.appendChild(metadataContainer);
+    }
+
+    return div;
+}
+
+// Create a target leaf node
+function createTargetNode(treeNode, pathParts) {
+    const div = document.createElement('div');
+    div.className = 'tree-node target leaf';
+    div.dataset.path = treeNode._fullPath || '';
+    div.dataset.isTarget = 'true';
+
+    const header = document.createElement('div');
+    header.className = 'tree-header';
+
+    const toggle = document.createElement('button');
+    toggle.className = 'tree-toggle';
+    toggle.innerHTML = '&#9654;';
+    header.appendChild(toggle);
+
+    const label = document.createElement('span');
+    label.className = 'tree-label';
+    label.textContent = treeNode._name;
+    header.appendChild(label);
+
+    div.appendChild(header);
+
+    return div;
+}
+
+// Create metadata container for a path node
+function createMetadataContainer(metadata) {
+    const metadataContainer = document.createElement('div');
+    metadataContainer.className = 'metadata';
+
+    const mimeType = metadata['mime-type'] || '';
+    const showContent = mimeType.startsWith('text/');
+
+    for (const [metaKey, metaValue] of Object.entries(metadata)) {
+        if (metaKey === 'content') continue;
+        if (metaKey.startsWith('_')) continue;
+        const metaDiv = document.createElement('div');
+        metaDiv.className = 'meta-info';
+        metaDiv.setAttribute('data-label', metaKey);
+        metaDiv.textContent = metaValue;
+        metadataContainer.appendChild(metaDiv);
+    }
+
+    if (showContent && metadata.content !== undefined) {
+        const contentWrapper = document.createElement('div');
+        contentWrapper.className = 'content-wrapper';
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'content';
+        contentDiv.textContent = metadata.content;
+        contentWrapper.appendChild(contentDiv);
+        metadataContainer.appendChild(contentWrapper);
+    }
+
+    return metadataContainer;
+}
+
+// Update an existing node's metadata without rebuilding
+function updateExistingNode(path, metadata) {
+    const nodeEl = nodeElements[path];
+    if (!nodeEl) return;
+
+    // Update data attributes
+    if (metadata['mime-type']) {
+        nodeEl.dataset.mimeType = metadata['mime-type'];
+    }
+    if (metadata.status) {
+        nodeEl.dataset.status = metadata.status;
+    }
+    if (metadata.content !== undefined) {
+        nodeEl.dataset.content = metadata.content;
+    }
+
+    // Update metadata display
+    const existingMetadata = nodeEl.querySelector(':scope > .metadata');
+    if (existingMetadata) {
+        // Update meta-info elements
+        for (const [metaKey, metaValue] of Object.entries(metadata)) {
+            if (metaKey === 'content') continue;
+            if (metaKey.startsWith('_')) continue;
+            
+            let metaDiv = existingMetadata.querySelector(`.meta-info[data-label="${metaKey}"]`);
+            if (metaDiv) {
+                metaDiv.textContent = metaValue;
+            } else {
+                metaDiv = document.createElement('div');
+                metaDiv.className = 'meta-info';
+                metaDiv.setAttribute('data-label', metaKey);
+                metaDiv.textContent = metaValue;
+                existingMetadata.insertBefore(metaDiv, existingMetadata.querySelector('.content-wrapper'));
+            }
+        }
+
+        // Update content if applicable
+        const mimeType = metadata['mime-type'] || '';
+        const showContent = mimeType.startsWith('text/');
+        const contentWrapper = existingMetadata.querySelector('.content-wrapper');
+        
+        if (showContent && metadata.content !== undefined) {
+            if (contentWrapper) {
+                const contentDiv = contentWrapper.querySelector('.content');
+                if (contentDiv) {
+                    contentDiv.textContent = metadata.content;
+                }
+            } else {
+                const newContentWrapper = document.createElement('div');
+                newContentWrapper.className = 'content-wrapper';
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'content';
+                contentDiv.textContent = metadata.content;
+                newContentWrapper.appendChild(contentDiv);
+                existingMetadata.appendChild(newContentWrapper);
+            }
+        }
+    }
+
+    // Update tree data structure
+    const parts = path.split('/');
+    let current = treeRoot;
+    for (let i = 0; i < parts.length - 1; i++) {
+        if (current._children && current._children[parts[i]]) {
+            current = current._children[parts[i]];
+        } else {
+            return;
+        }
+    }
+    const nodeKey = `path:${parts[parts.length - 1]}`;
+    if (current._children && current._children[nodeKey]) {
+        current._children[nodeKey]._metadata = metadata;
     }
 }
 
@@ -481,52 +773,6 @@ function getPathMetadata(path) {
 
 function setPathMetadata(path, metadata) {
     pathMetadata[path] = metadata;
-}
-
-// Insert a target pattern into the tree (for variable scope forms)
-function insertTargetPattern(pattern) {
-    const parts = pattern.split('/');
-    let current = treeRoot;
-    const orderIndex = getTargetOrderIndex(pattern);
-
-    for (let i = 0; i < parts.length; i++) {
-        const part = parts[i];
-        const isLeaf = i === parts.length - 1;
-
-        if (!current._children) {
-            current._children = {};
-        }
-
-        const isVariableSegment = part.includes('$');
-        
-        if (isLeaf) {
-            // Don't add leaf target patterns, they're handled by rebuildTree
-        } else {
-            const nodeKey = isVariableSegment ? `targetvar:${part}` : part;
-            
-            if (!current._children[nodeKey]) {
-                current._children[nodeKey] = {
-                    _name: part,
-                    _isIntermediate: true,
-                    _isVariableScope: isVariableSegment,
-                    _targetPattern: pattern,
-                    _expanded: true,
-                    _order: orderIndex
-                };
-            } else {
-                if (isVariableSegment) {
-                    current._children[nodeKey]._isVariableScope = true;
-                    current._children[nodeKey]._targetPattern = pattern;
-                }
-                // Update order to be the minimum (earliest) of all children
-                if (current._children[nodeKey]._order === undefined || 
-                    orderIndex < current._children[nodeKey]._order) {
-                    current._children[nodeKey]._order = orderIndex;
-                }
-            }
-            current = current._children[nodeKey];
-        }
-    }
 }
 
 function createVariableScopeForm(node, container, pathParts) {
@@ -657,12 +903,120 @@ function createVariableScopeForm(node, container, pathParts) {
     container.appendChild(formDiv);
 }
 
-function getPathPrefix(node) {
-    // This is simplified; in practice we'd track the full path
-    // For now, return the node name with a trailing slash
-    return node._name.replace(/\$[A-Z_][A-Z0-9_]*/g, '**') + '/';
+// Build the initial tree and render it (only called once on load)
+function buildInitialTree() {
+    treeRoot = {};
+    
+    // For each target, determine what should be displayed
+    for (const target of targetOrder) {
+        const vars = extractVariables(target);
+        
+        if (vars.length === 0) {
+            // No variables - show target only if path doesn't exist
+            if (!pathExists(target)) {
+                insertTargetIntoTree(target);
+            }
+        } else {
+            // Has variables - insert the target pattern for the variable scope form
+            insertTargetPattern(target);
+        }
+    }
+    
+    // Insert all known paths
+    for (const path of knownPaths) {
+        const metadata = getPathMetadata(path);
+        insertPathIntoTree(path, metadata);
+    }
 }
 
+// Insert a target into the tree data structure
+function insertTargetIntoTree(target) {
+    const parts = target.split('/');
+    let current = treeRoot;
+    const orderIndex = getTargetOrderIndex(target);
+
+    for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        const isLeaf = i === parts.length - 1;
+
+        if (!current._children) {
+            current._children = {};
+        }
+
+        if (isLeaf) {
+            const nodeKey = `target:${part}`;
+            current._children[nodeKey] = {
+                _name: part,
+                _isTarget: true,
+                _order: orderIndex,
+                _expanded: false,
+                _fullPath: target
+            };
+        } else {
+            const isVariableSegment = part.includes('$');
+            const nodeKey = isVariableSegment ? `targetvar:${part}` : part;
+            
+            if (!current._children[nodeKey]) {
+                current._children[nodeKey] = {
+                    _name: part,
+                    _isIntermediate: true,
+                    _isVariableScope: isVariableSegment,
+                    _expanded: true,
+                    _order: orderIndex
+                };
+            }
+            current = current._children[nodeKey];
+        }
+    }
+}
+
+// Insert a target pattern into the tree (for variable scope forms)
+function insertTargetPattern(pattern) {
+    const parts = pattern.split('/');
+    let current = treeRoot;
+    const orderIndex = getTargetOrderIndex(pattern);
+
+    for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        const isLeaf = i === parts.length - 1;
+
+        if (!current._children) {
+            current._children = {};
+        }
+
+        const isVariableSegment = part.includes('$');
+        
+        if (isLeaf) {
+            // Don't add leaf target patterns, they're handled elsewhere
+        } else {
+            const nodeKey = isVariableSegment ? `targetvar:${part}` : part;
+            
+            if (!current._children[nodeKey]) {
+                current._children[nodeKey] = {
+                    _name: part,
+                    _isIntermediate: true,
+                    _isVariableScope: isVariableSegment,
+                    _targetPattern: pattern,
+                    _expanded: true,
+                    _order: orderIndex
+                };
+            } else {
+                if (isVariableSegment) {
+                    current._children[nodeKey]._isVariableScope = true;
+                    current._children[nodeKey]._targetPattern = pattern;
+                }
+                // Update order to be the minimum (earliest) of all children
+                if (current._children[nodeKey]._order === undefined || 
+                    orderIndex < current._children[nodeKey]._order) {
+                    current._children[nodeKey]._order = orderIndex;
+                }
+            }
+            current = current._children[nodeKey];
+        }
+    }
+}
+
+// Render the entire tree (only called once on initial load)
 function renderTree(node, container, pathParts = []) {
     if (!node._children) return;
 
@@ -674,90 +1028,15 @@ function renderTree(node, container, pathParts = []) {
 
     for (const key of sortedKeys) {
         const child = node._children[key];
-        const div = document.createElement('div');
-        div.className = 'tree-node';
-
-        div.dataset.path = child._fullPath || '';
+        let div;
 
         if (child._isTarget) {
-            div.classList.add('target', 'leaf');
-            div.dataset.isTarget = 'true';
+            div = createTargetNode(child, [...pathParts, key]);
         } else if (child._isPath) {
-            div.classList.add('path', 'leaf');
+            div = createPathNode(child, child._fullPath, child._metadata);
             nodeElements[child._fullPath] = div;
-            if (child._metadata) {
-                if (child._metadata['mime-type']) {
-                    div.dataset.mimeType = child._metadata['mime-type'];
-                }
-                if (child._metadata.status) {
-                    div.dataset.status = child._metadata.status;
-                }
-                if (child._metadata.content !== undefined) {
-                    div.dataset.content = child._metadata.content;
-                }
-            }
         } else if (child._isIntermediate) {
-            div.classList.add('intermediate');
-            if (child._isVariableScope) {
-                div.classList.add('variable-scope');
-            }
-        }
-
-        if (child._expanded) {
-            div.classList.add('expanded');
-        }
-
-        const header = document.createElement('div');
-        header.className = 'tree-header';
-        header.addEventListener('click', () => {
-            toggleNode(key, [...pathParts]);
-        });
-
-        const toggle = document.createElement('button');
-        toggle.className = 'tree-toggle';
-        toggle.innerHTML = '&#9654;';
-        header.appendChild(toggle);
-
-        const label = document.createElement('span');
-        label.className = 'tree-label';
-        label.textContent = child._name;
-        header.appendChild(label);
-
-        div.appendChild(header);
-
-        // Add variable scope form if this is a variable scope node
-        if (child._isVariableScope) {
-            createVariableScopeForm(child, div, [...pathParts, key]);
-        }
-
-        if (child._isPath && child._metadata) {
-            const metadataContainer = document.createElement('div');
-            metadataContainer.className = 'metadata';
-
-            const mimeType = child._metadata['mime-type'] || '';
-            const showContent = mimeType.startsWith('text/');
-
-            for (const [metaKey, metaValue] of Object.entries(child._metadata)) {
-                if (metaKey === 'content') continue;
-                if (metaKey.startsWith('_')) continue;
-                const metaDiv = document.createElement('div');
-                metaDiv.className = 'meta-info';
-                metaDiv.setAttribute('data-label', metaKey);
-                metaDiv.textContent = metaValue;
-                metadataContainer.appendChild(metaDiv);
-            }
-
-            if (showContent && child._metadata.content !== undefined) {
-                const contentWrapper = document.createElement('div');
-                contentWrapper.className = 'content-wrapper';
-                const contentDiv = document.createElement('div');
-                contentDiv.className = 'content';
-                contentDiv.textContent = child._metadata.content;
-                contentWrapper.appendChild(contentDiv);
-                metadataContainer.appendChild(contentWrapper);
-            }
-
-            div.appendChild(metadataContainer);
+            div = createIntermediateNode(child, [...pathParts, key]);
         }
 
         // Notify components about new node
@@ -777,7 +1056,8 @@ function renderTree(node, container, pathParts = []) {
     }
 }
 
-function refreshDisplay() {
+// Initial display (only called once)
+function initialDisplay() {
     const container = document.getElementById('targets-container');
     container.innerHTML = '';
     nodeElements = {};
@@ -790,8 +1070,8 @@ function loadTargets() {
         .then(data => {
             targets = data;
             targetOrder = Object.keys(data);
-            rebuildTree();
-            refreshDisplay();
+            buildInitialTree();
+            initialDisplay();
         });
 }
 
