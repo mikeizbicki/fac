@@ -199,57 +199,47 @@ function getOrderKey(key, child) {
     return '9999999999:' + name;
 }
 
-function toggleNode(nodeKey, pathParts) {
-    let current = treeRoot;
-    for (const part of pathParts) {
-        if (current._children && current._children[part]) {
-            current = current._children[part];
-        } else {
-            return;
+function toggleNodeByElement(nodeEl) {
+    nodeEl.classList.toggle('expanded');
+    
+    // Also update the tree data structure to keep it in sync
+    const path = nodeEl.dataset.path;
+    if (path) {
+        const parts = path.split('/');
+        let current = treeRoot;
+        for (let i = 0; i < parts.length - 1; i++) {
+            const part = parts[i];
+            if (current._children) {
+                // Try direct match first
+                if (current._children[part]) {
+                    current = current._children[part];
+                } else {
+                    // Try targetvar match
+                    const targetVarKey = Object.keys(current._children).find(k => 
+                        k.startsWith('targetvar:') && current._children[k]._name === part
+                    );
+                    if (targetVarKey) {
+                        current = current._children[targetVarKey];
+                    }
+                }
+            }
         }
-    }
-    if (current._children && current._children[nodeKey]) {
-        const node = current._children[nodeKey];
-        node._expanded = !node._expanded;
-        
-        // Find the DOM element and toggle its expanded class
-        const fullPath = node._fullPath || [...pathParts, nodeKey].join('/');
-        const nodeEl = findDomNodeByTreePath([...pathParts, nodeKey]);
-        if (nodeEl) {
-            nodeEl.classList.toggle('expanded', node._expanded);
+        const lastPart = parts[parts.length - 1];
+        if (current._children) {
+            const nodeKey = `path:${lastPart}`;
+            if (current._children[nodeKey]) {
+                current._children[nodeKey]._expanded = nodeEl.classList.contains('expanded');
+            }
+            const targetKey = `target:${lastPart}`;
+            if (current._children[targetKey]) {
+                current._children[targetKey]._expanded = nodeEl.classList.contains('expanded');
+            }
         }
     }
 }
 
-// Find a DOM node by its tree path (array of keys)
-function findDomNodeByTreePath(pathParts) {
-    const container = document.getElementById('targets-container');
-    let current = container;
-    
-    for (const part of pathParts) {
-        if (!current) return null;
-        const children = current.querySelectorAll(':scope > .tree-node');
-        let found = false;
-        for (const child of children) {
-            const label = child.querySelector(':scope > .tree-header > .tree-label');
-            if (label) {
-                // Match by the actual text or by key pattern
-                const expectedName = part.includes(':') ? part.split(':').slice(1).join(':') : part;
-                if (label.textContent === expectedName) {
-                    current = child.querySelector(':scope > .tree-children') || child;
-                    found = true;
-                    break;
-                }
-            }
-        }
-        if (!found) return null;
-    }
-    
-    // Return the parent tree-node if we ended up in tree-children
-    if (current && current.classList.contains('tree-children')) {
-        return current.parentElement;
-    }
-    return current;
+function toggleIntermediateNode(nodeEl) {
+    nodeEl.classList.toggle('expanded');
 }
 
 function processNextOperation(path) {
@@ -455,12 +445,10 @@ function insertNodeIntoDom(path, metadata) {
     const container = document.getElementById('targets-container');
     let currentContainer = container;
     let currentTreeNode = treeRoot;
-    const pathParts = [];
 
     // Navigate/create intermediate nodes
     for (let i = 0; i < parts.length - 1; i++) {
         const part = parts[i];
-        pathParts.push(part);
         
         if (!currentTreeNode._children || !currentTreeNode._children[part]) {
             // This shouldn't happen if insertPathIntoTree was called first
@@ -472,7 +460,7 @@ function insertNodeIntoDom(path, metadata) {
         
         if (!domNode) {
             // Create intermediate node
-            domNode = createIntermediateNode(treeNode, pathParts.slice());
+            domNode = createIntermediateNode(treeNode);
             insertNodeInOrder(currentContainer, domNode, treeNode, currentTreeNode);
         }
         
@@ -551,7 +539,7 @@ function insertNodeInOrder(container, newNode, newTreeNode, parentTreeNode) {
 }
 
 // Create an intermediate (directory) node
-function createIntermediateNode(treeNode, pathParts) {
+function createIntermediateNode(treeNode) {
     const div = document.createElement('div');
     div.className = 'tree-node intermediate';
     
@@ -566,9 +554,8 @@ function createIntermediateNode(treeNode, pathParts) {
     const header = document.createElement('div');
     header.className = 'tree-header';
     
-    const nodeKey = treeNode._isVariableScope ? `targetvar:${treeNode._name}` : treeNode._name;
     header.addEventListener('click', () => {
-        toggleNode(nodeKey, pathParts.slice(0, -1));
+        toggleIntermediateNode(div);
     });
 
     const toggle = document.createElement('button');
@@ -585,7 +572,7 @@ function createIntermediateNode(treeNode, pathParts) {
 
     // Add variable scope form if this is a variable scope node
     if (treeNode._isVariableScope) {
-        createVariableScopeForm(treeNode, div, pathParts);
+        createVariableScopeForm(treeNode, div);
     }
 
     return div;
@@ -596,6 +583,10 @@ function createPathNode(treeNode, path, metadata) {
     const div = document.createElement('div');
     div.className = 'tree-node path leaf';
     div.dataset.path = path;
+
+    if (treeNode._expanded) {
+        div.classList.add('expanded');
+    }
 
     if (metadata) {
         if (metadata['mime-type']) {
@@ -611,6 +602,10 @@ function createPathNode(treeNode, path, metadata) {
 
     const header = document.createElement('div');
     header.className = 'tree-header';
+    
+    header.addEventListener('click', () => {
+        toggleNodeByElement(div);
+    });
 
     const toggle = document.createElement('button');
     toggle.className = 'tree-toggle';
@@ -634,14 +629,22 @@ function createPathNode(treeNode, path, metadata) {
 }
 
 // Create a target leaf node
-function createTargetNode(treeNode, pathParts) {
+function createTargetNode(treeNode) {
     const div = document.createElement('div');
     div.className = 'tree-node target leaf';
     div.dataset.path = treeNode._fullPath || '';
     div.dataset.isTarget = 'true';
 
+    if (treeNode._expanded) {
+        div.classList.add('expanded');
+    }
+
     const header = document.createElement('div');
     header.className = 'tree-header';
+    
+    header.addEventListener('click', () => {
+        toggleNodeByElement(div);
+    });
 
     const toggle = document.createElement('button');
     toggle.className = 'tree-toggle';
@@ -775,7 +778,7 @@ function setPathMetadata(path, metadata) {
     pathMetadata[path] = metadata;
 }
 
-function createVariableScopeForm(node, container, pathParts) {
+function createVariableScopeForm(node, container) {
     // Find all variables used in targets under this scope
     const allVars = new Set();
     for (const target of targetOrder) {
@@ -835,21 +838,14 @@ function createVariableScopeForm(node, container, pathParts) {
     const buildAllBtn = document.createElement('button');
     buildAllBtn.textContent = 'Build All';
     buildAllBtn.addEventListener('click', () => {
-        // Reconstruct the path prefix from pathParts, substituting variables
-        const pathPrefix = pathParts.map(p => {
-            if (p.startsWith('targetvar:')) {
-                let segment = p.substring('targetvar:'.length);
-                // Substitute variables in this segment
-                for (const [varName, input] of Object.entries(inputs)) {
-                    const value = input.value.trim();
-                    if (value) {
-                        segment = segment.replace(new RegExp('\\$' + varName, 'g'), value);
-                    }
-                }
-                return segment;
+        // Build the path by substituting variables in the node's name pattern
+        let pathPrefix = node._name;
+        for (const [varName, input] of Object.entries(inputs)) {
+            const value = input.value.trim();
+            if (value) {
+                pathPrefix = pathPrefix.replace(new RegExp('\\$' + varName, 'g'), value);
             }
-            return p;
-        }).join('/');
+        }
         
         const targetPath = pathPrefix + '/**';
         
@@ -1017,7 +1013,7 @@ function insertTargetPattern(pattern) {
 }
 
 // Render the entire tree (only called once on initial load)
-function renderTree(node, container, pathParts = []) {
+function renderTree(node, container) {
     if (!node._children) return;
 
     const sortedKeys = Object.keys(node._children).sort((a, b) => {
@@ -1031,12 +1027,12 @@ function renderTree(node, container, pathParts = []) {
         let div;
 
         if (child._isTarget) {
-            div = createTargetNode(child, [...pathParts, key]);
+            div = createTargetNode(child);
         } else if (child._isPath) {
             div = createPathNode(child, child._fullPath, child._metadata);
             nodeElements[child._fullPath] = div;
         } else if (child._isIntermediate) {
-            div = createIntermediateNode(child, [...pathParts, key]);
+            div = createIntermediateNode(child);
         }
 
         // Notify components about new node
@@ -1048,7 +1044,7 @@ function renderTree(node, container, pathParts = []) {
         if (child._children) {
             const childContainer = document.createElement('div');
             childContainer.className = 'tree-children';
-            renderTree(child, childContainer, [...pathParts, key]);
+            renderTree(child, childContainer);
             div.appendChild(childContainer);
         }
 
