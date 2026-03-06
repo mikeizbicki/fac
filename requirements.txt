@@ -18,3 +18,4 @@ pytest>=9.0.2
 fastapi>=0.129.0
 Jinja2>=3.1.6
 uvicorn>=0.41.0
+watchfiles>=1.1.0
