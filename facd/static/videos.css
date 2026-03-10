@@ -1,0 +1,28 @@
+/* videos.css
+ *
+ * Styles for video display in the target tree.
+ */
+
+.video-container {
+    margin-top: 8px;
+}
+
+.leaf-video {
+    max-width: 100%;
+    max-height: 400px;
+    border-radius: 4px;
+    background: #000;
+}
+
+/* Screenplay-specific video styles */
+.screenplay-video-container {
+    width: 100%;
+    margin-top: 4px;
+}
+
+.screenplay-video-container video {
+    width: 100%;
+    max-height: 150px;
+    border-radius: 2px;
+    background: #000;
+}
