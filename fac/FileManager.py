@@ -197,6 +197,8 @@ class FileManager(Routable):
         Primarily useful for downloading large binary files whose contents are not returned with the /monitor_files route.
         '''
         self._validate_path(path)
+        if not os.path.exists(path):
+            raise HTTPException(status_code=404, detail=f"File not found: {path}")
         return FileResponse(path)
 
     @route("/edit_file/{path:path}", methods=["PUT"])
