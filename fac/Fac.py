@@ -1487,6 +1487,7 @@ Generate the file "{context.path()}" based on the information below.
             do_build = False
         else:
             file_status.append('out-of-date')
+            file_status.extend(['dep:' + dep for dep in updated_deps])
             if file_manager:
                 file_manager.add(context.path(), 'stale')
     except FileNotFoundError:
