@@ -342,7 +342,7 @@
 
           if (!path) return false;
     // Check if a path is a target we care about for screenplay
-    function isScreenplayTarget(path) {
+    function isScreenplayTargetPath(path) {
         // Check if path matches any of our target patterns
         const match = path.match(/^shots\/([^/]+)\//);
         if (!match) return false;
@@ -355,7 +355,9 @@
     }
 
     window.registerComponent(function(nodeEl, status, isNew) {
-        const path = nodeEl.dataset.path;
+        const nodePath = nodeEl.dataset.path;
+            if (!nodePath) return;
+            const path = nodePath;
 
         // Handle shooting-script.xml
         if (path === 'shooting-script.xml') {
@@ -368,7 +370,7 @@
         }
 
         // Handle screenplay target paths
-        if (isScreenplayTarget(path)) {
+        if (isScreenplayTargetPath(path)) {
             const content = nodeEl.dataset.content || '';
             const mimeType = nodeEl.dataset.mimeType || '';
             updateTargetContent(path, content, status, mimeType);
