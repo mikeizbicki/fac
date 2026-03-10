@@ -54,9 +54,13 @@
     function renderFountain(text) {
         if (typeof fountain === 'undefined') {
             console.warn('fountain.js not loaded, displaying raw text');
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
+            const escaped = text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/\n/g, '<br>\n')
+                .replace(/  /g, '&nbsp;&nbsp;');
+            return `<pre class="fountain-fallback">${escaped}</pre>`;
         }
         const output = fountain.parse(text);
         return output.html.script || '';

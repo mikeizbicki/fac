@@ -81,6 +81,13 @@
     text-align: center;
 }
 
+/* Fallback when fountain.js is not available */
+.fountain-fallback {
+    white-space: pre-wrap;
+    font-family: 'Courier New', Courier, monospace;
+    margin: 0;
+}
+
 /* Sticky note */
 .screenplay-sticky-note {
     width: 200px;
@@ -250,13 +257,18 @@
     z-index: 1;
 }
 
-/* Header menu for media containers (build button) */
-.sticky-media-container .header-menu {
-    display: flex;
-    gap: 4px;
+/* Header menu positioning for media containers */
+.sticky-media-header {
+    position: relative;
 }
 
-.sticky-media-container .header-menu button {
+.sticky-media-header .header-menu {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+}
+
+.sticky-media-header .header-menu button {
     background: none;
     border: none;
     cursor: pointer;
