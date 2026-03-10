@@ -7,6 +7,7 @@
 //
 // Dependencies:
 // - fountain.min.js must be loaded before this script
+// - build.js must be loaded after this script for build menus
 //
 // The component:
 // 1. Detects nodes with path 'shooting-script.xml'
@@ -135,7 +136,6 @@
         const row = document.createElement('div');
         row.className = 'sticky-meta-row sticky-target-row tree-node path leaf';
         row.dataset.path = targetPath;
-        row.dataset.stickyTarget = 'true';
 
         const labelSpan = document.createElement('span');
         labelSpan.className = 'sticky-meta-label';
@@ -151,6 +151,9 @@
         // Register for tracking
         targetElements.set(targetPath, row);
 
+        // Trigger build.js to add header menu
+        notifyComponentsNewNode(row);
+
         return row;
     }
 
@@ -158,15 +161,14 @@
         const container = document.createElement('div');
         container.className = `sticky-media-container sticky-media-${mediaType} tree-node path leaf`;
         container.dataset.path = targetPath;
-        container.dataset.stickyTarget = 'true';
         container.dataset.mimeType = mediaType === 'image' ? 'image/png' : 'video/mp4';
 
-        // Header with label and build menu
+        // Header with label - build.js will add the menu
         const header = document.createElement('div');
-        header.className = 'sticky-media-header tree-header';
+        header.className = 'tree-header';
 
         const label = document.createElement('span');
-        label.className = 'sticky-media-label';
+        label.className = 'tree-label sticky-media-label';
         label.textContent = mediaType === 'image' ? 'startframe.png' : 'raw.mp4';
         header.appendChild(label);
 
@@ -182,7 +184,19 @@
         // Register for tracking
         targetElements.set(targetPath, container);
 
+        // Trigger build.js to add header menu (isNew=true)
+        notifyComponentsNewNode(container);
+
         return container;
+    }
+
+    function notifyComponentsNewNode(nodeEl) {
+        // Defer to next tick so all components are registered
+        setTimeout(() => {
+            for (const callback of window._componentCallbacks || []) {
+                callback(nodeEl, nodeEl.dataset.status || 'unknown', true);
+            }
+        }, 0);
     }
 
     function createShotElement(shot) {
@@ -256,9 +270,6 @@
         if (metadata) {
             metadata.style.display = 'none';
         }
-
-        // Request status for all target paths by triggering component callbacks
-        // The targets.js will notify us via registerComponent when data arrives
     }
 
     function updateTargetContent(path, content, status, mimeType) {
@@ -267,7 +278,7 @@
         const element = targetElements.get(path);
         if (!element) return;
 
-        // Update status attribute for overlays
+        // Update status attribute for styling
         element.dataset.status = status;
 
         // For text targets, update the value display
@@ -357,10 +368,20 @@
         });
     }
 
+    // Store reference to all component callbacks for notifying sticky elements
+    window._componentCallbacks = window._componentCallbacks || [];
+
+    // Wrap registerComponent to capture all callbacks
+    const originalRegister = window.registerComponent;
+    window.registerComponent = function(callback) {
+        window._componentCallbacks.push(callback);
+        originalRegister(callback);
+    };
+
     window.registerComponent(function(nodeEl, status, isNew) {
         const nodePath = nodeEl.dataset.path;
-            if (!nodePath) return;
-            const path = nodePath;
+        if (!nodePath) return;
+        const path = nodePath;
 
         // Handle shooting-script.xml
         if (path === 'shooting-script.xml') {
@@ -372,35 +393,11 @@
             return;
         }
 
-        // Handle screenplay target paths
+        // Handle screenplay target paths - update sticky note elements
         if (isScreenplayTargetPath(path)) {
             const content = nodeEl.dataset.content || '';
             const mimeType = nodeEl.dataset.mimeType || '';
             updateTargetContent(path, content, status, mimeType);
-
-            // Also notify overlay/build components about our sticky elements
-            const stickyEl = targetElements.get(path);
-            if (stickyEl && stickyEl !== nodeEl) {
-                // Copy relevant attributes
-                stickyEl.dataset.status = status;
-                stickyEl.dataset.mimeType = mimeType;
-                if (content) {
-                    stickyEl.dataset.content = content;
-                }
-
-                // Trigger other components for this element
-                for (const callback of window._screenplayComponentCallbacks || []) {
-                    callback(stickyEl, status, isNew);
-                }
-            }
         }
     });
-
-    // Store callbacks for sticky elements
-    window._screenplayComponentCallbacks = [];
-    const originalRegister = window.registerComponent;
-    window.registerComponent = function(callback) {
-        originalRegister(callback);
-        window._screenplayComponentCallbacks.push(callback);
-    };
 })();
