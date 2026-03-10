@@ -993,7 +993,7 @@ function insertTargetPattern(pattern) {
                     _isIntermediate: true,
                     _isVariableScope: isVariableSegment,
                     _targetPattern: pattern,
-                    _expanded: true,
+                    _expanded: false,
                     _order: orderIndex
                 };
             } else {
