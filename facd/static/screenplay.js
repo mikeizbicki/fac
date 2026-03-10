@@ -340,6 +340,7 @@
         transformToScreenplay(nodeEl);
     }
 
+          if (!path) return false;
     // Check if a path is a target we care about for screenplay
     function isScreenplayTarget(path) {
         // Check if path matches any of our target patterns
