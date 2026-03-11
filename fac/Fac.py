@@ -1115,7 +1115,25 @@ class BuildState(Routable):
                         context.variables_resolved,
                         )
             except VariableEvaluationError as e:
-                logger.error(f'Error evaluating variable ${var} in target {context.normalized_target}')
+                logger.error(f'Error evaluating variable {var} in target {context.normalized_target}')
+
+                # print hints for how to resolve common errors
+                patterns = [
+                    r"jq: error: Could not open file (.+?):",
+                    r"ls: cannot access '(.+?)':",
+                ]
+                for pattern in patterns:
+                    match = re.search(pattern, e.cmd.stderr)
+                    if match:
+                        path = match.group(1)
+                        target_matches = match_pattern_starstar(self.targets_dict.keys(), path)
+                        logger.error(f'HINT: {var} depends on file {path}')
+                        if len(target_matches) == 0:
+                            logger.error('HINT: there are no targets that correspond to this path')
+                        else:
+                            logger.error(f'HINT: add "{target_matches[0][0]}" to the dependencies to build the file')
+
+                # print raw output
                 logger.error('stderr: |', submessage=True)
                 for line in (e.cmd.stderr.strip()).strip().split('\n'):
                     logger.error('  ' + line, submessage=True)
