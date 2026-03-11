@@ -242,9 +242,9 @@ class BuildContext(BaseModel):
                     **self.variables_resolved,
                     **dict(zip(splitting_variables, split))
                     }
-            context1 = self.model_copy(update={
+            context1 = copy.deepcopy(self.model_copy(update={
                 'variables_resolved': freeze(variables_resolved1)
-                })
+                }))
             contexts1.append(context1)
         return contexts1
 
@@ -292,6 +292,16 @@ class BuildContext(BaseModel):
                 assert dep not in self.dependencies_unresolved
             for dep in self.dependencies_unresolved:
                 assert dep not in self.dependencies_building
+
+            # all dependencies must have corresponding entries in the config
+            dep_targets = [dep['target'] for dep in self.config.get('dependencies',[])]
+            for dep in itertools.chain(
+                    self.dependencies_unresolved,
+                    self.dependencies_building,
+                    self.dependencies_built,
+                    ):
+                matches = match_pattern_starstar(dep_targets, dep['target'])
+                assert len(matches) == 1
 
             # NOTE:
             # dependencies_built has a complicated relationship to dependencies_unresolved/building
@@ -466,6 +476,40 @@ class BuildState(Routable):
             states_minus_i.remove(state)
             for context in state:
                 assert context not in itertools.chain(*states_minus_i)
+
+        # no two contexts share any memory
+        for context1 in itertools.chain(
+                self.contexts_unresolved,
+                self.contexts_buildable.to_list_nopriority(),
+                self.contexts_waiting,
+                self.contexts_built,
+                ):
+            for context2 in itertools.chain(
+                    self.contexts_unresolved,
+                    self.contexts_buildable.to_list_nopriority(),
+                    self.contexts_waiting,
+                    self.contexts_built,
+                    ):
+                if context1 is not context2:
+                    attributes_to_check = [
+                            #'variables_resolved',
+                            #'variables_unresolved',
+                            'dependencies_unresolved',
+                            'dependencies_building',
+                            'dependencies_built',
+                            ]
+                    for attr in attributes_to_check:
+                        try:
+                            is_empty = not vars(context1)[attr]
+                            is_different = vars(context1)[attr] is not vars(context2)[attr]
+                            assert is_empty or is_different
+                        except AssertionError as e:
+                            logger.error({'context1': context1.to_dict()})
+                            logger.error({'context2': context2.to_dict()})
+                            logger.error(f'attr={attr}')
+                            logger.error(f'is_empty={is_empty}',submessage=True)
+                            logger.error(f'is_different={is_different}',submessage=True)
+                            raise e
 
         # every built_path has a corresponding context
         # (and vice versa)
@@ -718,7 +762,7 @@ class BuildState(Routable):
 
         for normalized_target, target_env in matches:
             # build variables_unresolved
-            variables_unresolved = copy.deepcopy(self.targets_dict[normalized_target]['variables'])
+            variables_unresolved = dict(copy.deepcopy(self.targets_dict[normalized_target]['variables']))
             for var in target_env:
                 if var in variables_unresolved:
                     del variables_unresolved[var]
@@ -817,10 +861,20 @@ class BuildState(Routable):
                     if not all_targets_built:
                         dependencies_building1.append(dep)
                     else:
+                        dep_targets = [dep['target'] for dep in context.config['dependencies']]
                         for loop_context in self.contexts_built:
                             dep1 = dict(copy.deepcopy(dep))
                             dep1['target'] = loop_context.path()
-                            dependencies_built1.append(freeze(dep1))
+                            matches = match_pattern_starstar(dep_targets, dep1['target'])
+                            if len(matches) == 1:
+                                # FIXME:
+                                # the if statement is needed for when fac builds more than one target at a time
+                                # (either through demon mode or multiple cmd line args)
+                                # in that case, contexts_built will contain paths that do not necessarily correspond to the current context,
+                                # and the if statement ensures that only those paths for this context will be added;
+                                # the problem (and thing to fix) is that the match_pattern_starstar function is slow
+                                # and should not be in an inner loop
+                                dependencies_built1.append(freeze(dep1))
                             assert '$' not in dep1['target']
         context1 = context.model_copy(update={
             'dependencies_built': dependencies_built1,
@@ -977,7 +1031,7 @@ class BuildState(Routable):
                             # construct the new *_unresolved variables
                             if normalized_target in self.targets_dict:
                                 dependencies_unresolved = self.targets_dict[normalized_target]['dependencies']
-                                variables_unresolved = copy.deepcopy(self.targets_dict[normalized_target]['variables'])
+                                variables_unresolved = dict(copy.deepcopy(self.targets_dict[normalized_target]['variables']))
                                 for var in variables_resolved:
                                     if var in variables_unresolved:
                                         del variables_unresolved[var]
@@ -1120,9 +1174,12 @@ class BuildSystem:
     auto_commit: bool = True
 
     def __post_init__(self):
-        self.targets_dict = load_config(self.config_file)
+        self.targets_dict = freeze(load_config(self.config_file))
         self.build_state = BuildState(self.targets_dict)
-
+        if self.debug:
+            logger.setLevel('DEBUG')
+        if self.trace:
+            logger.setLevel('TRACE')
         if self.print_config:
             pprint_targets(self.targets_dict)
 
