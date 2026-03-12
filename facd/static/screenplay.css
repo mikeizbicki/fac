@@ -170,32 +170,50 @@
     gap: 8px;
 }
 
+/* Media containers in sticky notes - reuse tree-node styles for full-bleed effect */
 .sticky-media-container {
-    background: #f5f5dc;
     border-radius: 4px;
     overflow: hidden;
     position: relative;
+    background: #f5f5dc;
+    min-height: 80px;
 }
 
-.sticky-media-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+/* Override tree-node defaults for sticky context */
+.sticky-media-container.tree-node {
+    margin: 0;
+    border: none;
+}
+
+/* Always show expanded in sticky notes */
+.sticky-media-container.tree-node.leaf {
+    /* Force expanded state for media display */
+}
+
+.sticky-media-container .tree-header {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1;
+    background: rgba(255, 255, 255, 0.85);
     padding: 4px 8px;
-    background: rgba(0, 0, 0, 0.05);
-    cursor: pointer;
 }
 
-.sticky-media-label {
+.sticky-media-container .tree-toggle {
+    display: none;
+}
+
+.sticky-media-container .tree-label {
     font-size: 8pt;
     font-weight: bold;
     color: #666;
 }
 
-/* Media placeholder - fixed size to prevent layout shift */
+/* Media placeholder - acts like image-container/video-container */
 .sticky-media-placeholder {
     width: 100%;
-    height: 100px;
+    min-height: 80px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -208,18 +226,18 @@
     font-size: 24px;
 }
 
-.sticky-media-image {
+/* Image styling - matches images.css full-bleed pattern */
+.sticky-media-placeholder img {
     width: 100%;
-    height: 100px;
-    object-fit: contain;
-    background: #000;
+    height: auto;
+    display: block;
 }
 
-.sticky-media-video {
+/* Video styling - matches videos.css full-bleed pattern */
+.sticky-media-placeholder video {
     width: 100%;
-    height: 100px;
-    object-fit: contain;
-    background: #000;
+    height: auto;
+    display: block;
 }
 
 /* Status overlays for media containers */
@@ -258,17 +276,13 @@
 }
 
 /* Header menu positioning for media containers */
-.sticky-media-header {
-    position: relative;
-}
-
-.sticky-media-header .header-menu {
+.sticky-media-container .header-menu {
     display: flex;
     gap: 4px;
     margin-left: auto;
 }
 
-.sticky-media-header .header-menu button {
+.sticky-media-container .header-menu button {
     background: none;
     border: none;
     cursor: pointer;

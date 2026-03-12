@@ -159,7 +159,7 @@
 
     function createMediaContainer(targetPath, mediaType) {
         const container = document.createElement('div');
-        container.className = `sticky-media-container sticky-media-${mediaType} tree-node path leaf`;
+        container.className = `sticky-media-container tree-node path leaf has-${mediaType === 'image' ? 'image' : 'video'} expanded`;
         container.dataset.path = targetPath;
         container.dataset.mimeType = mediaType === 'image' ? 'image/png' : 'video/mp4';
 
@@ -167,19 +167,24 @@
         const header = document.createElement('div');
         header.className = 'tree-header';
 
+        const toggle = document.createElement('button');
+        toggle.className = 'tree-toggle';
+        toggle.innerHTML = '&#9654;';
+        header.appendChild(toggle);
+
         const label = document.createElement('span');
-        label.className = 'tree-label sticky-media-label';
+        label.className = 'tree-label';
         label.textContent = mediaType === 'image' ? 'startframe.png' : 'raw.mp4';
         header.appendChild(label);
 
         container.appendChild(header);
 
-        // Placeholder for media content
-        const placeholder = document.createElement('div');
-        placeholder.className = 'sticky-media-placeholder';
-        placeholder.dataset.targetPath = targetPath;
-        placeholder.dataset.mediaType = mediaType;
-        container.appendChild(placeholder);
+        // Media container - matches image-container/video-container pattern
+        const mediaWrapper = document.createElement('div');
+        mediaWrapper.className = mediaType === 'image' ? 'image-container' : 'video-container';
+        mediaWrapper.dataset.targetPath = targetPath;
+        mediaWrapper.dataset.mediaType = mediaType;
+        container.appendChild(mediaWrapper);
 
         // Register for tracking
         targetElements.set(targetPath, container);
@@ -287,27 +292,27 @@
             valueSpan.textContent = content.trim() || '—';
         }
 
-        // For media targets, update the placeholder
-        const placeholder = element.querySelector('.sticky-media-placeholder');
-        if (placeholder) {
-            updateMediaPlaceholder(placeholder, path, content, status, mimeType);
+        // For media targets, update the media container
+        const mediaContainer = element.querySelector('.image-container, .video-container');
+        if (mediaContainer) {
+            updateMediaContainer(mediaContainer, path, content, status, mimeType);
         }
     }
 
-    function updateMediaPlaceholder(placeholder, path, content, status, mimeType) {
-        const mediaType = placeholder.dataset.mediaType;
+    function updateMediaContainer(container, path, content, status, mimeType) {
+        const mediaType = container.dataset.mediaType;
 
         // If status indicates content exists, load it
         if (status === 'fresh' || status === 'stale') {
-            if (mediaType === 'image' && !placeholder.querySelector('img')) {
-                loadImage(placeholder, path);
-            } else if (mediaType === 'video' && !placeholder.querySelector('video')) {
-                loadVideo(placeholder, path);
+            if (mediaType === 'image' && !container.querySelector('img')) {
+                loadImage(container, path);
+            } else if (mediaType === 'video' && !container.querySelector('video')) {
+                loadVideo(container, path);
             }
         }
     }
 
-    function loadImage(placeholder, path) {
+    function loadImage(container, path) {
         fetch(`/contents?path=${encodeURIComponent(path)}`)
             .then(response => {
                 if (!response.ok) throw new Error('Not found');
@@ -317,16 +322,16 @@
                 const url = URL.createObjectURL(blob);
                 const img = document.createElement('img');
                 img.src = url;
-                img.className = 'sticky-media-image';
-                placeholder.innerHTML = '';
-                placeholder.appendChild(img);
+                img.className = 'leaf-image';
+                container.innerHTML = '';
+                container.appendChild(img);
             })
             .catch(() => {
-                // Keep placeholder empty for missing files
+                // Keep container empty for missing files
             });
     }
 
-    function loadVideo(placeholder, path) {
+    function loadVideo(container, path) {
         fetch(`/contents?path=${encodeURIComponent(path)}`)
             .then(response => {
                 if (!response.ok) throw new Error('Not found');
@@ -336,14 +341,14 @@
                 const url = URL.createObjectURL(blob);
                 const video = document.createElement('video');
                 video.src = url;
-                video.className = 'sticky-media-video';
+                video.className = 'leaf-video';
                 video.controls = true;
                 video.preload = 'metadata';
-                placeholder.innerHTML = '';
-                placeholder.appendChild(video);
+                container.innerHTML = '';
+                container.appendChild(video);
             })
             .catch(() => {
-                // Keep placeholder empty for missing files
+                // Keep container empty for missing files
             });
     }
 
