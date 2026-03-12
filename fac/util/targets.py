@@ -161,7 +161,11 @@ def substitute_variables(target: str, variables: dict[str, str]):
     return results
 
 
-@lru_cache(maxsize=None)
+# enable lru_caching whenever not using doctests
+# this is a bit janky, but works
+import inspect
+disable_cache = any('doctest' in str(frame.filename) for frame in inspect.stack())
+@lru_cache(maxsize=None) if not disable_cache else lambda f: f
 def match_pattern_starstar(patterns, input_string):
     """
     Match an input string (containing **) against patterns and extract variables.
