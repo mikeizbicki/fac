@@ -10,6 +10,7 @@ I have high confidence the work correctly because of the doctests.
 But any edge cases not covered by doctests are likely broken.
 '''
 
+from functools import lru_cache
 import re
 
 
@@ -160,6 +161,7 @@ def substitute_variables(target: str, variables: dict[str, str]):
     return results
 
 
+@lru_cache(maxsize=None)
 def match_pattern_starstar(patterns, input_string):
     """
     Match an input string (containing **) against patterns and extract variables.

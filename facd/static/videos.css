@@ -1,7 +1,4 @@
-/* videos.css
- *
- * Styles for video display in the target tree.
- */
+/* videos.css - Styles for video display in the target tree */
 
 .video-container {
     margin-top: 8px;
@@ -10,19 +7,54 @@
 .leaf-video {
     max-width: 100%;
     max-height: 400px;
+    display: block;
+}
+
+/* Hide video container when leaf node is collapsed */
+.tree-node.leaf:not(.expanded) .video-container {
+    display: none;
+}
+
+/* Full-bleed video for expanded nodes */
+.tree-node.leaf.expanded.has-video {
+    position: relative;
+}
+
+.tree-node.leaf.expanded.has-video > .video-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    margin: 0;
+    z-index: 0;
+}
+
+.tree-node.leaf.expanded.has-video > .video-container .leaf-video {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    object-fit: cover;
     border-radius: 4px;
-    background: #000;
 }
 
-/* Screenplay-specific video styles */
-.screenplay-video-container {
-    width: 100%;
-    margin-top: 4px;
+.tree-node.leaf.expanded.has-video > .tree-header {
+    position: relative;
+    z-index: 1;
+    background: rgba(255, 255, 255, 0.85);
+    border-radius: 4px 4px 0 0;
 }
 
-.screenplay-video-container video {
-    width: 100%;
-    max-height: 150px;
-    border-radius: 2px;
-    background: #000;
+.tree-node.leaf.expanded.has-video > .metadata {
+    position: relative;
+    z-index: 1;
+    background: rgba(255, 255, 255, 0.85);
+    margin: 0;
+    padding: 6px 10px 10px 36px;
+    border-radius: 0 0 4px 4px;
+}
+
+/* Ensure the node has minimum height when expanded with video */
+.tree-node.leaf.expanded.has-video {
+    min-height: 300px;
 }

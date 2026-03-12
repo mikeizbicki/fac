@@ -10,6 +10,7 @@ import re
 
 # internal imports
 from fac.Logging import *
+from fac.util.freeze import *
 
 # external lib imports
 import yaml
@@ -50,7 +51,7 @@ def load_config(path):
     with open(path) as fin:
         text = fin.read()
     targets_dict = rawyaml_to_targets(text)
-    return targets_dict
+    return freeze(targets_dict)
 
 
 def pprint_targets(targets):

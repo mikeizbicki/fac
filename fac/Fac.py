@@ -26,6 +26,7 @@ from fac.FileManager import FileManager
 from fac.LLM import LLM, LLMError
 from fac.io_utils import *
 from fac.util.FastAPI import *
+from fac.util.freeze import *
 from fac.util.PrioritySet import PrioritySet
 from fac.util.targets import *
 from fac.util.templates import *
@@ -34,48 +35,6 @@ from fac.util.templates import *
 from fac.Logging import *
 #logger.setLevel(logging.DEBUG)
 logger.setLevel(logging.INFO)
-
-
-def freeze(obj):
-    """Recursively convert dicts to frozendicts and iterables to frozensets.
-
-    >>> freeze({'a': 1, 'b': 2})
-    frozendict.frozendict({'a': 1, 'b': 2})
-
-    >>> freeze({'nested': {'x': 1}})
-    frozendict.frozendict({'nested': frozendict.frozendict({'x': 1})})
-
-    >>> freeze([1, 2, 3])
-    frozenset({1, 2, 3})
-
-    >>> freeze({1, 2, 3})
-    frozenset({1, 2, 3})
-
-    >>> freeze([{'a': 1}, {'b': 2}]) == frozenset({frozendict({'a': 1}), frozendict({'b': 2})})
-    True
-
-    >>> freeze({'items': [{'x': 1}, {'y': 2}]}) == frozendict({'items': frozenset({frozendict({'x': 1}), frozendict({'y': 2})})})
-    True
-
-    >>> freeze('hello')
-    'hello'
-
-    >>> freeze(42)
-    42
-
-    >>> freeze(None)
-
-    >>> freeze([])
-    frozenset()
-
-    >>> freeze({})
-    frozendict.frozendict({})
-    """
-    if isinstance(obj, dict):
-        return frozendict({k: freeze(v) for k, v in obj.items()})
-    if isinstance(obj, (list, set, frozenset)):
-        return frozenset(freeze(item) for item in obj)
-    return obj
 
 
 class BuildContext(BaseModel):
@@ -294,14 +253,14 @@ class BuildContext(BaseModel):
                 assert dep not in self.dependencies_building
 
             # all dependencies must have corresponding entries in the config
-            dep_targets = [dep['target'] for dep in self.config.get('dependencies',[])]
+            dep_targets = freeze([dep['target'] for dep in self.config.get('dependencies',[])])
             for dep in itertools.chain(
                     self.dependencies_unresolved,
                     self.dependencies_building,
                     self.dependencies_built,
                     ):
                 matches = match_pattern_starstar(dep_targets, dep['target'])
-                assert len(matches) == 1
+                assert len(matches) >= 1
 
             # NOTE:
             # dependencies_built has a complicated relationship to dependencies_unresolved/building
@@ -464,6 +423,8 @@ class BuildState(Routable):
     ########################################
 
     def assert_invariants(self):
+        return # FIXME!!! DELETEME!!!
+
         # no context can be in more than one state
         states = [
                 self.contexts_unresolved,
@@ -580,6 +541,16 @@ class BuildState(Routable):
 
     def debug_statediff(self, state0, msg_str=''):
         state1 = self._state_as_dict()
+        text0 = yaml.dump(state0, default_flow_style=False, sort_keys=False)
+        text1 = yaml.dump(state1, default_flow_style=False, sort_keys=False)
+        import difflib
+        diff = difflib.unified_diff(
+                text0.splitlines(keepends=True),
+                text1.splitlines(keepends=True),
+                )
+        print(''.join(diff))
+        return
+
         diff = DeepDiff(state0, state1, verbose_level=2)
         
         # ensure that the diff only has keys we recognize
@@ -679,6 +650,7 @@ class BuildState(Routable):
                 #state0 = self.debug_statediff(state0, f'iter={len(states)} -- deps')
                 #self.debug_print(f'iter={len(states)} -- deps')
                 self.assert_invariants()
+                self.debug_short()
                 self.process_all_buildable()
                 #state0 = self.debug_statediff(state0, f'iter={len(states)} -- build')
                 #self.debug_print(f'iter={len(states)} -- build')
@@ -754,7 +726,7 @@ class BuildState(Routable):
             - "overwrite": always build the file, overwriting existing contents
             - "dryrun": register the file with the build system, but do not build
         '''
-        matches = match_pattern_starstar(self.targets_dict.keys(), target)
+        matches = match_pattern_starstar(self.targets_dict, target)
 
         if len(matches) == 0:
             logger.error(f'target {target} has no match in fac.yaml')
@@ -861,7 +833,7 @@ class BuildState(Routable):
                     if not all_targets_built:
                         dependencies_building1.append(dep)
                     else:
-                        dep_targets = [dep['target'] for dep in context.config['dependencies']]
+                        dep_targets = freeze([dep['target'] for dep in context.config['dependencies']])
                         for loop_context in self.contexts_built:
                             dep1 = dict(copy.deepcopy(dep))
                             dep1['target'] = loop_context.path()
@@ -882,7 +854,7 @@ class BuildState(Routable):
             })
         self._add_context(context1)
 
-    def process_all_buildable(self, max_procs=1):
+    def process_all_buildable_par(self, max_procs=1):
         logger.debug(f'process_all_buildable()')
         self.assert_invariants()
         self.process_all_waiting()
@@ -918,23 +890,24 @@ class BuildState(Routable):
                 self.assert_invariants()
                 self.process_all_waiting()
                 self.assert_invariants()
-    """
+
     def process_all_buildable(self):
         logger.debug(f'process_all_buildable()')
         self.assert_invariants()
         self.process_all_waiting()
         self.assert_invariants()
+        assert len(self.contexts_buildable.to_list()) == len(set(self.contexts_buildable.to_list()))
+        tmp_contexts = set()
         while len(self.contexts_buildable) > 0:
-            self.process_buildable()
+            context = self.contexts_buildable.pop()
+            assert context not in tmp_contexts
+            tmp_contexts.add(context)
+            self.process_buildable(context)
             self.assert_invariants()
             self.process_all_waiting()
             self.assert_invariants()
 
-    def process_buildable(self):
-        try:
-            context = self.contexts_buildable.pop()
-        except KeyError:
-            return 0
+    def process_buildable(self, context):
         path = context.path()
 
         if context.normalized_target not in self.targets_dict:
@@ -943,8 +916,9 @@ class BuildState(Routable):
         else:
             future = build_context(context)
             asyncio.run(future)
-        self.contexts_built.add(context)
-        self.file_manager.add(path, status='fresh')
+        if os.path.exists(context.path()):
+            self.contexts_built.add(context)
+            self.file_manager.add(path, status='fresh')
 
         for postreq in context.config.get('postreqs', []):
             self.add_target(
@@ -952,7 +926,6 @@ class BuildState(Routable):
                     )
 
         return 1
-    """
 
     def process_all_dependencies(self):
         '''
@@ -991,7 +964,7 @@ class BuildState(Routable):
                         # we compute these paths and queue each for building
                         else:
                             matches = match_pattern_starstar(
-                                    self.targets_dict.keys(),
+                                    self.targets_dict,
                                     dep['target'],
                                     )
 
@@ -1531,13 +1504,13 @@ Generate the file "{context.path()}" based on the information below.
             if type(options[option]) != str:
                 options[option] = str(options[option])
             else:
-                data[option] = process_template(options[option], env_vars=context.variables)
+                data[option] = process_template(options[option], env_vars=context.variables_resolved)
 
     elif major_type == 'image':
         data = {}
         data['prompt'] = prompt
         data['reference_images'] = binary_files
-        options = copy.deepcopy(context.config.get('options'))
+        options = copy.deepcopy(context.config.get('options', {}))
         for option in options:
             data[option] = process_template(options[option], env_vars=context.variables_resolved)
 
@@ -1702,546 +1675,6 @@ Generate the file "{context.path()}" based on the information below.
 
     return True
 
-################################################################################
-
-
-async def _build_context(
-        self,
-        context_id,
-        num_contexts,
-        target_to_build,
-        config,
-        context,
-        overwrite,
-        ):
-    '''
-    Build a file given the specified information.
-    '''
-    path_to_generate = process_template(
-            target_to_build,
-            context.variables,
-            print_function=logger.error,
-            template_name='target',
-            )
-
-    # ensure no unresolved dependencies
-    if context.unresolved_dependencies:
-        logger.error('unresolved dependencies:')
-        for dep in context.unresolved_dependencies:
-            logger.error(f" - {dep['target']}", submessage=True)
-        logger.error('variables:', submessage=True)
-        for var in sorted(context.variables):
-            logger.error(f' - {var}: {context.variables[var].replace("\n","\\n")}', submessage=True)
-        logger.error(f'context.variables={context.variables}')
-        raise UnresolvedDependencies(context.unresolved_dependencies)
-
-    ########################################
-    # compute build options
-    ########################################
-
-    # NOTE:
-    # by default, we will build the given context;
-    # but we may not rebuild if the path already exists
-    file_status = []
-    updated_deps = []
-    build_context = True
-
-    # use build_if to determine if we should build
-    build_if = config.get('build_options', {}).get('build_if', 'True')
-    build_if = process_template(build_if, context.variables)
-    if build_if.lower() == 'false':
-        build_context = False
-        file_status.append('build_if:False')
-
-    # annotate newly generated files
-    if not os.path.exists(path_to_generate):
-        if build_context:
-            file_status.append('new')
-
-    # The annotations/changes below should only happen for existing files
-    else:
-
-        # do not rebuild if file is frozen
-        if FacJSON(path_to_generate).get('frozen', False):
-            file_status.append('frozen')
-            build_context = False
-        if config.get('build_options', {}).get('freeze'):
-            file_status.append('config-frozen')
-            build_context = False
-
-        # do not rebuild the file if auto_rebuild is disabled
-        if not config.get('auto_rebuild', True) and build_context:
-            file_status.append('auto_rebuild disabled')
-            build_context = False
-
-        # if the file is up-to-date (i.e. all dependencies are older),
-        # then we will not rebuild it
-        path_to_generate_committed_date = self._committed_date(path_to_generate)
-        for path in context.dependency_paths:
-            path_committed_date = self._committed_date(path)
-            time_diff = path_to_generate_committed_date - path_committed_date
-            if time_diff < 0:
-                updated_deps.append(path)
-        if updated_deps == []:
-            file_status.append('up-to-date')
-            build_context = False
-            if overwrite:
-                file_status.append('overwrite')
-        else:
-            file_status.append('out-of-date')
-
-    # process options
-    # NOTE:
-    # options can be specified as either a string or dictionary;
-    # if specified as a string, any shell commands must be run and then it should be converted into a dictionary
-    if type(config.get('options')) == dict:
-        context_options = copy.deepcopy(config['options'])
-        for option in context_options:
-            context_options[option] = process_template(
-                    context_options[option],
-                    env_vars=context.variables,
-                    print_function=logger.error,
-                    template_name=f'options.{option}',
-                    )
-    elif type(config.get('options')) == str:
-        options_str = process_template(
-                config['options'],
-                env_vars=context.variables,
-                print_function=logger.error,
-                template_name='options',
-                )
-        context_options = yaml.safe_load(options_str)
-        assert type(context_options) == dict
-    elif config.get('options') is None:
-        context_options = {}
-
-    # print logging info
-    logger.info(f'file {context_id}/{num_contexts} [{", ".join(file_status)}] "{path_to_generate}"')
-    if self.print_dependencies and (build_context or overwrite):
-        logger.info('dependency_paths:', submessage=True)
-        for path in context.dependency_paths:
-            if path in updated_deps:
-                print_updated = '[updated] '
-            else:
-                print_updated = ''
-            logger.info(f' - {print_updated}{path}', submessage=True)
-        if context_options:
-            logger.info('options:', submessage=True)
-            for opt in context_options:
-                logger.info(f" - {opt}: {context_options[opt]}", submessage=True)
-        logger.debug('variables:', submessage=True)
-        for var in sorted(context.variables):
-            logger.debug(f' - {var}: {context.variables[var].replace("\n","\\n")}', submessage=True)
-
-    if not (build_context or overwrite):
-        return
-
-    ########################################
-    # build with shell
-    ########################################
-
-    # create output directory if needed
-    dirname = os.path.dirname(path_to_generate)
-    if len(dirname) > 0:
-        os.makedirs(dirname, exist_ok=True)
-
-    # build with a custom shell command
-    if config.get('cmd'):
-        if self.no_build:
-            logger.warning('build required, but skipping...', submessage=True)
-        else:
-            logger.info('building with bash...', submessage=True)
-            process = await asyncio.create_subprocess_shell(
-                config['cmd'],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT, # merge stderr into stdout
-                executable='/bin/bash',
-                env=variables_transitive_substitute({
-                    **os.environ,
-                    **context.variables,
-                    'FAC_DEPENDENCIES': '\n'.join(sorted(context.dependency_paths)),
-                    }),
-                )
-            try:
-                first_line = True
-                while True:
-                    line = await process.stdout.readline()
-                    if not line:
-                        break
-                    if first_line:
-                        logger.warning('build command output:', submessage=True)
-                        first_line = False
-                    logger.warning(line.decode().rstrip(), submessage=True)
-            except UnicodeDecodeError:
-                logger.warning('cannot decode stdout: UnicodeDecodeError')
-            await process.wait()
-
-            if process.returncode != 0:
-                stdout = await process.stdout.read()
-                logger.error(f"error running the following build script:", submessage=True)
-                for i, line in enumerate(config['cmd'].split('\n')):
-                    logger.error(f"line {i+1}: {line}", submessage=True)
-                logger.error(stdout.decode('ascii'), submessage=True)
-                raise CommandExecutionError(process.returncode, stdout)
-
-        return
-
-    ########################################
-    # generate prompt
-    ########################################
-
-    # first we generate the instructions for the llm,
-    # which will be stored in the `prompt_cmd` variable.
-    prompt_instructions = f'''<instructions>
-Generate the file "{path_to_generate}" based on the information below.
-</instructions>
-'''
-
-    if 'description' in config:
-        try:
-            prompt_description = '<file_description>\n'
-            prompt_description += process_template(
-                    config['description'],
-                    env_vars=context.variables,
-                    print_function=logger.error,
-                    template_name='description',
-                    )
-            prompt_description += '\n</file_description>\n'
-        except TemplateProcessingError as e:
-            raise FACError()
-    else:
-        prompt_description = ''
-
-    # next we compile all the documents that will be passed to the LLM,
-    # text documents are processed to form part of the prompt
-    # and binary files are stored in a list for later processing
-    binary_files = []
-    truncated_prompt = None
-    if len(context.dependency_paths) == 0:
-        files_prompt = ''
-    else:
-        files_prompt = '<reference_documents>\n'
-        for path in context.dependency_paths:
-
-            # skip paths that are annotated with "include: False"
-            include_dep = True
-            truncate_prompt = False
-            for dep in config['dependencies']:
-                if dep.get('include', True) == False:
-                    # NOTE:
-                    # it is a minor optimization to perform the match_pattern check inside of the if statement;
-                    # it is rare for a dependency to not be included,
-                    # and the match_patterns function is slightly expensive for an inner loop
-                    target, env = match_pattern([dep['target']], path)
-                    if target is not None:
-                        include_dep = False
-
-                if dep.get('is_prompt', False):
-                    target, env = match_pattern([dep['target']], path)
-                    if target is not None:
-                        truncate_prompt = True
-
-            if not include_dep:
-                continue
-
-            # NOTE:
-            # when piping into stdin, open('/dev/stdin') fails because the open function does not work on pipe "files";
-            # this is a hackish way to detect that we're piping into stdin,
-            # and then changing path to a value that is compatible with open;
-            # in theory, weirdly named files could break this hack
-            if 'pipe:[' in path: 
-                path = 0
-
-            # we always try to open the files as text;
-            # but if the file is a binary file (e.g. an image),
-            # we catch the error and do not add the file to the context
-            try:
-                with open(path) as fin:
-                    text = fin.read().strip()
-                    if truncate_prompt:
-                        truncated_prompt = text
-                    files_prompt += f'''<document path="{path}">\n{text}\n</document>\n'''
-            except UnicodeDecodeError:
-                binary_files.append(path)
-        files_prompt += '</reference_documents>'
-
-    # include a chat history if provided
-    # and the previous version of the file if available
-    old_version = None
-    try:
-        if self.include_old:
-            with open(path_to_generate) as fin:
-                old_version = fin.read()
-                include_threshold = 1e6
-                if len(old_version) > include_threshold:
-                    logger.warning('len(old_version) > {include_threshold}; cannot include file')
-                    old_version = None
-    except FileNotFoundError:
-        # if there is no old version of the file to include, then do nothing
-        pass
-    except UnicodeDecodeError:
-        # if the file is non-text, then do nothing
-        pass
-    chat_prompt = ''
-    if self.include_chat is not None:
-        chat_prompt = f'''
-<chat>
-The dialogue below records a history of user comments that should guide your creation of {path_to_generate}.  The 'user' is MUCH more important than the 'assistant', and the 'assistant' comments should only be considered based on how the 'user' comments about them.
-{self.include_chat}
-'''
-        if old_version:
-            chat_prompt += f'''
-The version of the document the user is commenting on is below.
-Keep the new document as close as possible to this old version,
-except for the changes requested by the user.
-<old_version>
-{old_version}
-</old_version>
-'''
-
-        chat_prompt += '''
-</chat>
-'''
-
-    # construct the final prompt
-    prompt = prompt_instructions + prompt_description + files_prompt + chat_prompt
-    if truncated_prompt:
-        prompt = truncated_prompt
-
-    ########################################
-    # filetype specific processing
-    ########################################
-
-    filename = os.path.basename(path_to_generate)
-    _, extension = os.path.splitext(filename)
-    response_format = None
-
-    if extension == '.wav':
-        filetype = 'audio'
-        # NOTE:
-        # we need a copy of the config here
-        # because we will be modifying the contents with the process_template function;
-        # without a copy, we get a bug where building multiple files results in the same config for all files
-        data = copy.deepcopy(context_options)
-        #for option in data:
-            #data[option] = process_template(data[option], env_vars=context.variables)
-
-    elif extension == '.mp4':
-        filetype = 'video'
-        data = {}
-        data['prompt'] = prompt
-        data['reference_images'] = binary_files
-        options = copy.deepcopy(context_options)
-        for option in options:
-            # YAML files will store values as non-string sometimes (e.g. for ints);
-            # we convert them to string here,
-            # also as a minor runtime optimization
-            # we do not try to process variables for these non-string values
-            if type(options[option]) != str:
-                options[option] = str(options[option])
-            else:
-                data[option] = process_template(options[option], env_vars=context.variables)
-
-    elif extension == '.png':
-        filetype = 'image'
-        data = {}
-        data['prompt'] = prompt
-        data['reference_images'] = binary_files
-        options = copy.deepcopy(context_options)
-        for option in options:
-            data[option] = process_template(options[option], env_vars=context.variables)
-
-    # process text output by default
-    else:
-        filetype = 'text'
-
-        # the messages list will contain the full set of instructions passed to the llm;
-        # it always starts with a system prompt
-        data = []
-        messages = data
-        messages.append({
-            'role': 'system',
-            'content': self.global_settings['system_prompt'],
-            })
-
-        # `format_instructions` defines the output format
-        format_instructions = ''
-        if 'md' not in extension and 'markdown' not in extension:
-            format_instructions += 'Do not output markdown, and do not put the output inside a codeblock.'
-        else:
-            format_instructions += 'Use markdown formatting to structure the output.'
-
-        if extension == '.json':
-            format_instructions += 'Output JSON.'
-            response_format = {'type': 'json_object'}
-        elif extension == '.jsonl':
-            response_format = {'type': 'json_object'}
-            format_instructions += f'Output JSONL.  Each line of the output should be a single JSON object. There should be at most {self.global_settings["jsonl_num_lines"]} total lines.'
-            format_instructions = process_template(format_instructions, env_vars=context.variables)
-
-        if config.get('schema'):
-            schema = llm.schema_dsl(config.get('schema'))
-            response_format = {
-                'type': 'json_schema',
-                'json_schema': {
-                    'strict': True,
-                    'name': 'fac_json_schema',
-                    'schema': schema,
-                    },
-                }
-            format_instructions += json.dumps(schema, indent=2).strip()
-        elif config.get('schema_file'):
-            try:
-                schema_file = config['schema_file']
-                schema_file = substitute_vars(schema_file, context.variables)
-                with open(schema_file) as fin:
-                    text = fin.read().strip()
-                    schema = json.loads(text)
-            except json.decoder.JSONDecodeError as e:
-                logger.error(f"config['schema_file']={config['schema_file']}")
-                logger.error(e)
-                sys.exit(1)
-            jsonschema.Draft7Validator.check_schema(schema)
-            # FIXME
-            if config.get('TMP_augment'):
-                schema = {
-                    'type': 'object',
-                    'name': 'schema_file_wrapper',
-                    'properties': {
-                        'path': {'type': 'string', 'description': 'The path that the data specified in the data section will be written to. The "data" section is a JSON schema that represents the actual content of the JSON object to be created.'},
-                        'data': schema,
-                    },
-                    'required': ['path', 'data']
-                }
-            format_instructions += ' Ensure the output conforms to the following JSON schema:\n'
-            #format_instructions += text.strip()
-            format_instructions += json.dumps(schema, indent=2).strip()
-            schema['additionalProperties'] = False
-            response_format = {
-                'type': 'json_schema',
-                'json_schema': {
-                    'strict': True,
-                    'name': 'fac_json_schema',
-                    'schema': schema,
-                    },
-                }
-
-        format_instructions = '<formatting>\n' + format_instructions + '\n</formatting>'
-
-        # add the user role + message
-        message = {
-            'role': 'user',
-            'content': [{ 'type': 'text', 'text': prompt + format_instructions}]
-            }
-        for binary_file in binary_files:
-            message['content'].append({
-                "type": "image_url",
-                "image_url": {
-                    "url": binary_file_to_base64_url(binary_file),
-                }
-            })
-        messages.append(message)
-
-        # extend the existing output
-        if self.extend:
-
-            # FIXME:
-            # currently we only support extending JSONL,
-            # but this restriction could be removed in principle
-            if extension != '.jsonl':
-                logger.error('extension {extension} not supported with --extend')
-                sys.exit(1)
-
-            # add previous model output to the messages list
-            with open(path_to_generate) as fin:
-                previous_output = fin.read().strip()
-            messages.append({
-                'role': 'assistant',
-                'content': previous_output,
-                })
-
-            # generate a new command
-            messages.append({
-                'role': 'user',
-                'content': f'The previous output looks good.  Now generate {self.extend} more examples.'
-                })
-
-    # stop processing if printing the prompt
-    # FIXME:
-    # This is all a pretty janky set of hacks for printing the "meaningful" part of the prompt,
-    # and could probably be made a lot more robust.
-    if self.print_prompt:
-        try:
-            if type(data[-1]['content']) == list:
-                print_str = data[-1]['content'][0]['text']
-            else:
-                print_str = data[-1]['content']
-        except KeyError:
-            try:
-                print_str = data['prompt']
-            except KeyError:
-                import pprint
-                print_str = pprint.pformat(data)
-        #print(f"type(print_str)={type(print_str)}")
-        #print(f"len(print_str)={len(print_str)}")
-        print(print_str[:10000])
-
-    # write prompt to the output file
-    if self.print_prompt_to_file:
-        with open(self.print_prompt_to_file, 'wt') as fout:
-            #json.dump(data, fout, indent=4)
-            fout.write(data[-1]['content'])
-
-    # NOTE:
-    # sometimes it is not necessary to rebuild a file even if the dependencies have been updated;
-    # this can occur, for example, when the prompt depends only on part of the dependencies;
-    # we check hashes of the prompt/file to see if we can skip rebuilding
-    facjson = FacJSON(path_to_generate)
-    try:
-        with open(path_to_generate, 'rb') as fin:
-            hash_contents_fin = hashlib.sha256(fin.read()).hexdigest()
-            contents_changed = hash_contents_fin != facjson.get('hash_contents')
-    except FileNotFoundError as e:
-        contents_changed = True
-    encoded_prompt = json.dumps(data).encode('utf-8')
-    hash_prompt_new = hashlib.sha256(encoded_prompt).hexdigest()
-    prompt_changed = hash_prompt_new != facjson.get('hash_prompt')
-
-    # skip building file if not needed
-    if not (contents_changed or prompt_changed) and not overwrite:
-        logger.info('content/prompts match, building not needed', submessage=True)
-
-    elif self.no_build:
-        logger.warning('build required, but skipping...', submessage=True)
-
-    # actually build the file
-    else:
-        mode = 'wb'
-        if self.from_scratch or overwrite:
-            if self.extend:
-                mode = 'ab'
-            else:
-                mode = 'wb'
-        logger.info('building with LLM...', submessage=True)
-        await self.llm.generate_file(
-            filetype,
-            path_to_generate,
-            data,
-            mode=mode,
-            model=config.get('model'),
-            response_format=response_format,
-            )
-
-        # record new hashes for future skip-tests
-        with open(path_to_generate, 'rb') as fin:
-            hash_contents = hashlib.sha256(fin.read()).hexdigest()
-            facjson.set('hash_contents', hash_contents)
-        facjson.set('hash_prompt', hash_prompt_new)
-        facjson.save()
-
-    # validate file
-    validate_file(path_to_generate, config.get('schema_file'))
-
 
 ################################################################################
 
@@ -2257,19 +1690,6 @@ def eval_var(var, expr, env):
         env=env,
         )
     if cmd.returncode != 0:
-        #logger.error(f'Failed to evaluate variable {var}')
-        #lines = expr.split('\n')
-        #if len(lines) == 1:
-            #logger.error(f'build command: {expr}', submessage=True)
-        #else:
-            #logger.error(f'build command:', submessage=True)
-            #for line in lines:
-                #logger.error(line, submessage=True)
-        #for line in (cmd.stderr.strip() + '\n' + cmd.stdout).strip().split('\n'):
-            #logger.error(line, submessage=True)
-        #logger.error('env:', submessage=True)
-        #for var in env:
-            #logger.error(f' - {var}: "{env[var].replace("\n", "\\n")}"', submessage=True)
         raise VariableEvaluationError(var, expr, env, cmd)
     stdout = cmd.stdout.strip()
 

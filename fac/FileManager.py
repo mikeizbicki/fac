@@ -143,7 +143,11 @@ class FileManager(Routable):
         queue: asyncio.Queue = asyncio.Queue()
         self._subscribers.append(queue)
         try:
-            for path in self.files:
+            # NOTE:
+            # we make a copy of self.files so that async changes to the dict
+            # don't result in errors
+            files_copy = dict(self.files)
+            for path in files_copy:
                 if await request.is_disconnected():
                     return
                 event = self._file_event(path)

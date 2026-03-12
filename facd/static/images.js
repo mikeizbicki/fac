@@ -48,12 +48,11 @@
         imageContainer = document.createElement('div');
         imageContainer.className = 'image-container';
         
-        const metadata = nodeEl.querySelector('.metadata');
-        if (metadata) {
-            metadata.appendChild(imageContainer);
-        } else {
-            nodeEl.appendChild(imageContainer);
-        }
+        // Insert image container as first child for full-bleed effect
+        nodeEl.insertBefore(imageContainer, nodeEl.firstChild);
+        
+        // Add class to indicate this node has an image
+        nodeEl.classList.add('has-image');
 
         fetchAndCacheImage(path).then(url => {
             const img = createImageElement(url, 'leaf-image');

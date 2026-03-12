@@ -49,12 +49,11 @@
         videoContainer = document.createElement('div');
         videoContainer.className = 'video-container';
         
-        const metadata = nodeEl.querySelector('.metadata');
-        if (metadata) {
-            metadata.appendChild(videoContainer);
-        } else {
-            nodeEl.appendChild(videoContainer);
-        }
+        // Insert video container as first child for full-bleed effect
+        nodeEl.insertBefore(videoContainer, nodeEl.firstChild);
+        
+        // Add class to indicate this node has a video
+        nodeEl.classList.add('has-video');
 
         fetchAndCacheVideo(path).then(url => {
             const video = createVideoElement(url, 'leaf-video');
