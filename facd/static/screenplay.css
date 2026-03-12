@@ -102,21 +102,8 @@
     box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.15);
     font-family: 'Courier New', Courier, monospace;
     font-size: 9pt;
-    position: sticky;
     top: 20px;
     align-self: flex-start;
-}
-
-.screenplay-sticky-note::before {
-    content: '';
-    position: absolute;
-    top: -4px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 40px;
-    height: 8px;
-    background: rgba(0, 0, 0, 0.1);
-    border-radius: 2px;
 }
 
 /* Metadata grid */
