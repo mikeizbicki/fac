@@ -23,6 +23,8 @@
     const targetElements = new Map();
     // Cache for target content/metadata
     const targetCache = new Map();
+    // Track paths we've created to avoid re-notifying on our own updates
+    const ownedPaths = new Set();
 
     // Target patterns for each shot
     const SHOT_TARGETS = {
@@ -130,6 +132,7 @@
         row.appendChild(valueSpan);
 
         targetElements.set(targetPath, row);
+        ownedPaths.add(targetPath);
 
         // Apply cached data if available
         const cached = targetCache.get(targetPath);
@@ -181,6 +184,7 @@
         }
 
         targetElements.set(targetPath, container);
+        ownedPaths.add(targetPath);
 
         // Load media if cached and available
         const cached = targetCache.get(targetPath);
@@ -260,7 +264,10 @@
         // Clear old registrations
         const oldData = screenplayNodes.get(path);
         if (oldData) {
-            for (const p of oldData.shotPaths) targetElements.delete(p);
+            for (const p of oldData.shotPaths) {
+                targetElements.delete(p);
+                ownedPaths.delete(p);
+            }
         }
 
         container.innerHTML = '';
@@ -279,14 +286,11 @@
         if (metadata) metadata.style.display = 'none';
     }
 
-    function updateTargetContent(path, content, status, mimeType) {
-        targetCache.set(path, { content, status, mimeType });
-
+    function updateTargetElement(path, content, status, mimeType) {
         const element = targetElements.get(path);
         if (!element) return;
 
         element.dataset.status = status;
-        window.notifyComponents(element, status, false);
 
         // Update text value display
         const valueSpan = element.querySelector('.sticky-target-value');
@@ -302,6 +306,10 @@
                 loadMedia(mediaContainer, path, isImage);
             }
         }
+
+        // Notify other components (overlay, build) about status change
+        // but don't trigger ourselves again
+        window.notifyComponents(element, status, false);
     }
 
     function isScreenplayTargetPath(path) {
@@ -318,20 +326,36 @@
         const path = nodeEl.dataset.path;
         if (!path) return;
 
+        // Handle shooting-script.xml
         if (path === 'shooting-script.xml') {
             if (isNew) transformToScreenplay(nodeEl);
             else if (status === 'fresh') transformToScreenplay(nodeEl);
             return;
         }
 
+        // Skip if this is one of our own nodes - we handle them via SSE
+        if (ownedPaths.has(path)) return;
+
+        // Handle screenplay target paths from the main tree
         if (isScreenplayTargetPath(path)) {
-            updateTargetContent(path, nodeEl.dataset.content || '', status, nodeEl.dataset.mimeType || '');
+            targetCache.set(path, {
+                content: nodeEl.dataset.content || '',
+                status: status,
+                mimeType: nodeEl.dataset.mimeType || ''
+            });
+            updateTargetElement(path, nodeEl.dataset.content || '', status, nodeEl.dataset.mimeType || '');
         }
     });
 
     // Register SSE handler for screenplay targets
     window.registerPathHandler(function(path, metadata, isNew) {
         if (!isScreenplayTargetPath(path)) return;
-        updateTargetContent(path, metadata.content || '', metadata.status, metadata['mime-type'] || '');
+
+        targetCache.set(path, {
+            content: metadata.content || '',
+            status: metadata.status,
+            mimeType: metadata['mime-type'] || ''
+        });
+        updateTargetElement(path, metadata.content || '', metadata.status, metadata['mime-type'] || '');
     });
 })();
