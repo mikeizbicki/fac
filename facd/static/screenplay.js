@@ -7,6 +7,7 @@
 //
 // Dependencies:
 // - fountain.min.js must be loaded before this script
+// - images.js and videos.js must be loaded before this script for media APIs
 // - build.js must be loaded after this script for build menus
 //
 // The component:
@@ -186,8 +187,12 @@
 
         if (isImage) {
             container.classList.add('has-image');
+            // Register with global image system
+            window.registerImageContainer(targetPath, mediaWrapper, 'leaf-image');
         } else {
             container.classList.add('has-video');
+            // Register with global video system
+            window.registerVideoContainer(targetPath, mediaWrapper, 'leaf-video');
         }
 
         targetElements.set(targetPath, container);
@@ -199,7 +204,7 @@
             container.dataset.status = cached.status;
             // File exists, so this is a path not a target
             delete container.dataset.isTarget;
-            loadMedia(mediaWrapper, targetPath, isImage);
+            loadMedia(targetPath, isImage);
         } else {
             // No data or unknown status - treat as target
             container.dataset.isTarget = 'true';
@@ -212,30 +217,12 @@
         return container;
     }
 
-    function loadMedia(container, path, isImage) {
-        fetch(`/contents?path=${encodeURIComponent(path)}`)
-            .then(response => {
-                if (!response.ok) throw new Error('Not found');
-                return response.blob();
-            })
-            .then(blob => {
-                const url = URL.createObjectURL(blob);
-                container.innerHTML = '';
-                if (isImage) {
-                    const img = document.createElement('img');
-                    img.src = url;
-                    img.className = 'leaf-image';
-                    container.appendChild(img);
-                } else {
-                    const video = document.createElement('video');
-                    video.src = url;
-                    video.className = 'leaf-video';
-                    video.controls = true;
-                    video.preload = 'metadata';
-                    container.appendChild(video);
-                }
-            })
-            .catch(() => {});
+    function loadMedia(path, isImage) {
+        if (isImage) {
+            window.fetchImage(path, false).catch(() => {});
+        } else {
+            window.fetchVideo(path, false).catch(() => {});
+        }
     }
 
     function createShotElement(shot) {
@@ -277,6 +264,14 @@
         const oldData = screenplayNodes.get(path);
         if (oldData) {
             for (const p of oldData.shotPaths) {
+                // Unregister media containers
+                const el = targetElements.get(p);
+                if (el) {
+                    const imgContainer = el.querySelector('.image-container');
+                    const vidContainer = el.querySelector('.video-container');
+                    if (imgContainer) window.unregisterImageContainer(p, imgContainer);
+                    if (vidContainer) window.unregisterVideoContainer(p, vidContainer);
+                }
                 targetElements.delete(p);
                 ownedPaths.delete(p);
             }
@@ -322,12 +317,30 @@
             valueSpan.textContent = content.trim() || '—';
         }
 
-        // Update media container
-        const mediaContainer = element.querySelector('.image-container, .video-container');
-        if (mediaContainer && (status === 'fresh' || status === 'stale')) {
-            const isImage = element.dataset.mimeType?.startsWith('image/');
-            if (status === 'fresh' || !mediaContainer.querySelector('img, video')) {
-                loadMedia(mediaContainer, path, isImage);
+        // Handle media updates - use global fetch functions which handle container refresh
+        const isImage = element.dataset.mimeType?.startsWith('image/');
+        const isVideo = element.dataset.mimeType?.startsWith('video/');
+        
+        if (status === 'fresh') {
+            // Force refresh media
+            if (isImage) {
+                window.fetchImage(path, true).catch(() => {});
+            } else if (isVideo) {
+                window.fetchVideo(path, true).catch(() => {});
+            }
+        } else if (status === 'deleted') {
+            // Clear media from containers
+            if (isImage) {
+                window.clearImageFromContainers(path);
+            } else if (isVideo) {
+                window.clearVideoFromContainers(path);
+            }
+        } else if (isExistingPath) {
+            // Load media if not already loaded
+            if (isImage) {
+                window.fetchImage(path, false).catch(() => {});
+            } else if (isVideo) {
+                window.fetchVideo(path, false).catch(() => {});
             }
         }
 
