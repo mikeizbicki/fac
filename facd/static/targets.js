@@ -82,11 +82,6 @@ function getPathOrderIndex(path) {
     return target ? getTargetOrderIndex(target) : targetOrder.length;
 }
 
-// Get all targets that match a given path prefix (for showing missing targets)
-function getTargetsUnderPrefix(prefix) {
-    return targetOrder.filter(t => t.startsWith(prefix + '/') || t === prefix);
-}
-
 // Get sibling targets that share the same variable scope
 function getSiblingTargets(targetPattern) {
     const vars = extractVariables(targetPattern);
@@ -204,38 +199,42 @@ function handleCreateOrUpdateOperation(path, metadata, isNew, onComplete) {
 function showSiblingTargets(path, matchingTarget) {
     const siblings = getSiblingTargets(matchingTarget);
     const parts = path.split('/');
-    
-    // Find variable position
     const targetParts = matchingTarget.split('/');
-    let varIndex = -1;
-    for (let i = 0; i < targetParts.length; i++) {
+    
+    // Build variable value map from the path
+    const varValues = {};
+    for (let i = 0; i < targetParts.length && i < parts.length; i++) {
         if (targetParts[i].includes('$')) {
-            varIndex = i;
-            break;
+            varValues[targetParts[i]] = parts[i];
         }
     }
-    if (varIndex < 0) return;
-    
-    const varValue = parts[varIndex];
     
     for (const sibling of siblings) {
         const sibParts = sibling.split('/');
-        // Build concrete path for this sibling
-        let concretePath = sibling;
+        // Build concrete path for this sibling using only the first variable
+        let concretePath = [];
         for (let i = 0; i < sibParts.length; i++) {
             if (sibParts[i].includes('$')) {
-                concretePath = concretePath.replace(sibParts[i], varValue);
+                if (varValues[sibParts[i]]) {
+                    concretePath.push(varValues[sibParts[i]]);
+                } else {
+                    // Stop at first unbound variable - don't create nodes beyond it
+                    break;
+                }
+            } else {
+                concretePath.push(sibParts[i]);
             }
         }
         
-        // Only show target node if path doesn't exist
-        // This maintains the invariant: one node per path
-        if (!knownPaths.has(concretePath)) {
-            if (!targetNodeElements[concretePath]) {
-                insertTargetNodeIntoDom(concretePath, sibling);
-            } else {
-                // Unhide if it was hidden
-                targetNodeElements[concretePath].style.display = '';
+        // Only create target nodes for complete paths (all variables bound)
+        if (concretePath.length === sibParts.length) {
+            const concretePathStr = concretePath.join('/');
+            if (!knownPaths.has(concretePathStr)) {
+                if (!targetNodeElements[concretePathStr]) {
+                    insertTargetNodeIntoDom(concretePathStr, sibling);
+                } else {
+                    targetNodeElements[concretePathStr].style.display = '';
+                }
             }
         }
     }
@@ -281,81 +280,6 @@ function cleanupEmptyContainers(container) {
     }
 }
 
-function getOrderKey(node) {
-    const order = node._order !== undefined ? node._order : 9999999999;
-    return String(order).padStart(10, '0') + ':' + (node._name || '');
-}
-
-function insertNodeIntoDom(path, metadata) {
-    const parts = path.split('/');
-    const container = document.getElementById('targets-container');
-    let currentContainer = container;
-    const orderIndex = getPathOrderIndex(path);
-
-    // Navigate/create intermediate nodes
-    for (let i = 0; i < parts.length - 1; i++) {
-        const part = parts[i];
-        let domNode = findChildByName(currentContainer, part);
-        
-        if (!domNode) {
-            domNode = createIntermediateNode(part, orderIndex, false);
-            insertNodeInOrder(currentContainer, domNode, orderIndex);
-        }
-        
-        let childContainer = domNode.querySelector(':scope > .tree-children');
-        if (!childContainer) {
-            childContainer = document.createElement('div');
-            childContainer.className = 'tree-children';
-            domNode.appendChild(childContainer);
-        }
-        currentContainer = childContainer;
-    }
-
-    const leafNode = createPathNode(parts[parts.length - 1], path, metadata, orderIndex);
-    nodeElements[path] = leafNode;
-    insertNodeInOrder(currentContainer, leafNode, orderIndex);
-    window.notifyComponents(leafNode, metadata?.status || null, true);
-}
-
-function insertTargetNodeIntoDom(concretePath, targetPattern) {
-    const parts = concretePath.split('/');
-    const container = document.getElementById('targets-container');
-    let currentContainer = container;
-    const orderIndex = getTargetOrderIndex(targetPattern);
-
-    for (let i = 0; i < parts.length - 1; i++) {
-        const part = parts[i];
-        let domNode = findChildByName(currentContainer, part);
-        
-        if (!domNode) {
-            const isVarScope = targetPattern.split('/')[i]?.includes('$');
-            domNode = createIntermediateNode(part, orderIndex, isVarScope, targetPattern);
-            insertNodeInOrder(currentContainer, domNode, orderIndex);
-        }
-        
-        let childContainer = domNode.querySelector(':scope > .tree-children');
-        if (!childContainer) {
-            childContainer = document.createElement('div');
-            childContainer.className = 'tree-children';
-            domNode.appendChild(childContainer);
-        }
-        currentContainer = childContainer;
-    }
-
-    const targetNode = createTargetNode(parts[parts.length - 1], concretePath, orderIndex);
-    targetNodeElements[concretePath] = targetNode;
-    insertNodeInOrder(currentContainer, targetNode, orderIndex);
-    window.notifyComponents(targetNode, 'target', true);
-}
-
-function findChildByName(container, name) {
-    for (const child of container.querySelectorAll(':scope > .tree-node')) {
-        const label = child.querySelector(':scope > .tree-header > .tree-label');
-        if (label?.textContent === name) return child;
-    }
-    return null;
-}
-
 function insertNodeInOrder(container, newNode, newOrder) {
     for (const child of container.querySelectorAll(':scope > .tree-node')) {
         const childOrder = parseInt(child.dataset.order || '9999999999');
@@ -370,7 +294,12 @@ function insertNodeInOrder(container, newNode, newOrder) {
     container.appendChild(newNode);
 }
 
-function createIntermediateNode(name, order, isVarScope, targetPattern) {
+function findOrCreateIntermediateNode(container, name, order, isVarScope, targetPattern) {
+    for (const child of container.querySelectorAll(':scope > .tree-node')) {
+        const label = child.querySelector(':scope > .tree-header > .tree-label');
+        if (label?.textContent === name) return child;
+    }
+    
     const div = document.createElement('div');
     div.className = 'tree-node intermediate expanded';
     div.dataset.order = order;
@@ -395,7 +324,55 @@ function createIntermediateNode(name, order, isVarScope, targetPattern) {
     if (isVarScope && targetPattern) {
         createVariableScopeForm(div, targetPattern);
     }
+    
+    insertNodeInOrder(container, div, order);
     return div;
+}
+
+function getOrCreateChildContainer(node) {
+    let childContainer = node.querySelector(':scope > .tree-children');
+    if (!childContainer) {
+        childContainer = document.createElement('div');
+        childContainer.className = 'tree-children';
+        node.appendChild(childContainer);
+    }
+    return childContainer;
+}
+
+function insertNodeIntoDom(path, metadata) {
+    const parts = path.split('/');
+    const container = document.getElementById('targets-container');
+    let currentContainer = container;
+    const orderIndex = getPathOrderIndex(path);
+
+    for (let i = 0; i < parts.length - 1; i++) {
+        const domNode = findOrCreateIntermediateNode(currentContainer, parts[i], orderIndex, false, null);
+        currentContainer = getOrCreateChildContainer(domNode);
+    }
+
+    const leafNode = createPathNode(parts[parts.length - 1], path, metadata, orderIndex);
+    nodeElements[path] = leafNode;
+    insertNodeInOrder(currentContainer, leafNode, orderIndex);
+    window.notifyComponents(leafNode, metadata?.status || null, true);
+}
+
+function insertTargetNodeIntoDom(concretePath, targetPattern) {
+    const parts = concretePath.split('/');
+    const targetParts = targetPattern.split('/');
+    const container = document.getElementById('targets-container');
+    let currentContainer = container;
+    const orderIndex = getTargetOrderIndex(targetPattern);
+
+    for (let i = 0; i < parts.length - 1; i++) {
+        const isVarScope = targetParts[i + 1]?.includes('$');
+        const domNode = findOrCreateIntermediateNode(currentContainer, parts[i], orderIndex, isVarScope, isVarScope ? targetPattern : null);
+        currentContainer = getOrCreateChildContainer(domNode);
+    }
+
+    const targetNode = createTargetNode(parts[parts.length - 1], concretePath, orderIndex);
+    targetNodeElements[concretePath] = targetNode;
+    insertNodeInOrder(currentContainer, targetNode, orderIndex);
+    window.notifyComponents(targetNode, 'target', true);
 }
 
 function createPathNode(name, path, metadata, order) {
@@ -530,12 +507,11 @@ function updateExistingNode(path, metadata) {
 }
 
 function createVariableScopeForm(container, targetPattern) {
-    // Get variables only from this specific target pattern's scope
     const vars = extractVariables(targetPattern);
     if (vars.length === 0) return;
 
     const formDiv = document.createElement('div');
-    formDiv.className = 'variable-scope-form';
+    formDiv.className = 'variable-scope-form tree-children';
     
     const varsContainer = document.createElement('div');
     varsContainer.className = 'variable-inputs';
@@ -579,24 +555,17 @@ function createVariableScopeForm(container, targetPattern) {
     const buildAllBtn = document.createElement('button');
     buildAllBtn.textContent = 'Build All';
     buildAllBtn.addEventListener('click', () => {
-        // Get variable values
         const varValues = {};
-        let hasValue = false;
         for (const [varName, input] of Object.entries(inputs)) {
             const value = input.value.trim();
-            if (value) {
-                varValues[varName] = value;
-                hasValue = true;
-            }
+            if (value) varValues[varName] = value;
         }
         
-        // Build the target path
         let buildPath = targetPattern;
         for (const [varName, value] of Object.entries(varValues)) {
             buildPath = buildPath.replace(new RegExp('\\$' + varName, 'g'), value);
         }
         
-        // Replace remaining variables with ** for "build all"
         const parts = buildPath.split('/');
         const newParts = [];
         for (const part of parts) {
@@ -606,7 +575,6 @@ function createVariableScopeForm(container, targetPattern) {
             }
             newParts.push(part);
         }
-        // Use ** at end to build all targets under this prefix
         if (newParts[newParts.length - 1] !== '**') {
             newParts.push('**');
         }
@@ -662,7 +630,6 @@ function buildInitialTree() {
                 if (parts[i].includes('$')) {
                     if (!seenPrefixes.has(prefix)) {
                         seenPrefixes.add(prefix);
-                        // Create intermediate nodes up to variable scope
                         insertVariableScopeNode(prefix, target);
                     }
                     break;
@@ -692,22 +659,9 @@ function insertVariableScopeNode(prefix, targetPattern) {
     const orderIndex = getTargetOrderIndex(targetPattern);
 
     for (let i = 0; i < parts.length; i++) {
-        const part = parts[i];
-        let domNode = findChildByName(currentContainer, part);
-        
-        if (!domNode) {
-            const isLast = i === parts.length - 1;
-            domNode = createIntermediateNode(part, orderIndex, isLast, isLast ? targetPattern : null);
-            insertNodeInOrder(currentContainer, domNode, orderIndex);
-        }
-        
-        let childContainer = domNode.querySelector(':scope > .tree-children');
-        if (!childContainer) {
-            childContainer = document.createElement('div');
-            childContainer.className = 'tree-children';
-            domNode.appendChild(childContainer);
-        }
-        currentContainer = childContainer;
+        const isLast = i === parts.length - 1;
+        const domNode = findOrCreateIntermediateNode(currentContainer, parts[i], orderIndex, isLast, isLast ? targetPattern : null);
+        currentContainer = getOrCreateChildContainer(domNode);
     }
 }
 
