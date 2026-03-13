@@ -21,6 +21,18 @@
 //   - data-status: current status (paths only)
 //   - data-content: file content for text files (paths only)
 //
+// Tree Invariant:
+// ---------------
+// We maintain an invariant that for every path, exactly one node will be
+// displayed in the tree. For example, consider the set of targets:
+//   "/characters/$CHARACTER/about.json"
+//   "/characters/$CHARACTER/voice.json"
+//   "/characters/$CHARACTER/character_sheet.png"
+// If the path "/characters/Barbaros/about.json" exists, then we will have
+// a corresponding path node but no corresponding target node. But if
+// "/characters/Barbaros/about.json" exists and "/characters/Barbaros/voice.json"
+// does not exist, then we will need a target node for "/characters/Barbaros/voice.json".
+//
 // IMPORTANT:
 // Coding agents must not change this API without asking for permission.
 
@@ -169,9 +181,13 @@ function handleCreateOrUpdateOperation(path, metadata, isNew, onComplete) {
     
     if (isNew) {
         const matchingTarget = findMatchingTarget(path);
-        if (matchingTarget && matchingTarget === path) {
-            hideTargetNode(matchingTarget);
+        
+        // Hide target node for this concrete path if it exists
+        // This ensures we don't show both target and path nodes for the same path
+        if (targetNodeElements[path]) {
+            hideTargetNode(path);
         }
+        
         insertNodeIntoDom(path, metadata);
         
         // Show sibling targets for variable paths
@@ -201,7 +217,6 @@ function showSiblingTargets(path, matchingTarget) {
     if (varIndex < 0) return;
     
     const varValue = parts[varIndex];
-    const prefix = parts.slice(0, varIndex + 1).join('/');
     
     for (const sibling of siblings) {
         const sibParts = sibling.split('/');
@@ -213,9 +228,15 @@ function showSiblingTargets(path, matchingTarget) {
             }
         }
         
-        // Only show if path doesn't exist
-        if (!knownPaths.has(concretePath) && !targetNodeElements[concretePath]) {
-            insertTargetNodeIntoDom(concretePath, sibling);
+        // Only show target node if path doesn't exist
+        // This maintains the invariant: one node per path
+        if (!knownPaths.has(concretePath)) {
+            if (!targetNodeElements[concretePath]) {
+                insertTargetNodeIntoDom(concretePath, sibling);
+            } else {
+                // Unhide if it was hidden
+                targetNodeElements[concretePath].style.display = '';
+            }
         }
     }
 }
@@ -228,8 +249,8 @@ function showTargetNode(target) {
     insertTargetNodeIntoDom(target, target);
 }
 
-function hideTargetNode(target) {
-    const el = targetNodeElements[target];
+function hideTargetNode(path) {
+    const el = targetNodeElements[path];
     if (el) el.style.display = 'none';
 }
 

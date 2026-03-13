@@ -119,7 +119,7 @@
         const row = document.createElement('div');
         row.className = 'sticky-meta-row sticky-target-row tree-node path leaf';
         row.dataset.path = targetPath;
-        row.dataset.isTarget = 'true';
+        // Do not set data-is-target here - these are path nodes that may or may not exist yet
 
         const labelSpan = document.createElement('span');
         labelSpan.className = 'sticky-meta-label';
@@ -139,6 +139,13 @@
         if (cached) {
             if (cached.content) valueSpan.textContent = cached.content.trim() || '—';
             row.dataset.status = cached.status;
+            // If we have cached data with a real status, this is a path not a target
+            if (cached.status && cached.status !== 'unknown') {
+                delete row.dataset.isTarget;
+            }
+        } else {
+            // No cached data means this is a target (file doesn't exist yet)
+            row.dataset.isTarget = 'true';
         }
 
         // Notify components (deferred to ensure all are registered)
@@ -153,8 +160,8 @@
         const container = document.createElement('div');
         container.className = 'sticky-media-container tree-node path leaf expanded';
         container.dataset.path = targetPath;
-        container.dataset.isTarget = 'true';
         container.dataset.mimeType = mimeType;
+        // Start as a target (file may not exist); will be updated when we get status
 
         const header = document.createElement('div');
         header.className = 'tree-header';
@@ -190,7 +197,12 @@
         const cached = targetCache.get(targetPath);
         if (cached && (cached.status === 'fresh' || cached.status === 'stale')) {
             container.dataset.status = cached.status;
+            // File exists, so this is a path not a target
+            delete container.dataset.isTarget;
             loadMedia(mediaWrapper, targetPath, isImage);
+        } else {
+            // No data or unknown status - treat as target
+            container.dataset.isTarget = 'true';
         }
 
         setTimeout(() => {
@@ -291,6 +303,18 @@
         if (!element) return;
 
         element.dataset.status = status;
+
+        // Determine if this is a target (doesn't exist) or a path (exists)
+        // Files with status fresh/stale/building/queued exist or are being built
+        const isExistingPath = status === 'fresh' || status === 'stale';
+        if (isExistingPath) {
+            // This is an existing path, not a target
+            delete element.dataset.isTarget;
+        } else if (status === 'deleted' || status === 'unknown') {
+            // File doesn't exist, treat as target
+            element.dataset.isTarget = 'true';
+        }
+        // For building/queued, keep current state
 
         // Update text value display
         const valueSpan = element.querySelector('.sticky-target-value');
