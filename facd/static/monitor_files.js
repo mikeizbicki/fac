@@ -19,6 +19,18 @@
         pathHandlers.push(callback);
     };
 
+    window.markPathSeen = function(path) {
+        seenPaths.add(path);
+    };
+
+    window.markPathUnseen = function(path) {
+        seenPaths.delete(path);
+    };
+
+    window.isPathSeen = function(path) {
+        return seenPaths.has(path);
+    };
+
     function monitorFiles() {
         const eventSource = new EventSource('/monitor_files');
 
@@ -35,11 +47,8 @@
 
             const isNew = !seenPaths.has(path);
 
-            if (metadata.status === 'deleted') {
-                seenPaths.delete(path);
-            } else {
-                seenPaths.add(path);
-            }
+            // Don't update seenPaths here - let targets.js manage it
+            // to handle delete+create race conditions properly
 
             for (const handler of pathHandlers) {
                 handler(path, metadata, isNew);

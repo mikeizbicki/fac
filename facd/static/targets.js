@@ -29,6 +29,7 @@ let treeRoot = {};
 let targetOrder = [];
 let knownPaths = new Set();
 let nodeElements = {};
+let targetNodeElements = {};
 
 // Pending operations queue per path to handle race conditions
 let pendingOperations = {};
@@ -275,13 +276,22 @@ function handleDeleteOperation(path, onComplete) {
         return;
     }
 
+    // Check if there's already a pending create operation - if so, skip the delete animation
+    if (pendingOperations[path] && pendingOperations[path].length > 0) {
+        // Just update status without the fade-out animation
+        nodeEl.dataset.status = 'deleted';
+        window.notifyComponents(nodeEl, 'deleted', false);
+        onComplete();
+        return;
+    }
+
     nodeEl.dataset.status = 'deleted';
 
     window.notifyComponents(nodeEl, 'deleted', false);
 
     nodeEl.classList.add('fading-out');
     setTimeout(() => {
-        // Check if a newer operation has re-added this path
+        // Check again if a newer operation has re-added this path
         if (pendingOperations[path] && pendingOperations[path].length > 0) {
             // There's a pending operation, skip the actual deletion
             nodeEl.classList.remove('fading-out');
@@ -290,15 +300,30 @@ function handleDeleteOperation(path, onComplete) {
         }
 
         removeNodeFromDomAndTree(path);
+        
+        // Show target node if this was a non-variable target
+        const matchingTarget = findMatchingTarget(path);
+        if (matchingTarget && matchingTarget === path) {
+            showTargetNode(matchingTarget);
+        }
+        
         onComplete();
     }, 1500);
 }
 
 function handleCreateOrUpdateOperation(path, metadata, isNew, onComplete) {
+    // Mark path as seen in monitor_files
+    window.markPathSeen(path);
     knownPaths.add(path);
     setPathMetadata(path, metadata);
     
     if (isNew) {
+        // Hide target node if this path matches a non-variable target exactly
+        const matchingTarget = findMatchingTarget(path);
+        if (matchingTarget && matchingTarget === path) {
+            hideTargetNode(matchingTarget);
+        }
+        
         // Insert into tree data structure
         insertPathIntoTree(path, metadata);
         // Insert into DOM
@@ -306,10 +331,31 @@ function handleCreateOrUpdateOperation(path, metadata, isNew, onComplete) {
     } else {
         // Just update the existing node's metadata
         updateExistingNode(path, metadata);
+        updateNodeStatus(path, metadata.status, false);
     }
     
-    updateNodeStatus(path, metadata.status, isNew);
     onComplete();
+}
+
+// Show a target node (when its path is deleted)
+function showTargetNode(target) {
+    // Check if target node already exists
+    if (targetNodeElements[target]) {
+        targetNodeElements[target].style.display = '';
+        return;
+    }
+    
+    // Need to create the target node
+    insertTargetIntoTree(target);
+    insertTargetNodeIntoDom(target);
+}
+
+// Hide a target node (when its path exists)
+function hideTargetNode(target) {
+    const targetEl = targetNodeElements[target];
+    if (targetEl) {
+        targetEl.style.display = 'none';
+    }
 }
 
 // Insert a path into the tree data structure
@@ -374,6 +420,7 @@ function removeNodeFromDomAndTree(path) {
     // Clean up tracking
     delete nodeElements[path];
     knownPaths.delete(path);
+    window.markPathUnseen(path);
     delete pathMetadata[path];
 }
 
@@ -478,6 +525,70 @@ function insertNodeIntoDom(path, metadata) {
     // Notify components about new node
     const status = metadata?.status || null;
     window.notifyComponents(leafNode, status, true);
+}
+
+// Insert a target node into the DOM
+function insertTargetNodeIntoDom(target) {
+    const parts = target.split('/');
+    const container = document.getElementById('targets-container');
+    let currentContainer = container;
+    let currentTreeNode = treeRoot;
+
+    // Navigate/create intermediate nodes
+    for (let i = 0; i < parts.length - 1; i++) {
+        const part = parts[i];
+        
+        if (!currentTreeNode._children) {
+            return;
+        }
+        
+        // Try to find the intermediate node
+        let treeNode = currentTreeNode._children[part];
+        if (!treeNode) {
+            // Try targetvar match
+            const targetVarKey = Object.keys(currentTreeNode._children).find(k => 
+                k.startsWith('targetvar:') && currentTreeNode._children[k]._name === part
+            );
+            if (targetVarKey) {
+                treeNode = currentTreeNode._children[targetVarKey];
+            }
+        }
+        
+        if (!treeNode) return;
+        
+        let domNode = findChildByName(currentContainer, part);
+        
+        if (!domNode) {
+            // Create intermediate node
+            domNode = createIntermediateNode(treeNode);
+            insertNodeInOrder(currentContainer, domNode, treeNode, currentTreeNode);
+        }
+        
+        let childContainer = domNode.querySelector(':scope > .tree-children');
+        if (!childContainer) {
+            childContainer = document.createElement('div');
+            childContainer.className = 'tree-children';
+            domNode.appendChild(childContainer);
+        }
+        
+        currentContainer = childContainer;
+        currentTreeNode = treeNode;
+    }
+
+    // Create the target node
+    const lastPart = parts[parts.length - 1];
+    const nodeKey = `target:${lastPart}`;
+    const treeNode = currentTreeNode._children ? currentTreeNode._children[nodeKey] : null;
+    
+    if (!treeNode) return;
+    
+    const targetNode = createTargetNode(treeNode);
+    targetNodeElements[target] = targetNode;
+    
+    insertNodeInOrder(currentContainer, targetNode, treeNode, currentTreeNode);
+    
+    // Notify components about new node
+    window.notifyComponents(targetNode, 'target', true);
 }
 
 // Find a child node by its display name
@@ -769,10 +880,33 @@ function setPathMetadata(path, metadata) {
 function createVariableScopeForm(node, container) {
     // Find all variables used in targets under this scope
     const allVars = new Set();
+    const nodeName = node._name;
+    
+    // Build the path prefix up to this node
+    let pathPrefix = '';
+    function findPathPrefix(searchNode, targetName, currentPath) {
+        if (searchNode._name === targetName) {
+            return currentPath ? currentPath + '/' + targetName : targetName;
+        }
+        if (searchNode._children) {
+            for (const [key, child] of Object.entries(searchNode._children)) {
+                const result = findPathPrefix(child, targetName, currentPath ? currentPath + '/' + searchNode._name : searchNode._name);
+                if (result) return result;
+            }
+        }
+        return null;
+    }
+    
+    // Find the target pattern that contains this variable scope
     for (const target of targetOrder) {
-        if (target.includes(node._name)) {
-            for (const v of extractVariables(target)) {
-                allVars.add(v);
+        const parts = target.split('/');
+        for (let i = 0; i < parts.length; i++) {
+            if (parts[i] === nodeName || parts[i].includes('$')) {
+                // This target is relevant to this scope
+                for (const v of extractVariables(target)) {
+                    allVars.add(v);
+                }
+                break;
             }
         }
     }
@@ -826,19 +960,46 @@ function createVariableScopeForm(node, container) {
     const buildAllBtn = document.createElement('button');
     buildAllBtn.textContent = 'Build All';
     buildAllBtn.addEventListener('click', () => {
-        // Build the path by substituting variables in the node's name pattern
-        let pathPrefix = node._name;
-        for (const [varName, input] of Object.entries(inputs)) {
-            const value = input.value.trim();
-            if (value) {
-                pathPrefix = pathPrefix.replace(new RegExp('\\$' + varName, 'g'), value);
+        // Find the target pattern that this scope belongs to
+        let targetPattern = null;
+        for (const target of targetOrder) {
+            if (target.includes(nodeName)) {
+                targetPattern = target;
+                break;
             }
         }
         
-        const targetPath = pathPrefix + '/**';
+        if (!targetPattern) {
+            alert('Could not find target pattern for this scope');
+            return;
+        }
+        
+        // Build the path by substituting variables
+        let buildPath = targetPattern;
+        for (const [varName, input] of Object.entries(inputs)) {
+            const value = input.value.trim();
+            if (value) {
+                buildPath = buildPath.replace(new RegExp('\\$' + varName, 'g'), value);
+            }
+        }
+        
+        // If there are still unsubstituted variables, use wildcard
+        if (buildPath.includes('$')) {
+            // Find the first segment with unsubstituted variable and use /** from there
+            const parts = buildPath.split('/');
+            const newParts = [];
+            for (const part of parts) {
+                if (part.includes('$')) {
+                    newParts.push('**');
+                    break;
+                }
+                newParts.push(part);
+            }
+            buildPath = newParts.join('/');
+        }
         
         const params = new URLSearchParams();
-        params.set('target', targetPath);
+        params.set('target', buildPath);
         if (promptInput.value.trim()) {
             params.set('include_prompt', promptInput.value.trim());
         }
@@ -1016,6 +1177,7 @@ function renderTree(node, container) {
 
         if (child._isTarget) {
             div = createTargetNode(child);
+            targetNodeElements[child._fullPath] = div;
         } else if (child._isPath) {
             div = createPathNode(child, child._fullPath, child._metadata);
             nodeElements[child._fullPath] = div;
@@ -1043,6 +1205,7 @@ function initialDisplay() {
     const container = document.getElementById('targets-container');
     container.innerHTML = '';
     nodeElements = {};
+    targetNodeElements = {};
     renderTree(treeRoot, container);
 }
 
@@ -1061,12 +1224,16 @@ function loadTargets() {
 window.registerPathHandler(function(path, metadata, isNew) {
     const status = metadata.status;
 
+    // Use our own tracking of known paths, not monitor_files' tracking
+    // because we need to handle the delete+create race condition
+    const isActuallyNew = !knownPaths.has(path);
+
     if (status === 'deleted') {
         if (knownPaths.has(path)) {
             queueOperation(path, (onComplete) => handleDeleteOperation(path, onComplete));
         }
     } else {
-        queueOperation(path, (onComplete) => handleCreateOrUpdateOperation(path, metadata, isNew, onComplete));
+        queueOperation(path, (onComplete) => handleCreateOrUpdateOperation(path, metadata, isActuallyNew, onComplete));
     }
 });
 

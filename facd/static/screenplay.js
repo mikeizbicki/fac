@@ -151,6 +151,13 @@
         // Register for tracking
         targetElements.set(targetPath, row);
 
+        // Check if we already have cached data for this path
+        const cached = targetCache.get(targetPath);
+        if (cached) {
+            valueSpan.textContent = cached.content?.trim() || '—';
+            row.dataset.status = cached.status;
+        }
+
         // Notify components about new node (deferred to allow all components to register)
         setTimeout(() => {
             window.notifyComponents(row, row.dataset.status || 'unknown', true);
@@ -181,7 +188,7 @@
 
         container.appendChild(header);
 
-        // Media container - matches image-container/video-container pattern
+        // Media wrapper - matches image-container/video-container pattern
         const mediaWrapper = document.createElement('div');
         mediaWrapper.className = mediaType === 'image' ? 'image-container' : 'video-container';
         mediaWrapper.dataset.targetPath = targetPath;
@@ -190,6 +197,17 @@
 
         // Register for tracking
         targetElements.set(targetPath, container);
+
+        // Check if we already have cached data and load media if available
+        const cached = targetCache.get(targetPath);
+        if (cached && (cached.status === 'fresh' || cached.status === 'stale')) {
+            container.dataset.status = cached.status;
+            if (mediaType === 'image') {
+                loadImage(mediaWrapper, targetPath);
+            } else {
+                loadVideo(mediaWrapper, targetPath);
+            }
+        }
 
         // Notify components about new node (deferred to allow all components to register)
         setTimeout(() => {
@@ -250,6 +268,15 @@
 
         // Clear and rebuild
         screenplayContainer.innerHTML = '';
+        
+        // Clear old target element registrations for this screenplay
+        const oldData = screenplayNodes.get(path);
+        if (oldData) {
+            for (const shotPath of oldData.shotPaths) {
+                targetElements.delete(shotPath);
+            }
+        }
+        
         const shotPaths = [];
 
         shots.forEach(shot => {
@@ -302,10 +329,16 @@
 
         // If status indicates content exists, load it
         if (status === 'fresh' || status === 'stale') {
-            if (mediaType === 'image' && !container.querySelector('img')) {
-                loadImage(container, path);
-            } else if (mediaType === 'video' && !container.querySelector('video')) {
-                loadVideo(container, path);
+            if (mediaType === 'image') {
+                // Reload image on fresh status
+                if (status === 'fresh' || !container.querySelector('img')) {
+                    loadImage(container, path);
+                }
+            } else if (mediaType === 'video') {
+                // Reload video on fresh status
+                if (status === 'fresh' || !container.querySelector('video')) {
+                    loadVideo(container, path);
+                }
             }
         }
     }
@@ -387,7 +420,7 @@
             return;
         }
 
-        // Handle screenplay target paths - update sticky note elements
+        // Handle screenplay target paths from tree - update our cache and sticky elements
         if (isScreenplayTargetPath(path)) {
             const content = nodeEl.dataset.content || '';
             const mimeType = nodeEl.dataset.mimeType || '';
