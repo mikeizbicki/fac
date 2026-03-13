@@ -82,12 +82,12 @@ function getPathOrderIndex(path) {
     return target ? getTargetOrderIndex(target) : targetOrder.length;
 }
 
-// Get sibling targets that share the same variable scope
+// Get sibling targets that share the same first variable scope
 function getSiblingTargets(targetPattern) {
     const vars = extractVariables(targetPattern);
     if (vars.length === 0) return [targetPattern];
     
-    // Find the variable segment position
+    // Find the first variable segment position
     const parts = targetPattern.split('/');
     let varIndex = -1;
     for (let i = 0; i < parts.length; i++) {
@@ -178,7 +178,6 @@ function handleCreateOrUpdateOperation(path, metadata, isNew, onComplete) {
         const matchingTarget = findMatchingTarget(path);
         
         // Hide target node for this concrete path if it exists
-        // This ensures we don't show both target and path nodes for the same path
         if (targetNodeElements[path]) {
             hideTargetNode(path);
         }
@@ -201,40 +200,35 @@ function showSiblingTargets(path, matchingTarget) {
     const parts = path.split('/');
     const targetParts = matchingTarget.split('/');
     
-    // Build variable value map from the path
-    const varValues = {};
+    // Find the first variable position and its value
+    let firstVarIndex = -1;
+    let firstVarValue = null;
     for (let i = 0; i < targetParts.length && i < parts.length; i++) {
         if (targetParts[i].includes('$')) {
-            varValues[targetParts[i]] = parts[i];
+            firstVarIndex = i;
+            firstVarValue = parts[i];
+            break;
         }
     }
+    if (firstVarIndex < 0) return;
     
     for (const sibling of siblings) {
         const sibParts = sibling.split('/');
-        // Build concrete path for this sibling using only the first variable
-        let concretePath = [];
-        for (let i = 0; i < sibParts.length; i++) {
-            if (sibParts[i].includes('$')) {
-                if (varValues[sibParts[i]]) {
-                    concretePath.push(varValues[sibParts[i]]);
-                } else {
-                    // Stop at first unbound variable - don't create nodes beyond it
-                    break;
-                }
-            } else {
-                concretePath.push(sibParts[i]);
+        // Build concrete path: substitute first variable, keep rest as-is
+        const concreteParts = sibParts.map((part, i) => {
+            if (i === firstVarIndex && part.includes('$')) {
+                return firstVarValue;
             }
-        }
+            return part;
+        });
+        const concretePathStr = concreteParts.join('/');
         
-        // Only create target nodes for complete paths (all variables bound)
-        if (concretePath.length === sibParts.length) {
-            const concretePathStr = concretePath.join('/');
-            if (!knownPaths.has(concretePathStr)) {
-                if (!targetNodeElements[concretePathStr]) {
-                    insertTargetNodeIntoDom(concretePathStr, sibling);
-                } else {
-                    targetNodeElements[concretePathStr].style.display = '';
-                }
+        // Only show if no existing path matches this concrete path
+        if (!knownPaths.has(concretePathStr)) {
+            if (!targetNodeElements[concretePathStr]) {
+                insertTargetNodeIntoDom(concretePathStr, sibling);
+            } else {
+                targetNodeElements[concretePathStr].style.display = '';
             }
         }
     }
@@ -364,6 +358,7 @@ function insertTargetNodeIntoDom(concretePath, targetPattern) {
     const orderIndex = getTargetOrderIndex(targetPattern);
 
     for (let i = 0; i < parts.length - 1; i++) {
+        // Check if the NEXT segment in the target pattern contains a variable
         const isVarScope = targetParts[i + 1]?.includes('$');
         const domNode = findOrCreateIntermediateNode(currentContainer, parts[i], orderIndex, isVarScope, isVarScope ? targetPattern : null);
         currentContainer = getOrCreateChildContainer(domNode);
