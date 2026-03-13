@@ -1554,7 +1554,7 @@ Generate the file "{context.path()}" based on the information below.
         contents_changed = True
     encoded_prompt = json.dumps(data).encode('utf-8')
     hash_prompt_new = hashlib.sha256(encoded_prompt).hexdigest()
-    if facjson.get('hash_prompt'):
+    if 'new' not in file_status and facjson.get('hash_prompt'):
         prompt_changed = hash_prompt_new != facjson.get('hash_prompt')
         if prompt_changed:
             file_status.append('prompt-changed')
