@@ -2,7 +2,7 @@
 //
 // This file manages a hierarchical tree view of build targets and file paths.
 // It fetches target definitions from /list_targets and monitors file changes
-// via Server-Sent Events from /monitor_files. The tree displays both targets
+// via the monitor_files.js module. The tree displays both targets
 // (build recipes with potential variables like $CHAPTER) and paths (actual
 // files generated from those targets). Nodes are expandable/collapsible,
 // with all nodes expanded by default.
@@ -30,15 +30,9 @@ let targetOrder = [];
 let knownPaths = new Set();
 let nodeElements = {};
 
-let componentCallbacks = [];
-
 // Pending operations queue per path to handle race conditions
 let pendingOperations = {};
 let processingPaths = new Set();
-
-window.registerComponent = function(callback) {
-    componentCallbacks.push(callback);
-};
 
 // Extract variable names from a target pattern
 function extractVariables(pattern) {
@@ -271,9 +265,7 @@ function updateNodeStatus(path, status, isNew) {
 
     nodeEl.dataset.status = status;
 
-    for (const callback of componentCallbacks) {
-        callback(nodeEl, status, isNew);
-    }
+    window.notifyComponents(nodeEl, status, isNew);
 }
 
 function handleDeleteOperation(path, onComplete) {
@@ -285,9 +277,7 @@ function handleDeleteOperation(path, onComplete) {
 
     nodeEl.dataset.status = 'deleted';
 
-    for (const callback of componentCallbacks) {
-        callback(nodeEl, 'deleted', false);
-    }
+    window.notifyComponents(nodeEl, 'deleted', false);
 
     nodeEl.classList.add('fading-out');
     setTimeout(() => {
@@ -487,9 +477,7 @@ function insertNodeIntoDom(path, metadata) {
     
     // Notify components about new node
     const status = metadata?.status || null;
-    for (const callback of componentCallbacks) {
-        callback(leafNode, status, true);
-    }
+    window.notifyComponents(leafNode, status, true);
 }
 
 // Find a child node by its display name
@@ -1037,9 +1025,7 @@ function renderTree(node, container) {
 
         // Notify components about new node
         const status = child._metadata?.status || (child._isTarget ? 'target' : null);
-        for (const callback of componentCallbacks) {
-            callback(div, status, true);
-        }
+        window.notifyComponents(div, status, true);
 
         if (child._children) {
             const childContainer = document.createElement('div');
@@ -1071,33 +1057,17 @@ function loadTargets() {
         });
 }
 
-function monitorFiles() {
-    const eventSource = new EventSource('/monitor_files');
+// Register path handler for SSE events
+window.registerPathHandler(function(path, metadata, isNew) {
+    const status = metadata.status;
 
-    eventSource.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        const path = data.path;
-        const status = data.status;
-        const isNew = !knownPaths.has(path);
-
-        const metadata = {
-            target: data.target,
-            status: data.status,
-            'mime-type': data['mime-type'],
-            content: data.content
-        };
-
-        setPathMetadata(path, metadata);
-
-        if (status === 'deleted') {
-            if (knownPaths.has(path)) {
-                queueOperation(path, (onComplete) => handleDeleteOperation(path, onComplete));
-            }
-        } else {
-            queueOperation(path, (onComplete) => handleCreateOrUpdateOperation(path, metadata, isNew, onComplete));
+    if (status === 'deleted') {
+        if (knownPaths.has(path)) {
+            queueOperation(path, (onComplete) => handleDeleteOperation(path, onComplete));
         }
-    };
-}
+    } else {
+        queueOperation(path, (onComplete) => handleCreateOrUpdateOperation(path, metadata, isNew, onComplete));
+    }
+});
 
 loadTargets();
-monitorFiles();

@@ -151,8 +151,10 @@
         // Register for tracking
         targetElements.set(targetPath, row);
 
-        // Trigger build.js to add header menu
-        notifyComponentsNewNode(row);
+        // Notify components about new node (deferred to allow all components to register)
+        setTimeout(() => {
+            window.notifyComponents(row, row.dataset.status || 'unknown', true);
+        }, 0);
 
         return row;
     }
@@ -189,19 +191,12 @@
         // Register for tracking
         targetElements.set(targetPath, container);
 
-        // Trigger build.js to add header menu (isNew=true)
-        notifyComponentsNewNode(container);
+        // Notify components about new node (deferred to allow all components to register)
+        setTimeout(() => {
+            window.notifyComponents(container, container.dataset.status || 'unknown', true);
+        }, 0);
 
         return container;
-    }
-
-    function notifyComponentsNewNode(nodeEl) {
-        // Defer to next tick so all components are registered
-        setTimeout(() => {
-            for (const callback of window._componentCallbacks || []) {
-                callback(nodeEl, nodeEl.dataset.status || 'unknown', true);
-            }
-        }, 0);
     }
 
     function createShotElement(shot) {
@@ -285,6 +280,9 @@
 
         // Update status attribute for styling
         element.dataset.status = status;
+
+        // Notify components about the status change
+        window.notifyComponents(element, status, false);
 
         // For text targets, update the value display
         const valueSpan = element.querySelector('.sticky-target-value');
@@ -373,16 +371,7 @@
         });
     }
 
-    // Store reference to all component callbacks for notifying sticky elements
-    window._componentCallbacks = window._componentCallbacks || [];
-
-    // Wrap registerComponent to capture all callbacks
-    const originalRegister = window.registerComponent;
-    window.registerComponent = function(callback) {
-        window._componentCallbacks.push(callback);
-        originalRegister(callback);
-    };
-
+    // Register component callback for tree node events
     window.registerComponent(function(nodeEl, status, isNew) {
         const nodePath = nodeEl.dataset.path;
         if (!nodePath) return;
@@ -404,5 +393,16 @@
             const mimeType = nodeEl.dataset.mimeType || '';
             updateTargetContent(path, content, status, mimeType);
         }
+    });
+
+    // Register path handler for SSE events to update screenplay elements
+    window.registerPathHandler(function(path, metadata, isNew) {
+        if (!isScreenplayTargetPath(path)) return;
+
+        const content = metadata.content || '';
+        const status = metadata.status;
+        const mimeType = metadata['mime-type'] || '';
+
+        updateTargetContent(path, content, status, mimeType);
     });
 })();
