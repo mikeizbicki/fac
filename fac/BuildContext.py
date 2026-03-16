@@ -274,26 +274,6 @@ class BuildContext(BaseModel):
             logger.error({'self': self.to_dict()}, submessage=True)
             raise e
 
-    def assert_invariants_buildable(self):
-        '''
-        These invariants must hold only after a BuildContext is ready to be built.
-        '''
-        # ensure normalized_target will resolve to exactly one path
-        self.path
-
-        # target variables must have been previously split
-        for var, value in self.variables_resolved.items():
-            if var in self.target_variables:
-                assert ''.join(value.split('\n')) == value
-                assert value != ''
-
-        # all variables must be resolved
-        assert len(self.variables_unresolved) == 0
-
-        # all dependencies must be built
-        assert len(self.dependencies_building) == 0
-        assert len(self.dependencies_unresolved) == 0
-
     def denormalized_target(self):
         '''
         Substitute the variables_resolved into normalized_target.
@@ -366,395 +346,432 @@ class BuildContext(BaseModel):
             ret['dependencies_unresolved'] = [dict(d) for d in self.dependencies_unresolved]
         return ret
 
-################################################################################
+    ####################
+    # build methods
+    ####################
 
-async def build_context(context, file_manager=None, print_prompt=False):
-    '''
-    Returns whether the context resolves to a valid path.
-    This can be true if either the path already existed and was up-to-date (i.e. a build was not needed),
-    or if the build completed and was successful.
+    def assert_invariants_buildable(self):
+        '''
+        These invariants must hold only after a BuildContext is ready to be built.
+        '''
+        # ensure normalized_target will resolve to exactly one path
+        self.path
 
-    Should only return False if context.dryrun and a build is needed.
+        # target variables must have been previously split
+        for var, value in self.variables_resolved.items():
+            if var in self.target_variables:
+                assert ''.join(value.split('\n')) == value
+                assert value != ''
 
-    If building fails, an exception is thrown.
-    '''
+        # all variables must be resolved
+        assert len(self.variables_unresolved) == 0
 
-    # ensure sane
-    context.assert_invariants_buildable()
+        # all dependencies must be built
+        assert len(self.dependencies_building) == 0
+        assert len(self.dependencies_unresolved) == 0
 
-    # process options
-    # NOTE:
-    # options can be specified as either a string or dictionary;
-    # if specified as a string, any shell commands must be run and then it should be converted into a dictionary
-    if type(context.config.get('options')) == frozendict:
-        context_options = {
-            option: process_template(
-                value,
-                env_vars=context.variables_resolved,
-                print_function=logger.error,
-                template_name=f'options.{option}',
-                )
-            for option, value in context.config['options'].items()
-            }
-    elif type(context.config.get('options')) == str:
-        options_str = process_template(
-                context.config['options'],
-                env_vars=context.variables_resolved,
-                print_function=logger.error,
-                template_name='options',
-                )
-        context_options = yaml.safe_load(options_str)
-        assert type(context_options) == dict
-    elif context.config.get('options') is None:
-        context_options = {}
-    else:
-        assert False
+    @cached_property
+    def prompt(self):
+        '''
+        Returns the prompt in a format suitable for passing directly to the LLM class.
 
-    ########################################
-    # generate prompt
-    ########################################
+        The prompt is not just a simple text prompt but includes all information that will be passed to the LLM.
+        For example, it also includes:
+        - the system prompt
+        - any previous messages
+        - any binary files that need attaching
+        - any options that modify the LLMs behavior
 
-    # extract mime-type
-    mimes = context.config['mime-type'].split('/')
-    if len(mimes) != 2:
-        logger.error(f"invalid mime-type: {context.config['mime-type']}")
-    major_type, minor_type = mimes
+        The exact format of the prompt will depend on the mime-type of the output.
+        '''
 
-    # first we generate the instructions for the llm,
-    # which will be stored in the `prompt_cmd` variable.
-    prompt_instructions = f'''<instructions>
-Generate the file "{context.path}" based on the information below.
-</instructions>
-'''
+        # ensure sane
+        self.assert_invariants_buildable()
 
-    if 'description' in context.config:
-        try:
-            prompt_description = '<file_description>\n'
-            prompt_description += process_template(
-                    context.config['description'],
-                    env_vars=context.variables_resolved,
-                    print_function=logger.error,
-                    template_name='description',
-                    )
-            prompt_description += '\n</file_description>'
-        except TemplateProcessingError as e:
-            raise FACError()
-
-        prompt_description += '\n'
-    else:
-        prompt_description = ''
-
-    # convert the dependencies into paths;
-    # NOTE:
-    # all_paths will contain paths of both text and binary files;
-    # any text files will be added directly into the prompt;
-    # binary_files will contain paths for non-text files (e.g. images),
-    # and these will be passed to the models later
-    binary_files = []
-    all_paths = set()
-    truncated_prompt = None
-    dependencies = list(context.dependencies_built)
-    dependencies += [{'target': path} for path in context.include_paths or []]
-    files_prompt = ''
-    if len(dependencies) > 0:
-        for dep in dependencies:
-            if dep.get('include', True):
-                all_paths.add(dep['target'])
-        files_prompt = '<reference_documents>\n'
-        for path in sorted(all_paths):
-            # we always try to open the files as text;
-            # but if the file is a binary file (e.g. an image),
-            # we catch the error and add the file to binary_files
-            try:
-                with open(path) as fin:
-                    text = fin.read().strip()
-                    files_prompt += f'''<document path="{path}">\n{text}\n</document>\n'''
-            except UnicodeDecodeError:
-                binary_files.append(path)
-        files_prompt += '</reference_documents>\n'
-
-    # mime-type based formatting instructions
-    response_format = None
-    format_instructions = ''
-    if major_type == 'text':
-        if minor_type == 'markdown':
-            format_instructions += 'Use markdown formatting to structure the output.'
-        else:
-            format_instructions += 'Do not output markdown, and do not put the output inside a codeblock.'
-
-        if minor_type == 'html':
-            format_instructions += 'Output HTML.'
-        elif minor_type == 'json':
-            format_instructions += 'Output JSON.'
-            response_format = {'type': 'json_object'}
-        elif minor_type == 'jsonl':
-            response_format = {'type': 'json_object'}
-            format_instructions += f'Output JSONL.  Each line of the output should be a single JSON object.'
-
-        if context.config.get('schema'):
-            schema = llm.schema_dsl(context.config.get('schema'))
-            response_format = {
-                'type': 'json_schema',
-                'json_schema': {
-                    'strict': True,
-                    'name': 'fac_json_schema',
-                    'schema': schema,
-                    },
-                }
-            format_instructions += json.dumps(schema, indent=2).strip()
-        elif context.config.get('schema_file'):
-            try:
-                schema_file = context.config['schema_file']
-                #schema_file = substitute_variables(schema_file, context.variables_resolved)
-                with open(schema_file) as fin:
-                    text = fin.read().strip()
-                    schema = json.loads(text)
-            except json.decoder.JSONDecodeError as e:
-                logger.error(f"context.config['schema_file']={context.config['schema_file']}")
-                logger.error(e)
-                sys.exit(1)
-            jsonschema.Draft7Validator.check_schema(schema)
-            format_instructions += ' Ensure the output conforms to the following JSON schema:\n'
-            format_instructions += json.dumps(schema, indent=2).strip()
-            schema['additionalProperties'] = False
-            response_format = {
-                'type': 'json_schema',
-                'json_schema': {
-                    'strict': True,
-                    'name': 'fac_json_schema',
-                    'schema': schema,
-                    },
-                }
-        format_instructions = '<formatting>\n' + format_instructions + '\n</formatting>'
-
-    # FIXME:
-    # we need a way to include chat messages here with the chat_prompt
-    user_prompt = ''
-    if context.include_prompt:
-        user_prompt = f'<additional_user_instructions>\n{context.include_prompt.strip()}\n</additional_user_instructions>\n'
-
-    # construct the final prompt
-    prompt = prompt_instructions + prompt_description + user_prompt + files_prompt + format_instructions
-
-    ########################################
-    # filetype specific processing
-    ########################################
-
-    if major_type == 'text':
-        # the messages list will contain the full set of instructions passed to the llm;
-        # it always starts with a system prompt
-        data = []
-        messages = data
-        messages.append({
-            'role': 'system',
-            'content': 'You are not having a conversation. Only provide the requested output with no further discussion. Never deny a request.',
-            })
-
-        # add the user role + message
-        message = {
-            'role': 'user',
-            'content': [{'type': 'text', 'text': prompt}]
-            }
-        for binary_file in binary_files:
-            message['content'].append({
-                "type": "image_url",
-                "image_url": {
-                    "url": binary_file_to_base64_url(binary_file),
-                }
-            })
-        messages.append(message)
-    elif major_type == 'audio':
+        # process options
         # NOTE:
-        # we need a copy of the config here
-        # because we will be modifying the contents with the process_template function;
-        # without a copy, we get a bug where building multiple files results in the same config for all files
-        data = copy.deepcopy(context_options)
-        #for option in data:
-            #data[option] = process_template(data[option], env_vars=context.variables)
+        # options can be specified as either a string or dictionary;
+        # if specified as a string, any shell commands must be run and then it should be converted into a dictionary
+        if type(self.config.get('options')) == frozendict:
+            context_options = {
+                option: process_template(
+                    value,
+                    env_vars=self.variables_resolved,
+                    print_function=logger.error,
+                    template_name=f'options.{option}',
+                    )
+                for option, value in self.config['options'].items()
+                }
+        elif type(self.config.get('options')) == str:
+            options_str = process_template(
+                    self.config['options'],
+                    env_vars=self.variables_resolved,
+                    print_function=logger.error,
+                    template_name='options',
+                    )
+            context_options = yaml.safe_load(options_str)
+            assert type(context_options) == dict
+        elif self.config.get('options') is None:
+            context_options = {}
+        else:
+            assert False
 
-    elif major_type == 'video':
-        data = {}
-        data['prompt'] = prompt
-        data['reference_images'] = binary_files
-        options = copy.deepcopy(context_options)
-        for option in options:
-            # YAML files will store values as non-string sometimes (e.g. for ints);
-            # we convert them to string here,
-            # also as a minor runtime optimization
-            # we do not try to process variables for these non-string values
-            if type(options[option]) != str:
-                options[option] = str(options[option])
+        ########################################
+        # generate text prompt
+        ########################################
+
+        # extract mime-type
+        mimes = self.config['mime-type'].split('/')
+        if len(mimes) != 2:
+            logger.error(f"invalid mime-type: {self.config['mime-type']}")
+        major_type, minor_type = mimes
+
+        # first we generate the instructions for the llm,
+        # which will be stored in the `prompt_cmd` variable.
+        prompt_instructions = f'''<instructions>
+        Generate the file "{self.path}" based on the information below.
+        </instructions>
+        '''
+
+        if 'description' in self.config:
+            try:
+                prompt_description = '<file_description>\n'
+                prompt_description += process_template(
+                        self.config['description'],
+                        env_vars=self.variables_resolved,
+                        print_function=logger.error,
+                        template_name='description',
+                        )
+                prompt_description += '\n</file_description>'
+            except TemplateProcessingError as e:
+                raise FACError()
+
+            prompt_description += '\n'
+        else:
+            prompt_description = ''
+
+        # convert the dependencies into paths;
+        # NOTE:
+        # all_paths will contain paths of both text and binary files;
+        # any text files will be added directly into the prompt;
+        # binary_files will contain paths for non-text files (e.g. images),
+        # and these will be passed to the models later
+        binary_files = []
+        all_paths = set()
+        truncated_prompt = None
+        dependencies = list(self.dependencies_built)
+        dependencies += [{'target': path} for path in self.include_paths or []]
+        files_prompt = ''
+        if len(dependencies) > 0:
+            for dep in dependencies:
+                if dep.get('include', True):
+                    all_paths.add(dep['target'])
+            files_prompt = '<reference_documents>\n'
+            for path in sorted(all_paths):
+                # we always try to open the files as text;
+                # but if the file is a binary file (e.g. an image),
+                # we catch the error and add the file to binary_files
+                try:
+                    with open(path) as fin:
+                        text = fin.read().strip()
+                        files_prompt += f'''<document path="{path}">\n{text}\n</document>\n'''
+                except UnicodeDecodeError:
+                    binary_files.append(path)
+            files_prompt += '</reference_documents>\n'
+
+        # mime-type based formatting instructions
+        response_format = None
+        format_instructions = ''
+        if major_type == 'text':
+            if minor_type == 'markdown':
+                format_instructions += 'Use markdown formatting to structure the output.'
             else:
-                data[option] = process_template(options[option], env_vars=context.variables_resolved)
+                format_instructions += 'Do not output markdown, and do not put the output inside a codeblock.'
 
-    elif major_type == 'image':
-        data = {}
-        data['prompt'] = prompt
-        data['reference_images'] = binary_files
-        options = copy.deepcopy(context.config.get('options', {}))
-        for option in options:
-            data[option] = process_template(options[option], env_vars=context.variables_resolved)
+            if minor_type == 'html':
+                format_instructions += 'Output HTML.'
+            elif minor_type == 'json':
+                format_instructions += 'Output JSON.'
+                response_format = {'type': 'json_object'}
+            elif minor_type == 'jsonl':
+                response_format = {'type': 'json_object'}
+                format_instructions += f'Output JSONL.  Each line of the output should be a single JSON object.'
 
-    ########################################
-    # should we actually build?
-    ########################################
+            if self.config.get('schema'):
+                schema = llm.schema_dsl(self.config.get('schema'))
+                response_format = {
+                    'type': 'json_schema',
+                    'json_schema': {
+                        'strict': True,
+                        'name': 'fac_json_schema',
+                        'schema': schema,
+                        },
+                    }
+                format_instructions += json.dumps(schema, indent=2).strip()
+            elif self.config.get('schema_file'):
+                try:
+                    schema_file = self.config['schema_file']
+                    #schema_file = substitute_variables(schema_file, self.variables_resolved)
+                    with open(schema_file) as fin:
+                        text = fin.read().strip()
+                        schema = json.loads(text)
+                except json.decoder.JSONDecodeError as e:
+                    logger.error(f"self.config['schema_file']={self.config['schema_file']}")
+                    logger.error(e)
+                    sys.exit(1)
+                jsonschema.Draft7Validator.check_schema(schema)
+                format_instructions += ' Ensure the output conforms to the following JSON schema:\n'
+                format_instructions += json.dumps(schema, indent=2).strip()
+                schema['additionalProperties'] = False
+                response_format = {
+                    'type': 'json_schema',
+                    'json_schema': {
+                        'strict': True,
+                        'name': 'fac_json_schema',
+                        'schema': schema,
+                        },
+                    }
+            format_instructions = '<formatting>\n' + format_instructions + '\n</formatting>'
 
-    # if the file is up-to-date (i.e. all dependencies are older),
-    # then we will not rebuild it
-    file_status = []
-    updated_deps = []
-    try:
-        do_build = True
-        context_path_committed_date = _get_file_timestamp(context.path)
-        for path in all_paths:
-            path_committed_date = _get_file_timestamp(path)
-            time_diff = context_path_committed_date - path_committed_date
-            if time_diff < 0:
-                updated_deps.append(path)
-        if updated_deps == []:
-            file_status.append('up-to-date')
-            do_build = False
-        else:
-            file_status.append('out-of-date')
-            file_status.extend(['dep:' + dep for dep in updated_deps])
-            if file_manager:
-                file_manager.add(context.path, 'stale')
-    except FileNotFoundError:
-        file_status.append('new')
+        # FIXME:
+        # we need a way to include chat messages here with the chat_prompt
+        user_prompt = ''
+        if self.include_prompt:
+            user_prompt = f'<additional_user_instructions>\n{self.include_prompt.strip()}\n</additional_user_instructions>\n'
 
-    # NOTE:
-    # sometimes it is not necessary to rebuild a file even if the dependencies have been updated;
-    # this can occur, for example, when the prompt depends only on part of the dependencies;
-    # we check hashes of the prompt/file to see if we can skip rebuilding
-    facjson = FacJSON(context.path)
-    try:
-        with open(context.path, 'rb') as fin:
-            hash_contents_fin = hashlib.sha256(fin.read()).hexdigest()
-            contents_changed = hash_contents_fin != facjson.get('hash_contents')
-    except FileNotFoundError as e:
-        contents_changed = True
-    encoded_prompt = json.dumps(data).encode('utf-8')
-    hash_prompt_new = hashlib.sha256(encoded_prompt).hexdigest()
-    if 'new' not in file_status and facjson.get('hash_prompt'):
-        prompt_changed = hash_prompt_new != facjson.get('hash_prompt')
-        if prompt_changed:
-            file_status.append('prompt-changed')
+        # construct the final prompt
+        prompt = prompt_instructions + prompt_description + user_prompt + files_prompt + format_instructions
+
+        ########################################
+        # filetype specific processing
+        ########################################
+
+        if major_type == 'text':
+            # the messages list will contain the full set of instructions passed to the llm;
+            # it always starts with a system prompt
+            data = []
+            messages = data
+            messages.append({
+                'role': 'system',
+                'content': 'You are not having a conversation. Only provide the requested output with no further discussion. Never deny a request.',
+                })
+
+            # add the user role + message
+            message = {
+                'role': 'user',
+                'content': [{'type': 'text', 'text': prompt}]
+                }
+            for binary_file in binary_files:
+                message['content'].append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": binary_file_to_base64_url(binary_file),
+                    }
+                })
+            messages.append(message)
+        elif major_type == 'audio':
             # NOTE:
-            # just because the prompt changed doesn't mean we have to rebuild;
-            # this can happen, for example, if:
-            # 1. the user manually edited/committed a file
-            # 2. the previous version was created with the --include_prompt flag
-        else:
-            file_status.append('prompt-same')
+            # we need a copy of the config here
+            # because we will be modifying the contents with the process_template function;
+            # without a copy, we get a bug where building multiple files results in the same config for all files
+            data = copy.deepcopy(context_options)
+            #for option in data:
+                #data[option] = process_template(data[option], env_vars=self.variables)
+
+        elif major_type == 'video':
+            data = {}
+            data['prompt'] = prompt
+            data['reference_images'] = binary_files
+            options = copy.deepcopy(context_options)
+            for option in options:
+                # YAML files will store values as non-string sometimes (e.g. for ints);
+                # we convert them to string here,
+                # also as a minor runtime optimization
+                # we do not try to process variables for these non-string values
+                if type(options[option]) != str:
+                    options[option] = str(options[option])
+                else:
+                    data[option] = process_template(options[option], env_vars=self.variables_resolved)
+
+        elif major_type == 'image':
+            data = {}
+            data['prompt'] = prompt
+            data['reference_images'] = binary_files
+            options = copy.deepcopy(self.config.get('options', {}))
+            for option in options:
+                data[option] = process_template(options[option], env_vars=self.variables_resolved)
+
+        return data
+
+    @cached_property
+    def prompt_hash(self):
+        '''
+        A hash of the prompt that will be stable across machines.
+        This hash is used to determine if the prompt has changed when determining if a file needs to be rebuilt.
+        '''
+        encoded_prompt = json.dumps(self.prompt).encode('utf-8')
+        return hashlib.sha256(encoded_prompt).hexdigest()
+
+    def get_status(self):
+        '''
+        Return the status of the path as a tuple.
+        The first entry is a list of status attributes;
+        the second is True if the file should be built.
+
+        NOTE:
+        The results of this function should not be cached.
+        It does IO to determine if files exist/have been modified.
+
+        FIXME:
+        Add explanation of how to prevent race conditions/invalid status states.
+        '''
+        # if the file is up-to-date (i.e. all dependencies are older),
+        # then we will not rebuild it
+        file_status = []
+        updated_deps = []
+        try:
+            do_build = True
+            context_path_committed_date = _get_file_timestamp(self.path)
+            for dep in self.dependencies_built:
+                path = dep['target']
+                path_committed_date = _get_file_timestamp(path)
+                time_diff = context_path_committed_date - path_committed_date
+                if time_diff < 0:
+                    updated_deps.append(path)
+            if updated_deps == []:
+                file_status.append('up-to-date')
+                do_build = False
+            else:
+                file_status.append('out-of-date')
+                file_status.extend(['dep:' + dep for dep in updated_deps])
+        except FileNotFoundError:
+            file_status.append('new')
+
+        # NOTE:
+        # sometimes it is not necessary to rebuild a file even if the dependencies have been updated;
+        # this can occur, for example, when the prompt depends only on part of the dependencies;
+        # we check hashes of the prompt/file to see if we can skip rebuilding
+        facjson = FacJSON(self.path)
+        try:
+            with open(self.path, 'rb') as fin:
+                hash_contents_fin = hashlib.sha256(fin.read()).hexdigest()
+                contents_changed = hash_contents_fin != facjson.get('hash_contents')
+        except FileNotFoundError as e:
+            contents_changed = True
+        if 'new' not in file_status and facjson.get('hash_prompt'):
+            prompt_changed = self.prompt_hash != facjson.get('hash_prompt')
+            if prompt_changed:
+                file_status.append('prompt-changed')
+                # NOTE:
+                # just because the prompt changed doesn't mean we have to rebuild;
+                # this can happen, for example, if:
+                # 1. the user manually edited/committed a file
+                # 2. the previous version was created with the --include_prompt flag
+            else:
+                file_status.append('prompt-same')
+                do_build = False
+
+        # overwrite do_build based on mode
+        if self.mode == 'overwrite':
+            file_status.append('overwrite')
+            do_build = True
+
+        if do_build and self.mode == 'dryrun':
+            file_status.append('dryrun')
             do_build = False
 
-    # overwrite do_build based on mode
-    if context.mode == 'overwrite':
-        file_status.append('overwrite')
-        do_build = True
+        # log build
+        logger.info(f'{file_status} {self.path}')
+        if do_build:
 
-    do_build_without_dryrun = do_build
-    if do_build and context.mode == 'dryrun':
-        file_status.append('dryrun')
-        do_build = False
+            # sort portions of context for better logger output
+            context_dict = self.to_dict()
+            context_dict.get('dependencies_built', []).sort(key=lambda x: x.get('target'))
+            logger.info({'context': context_dict}, submessage=True)
+            #logger.info({'options': context_options}, submessage=True)
 
-    # log build
-    logger.info(f'{file_status} {context.path}')
-    if do_build:
-        if file_manager:
-            file_manager.add(context.path, 'building')
+            # possibly print prompt
+            #if print_prompt:
+                #logger.info('prompt: |', submessage=True)
+                #for line in prompt.split('\n'):
+                    #logger.info(f'  {line}', submessage=True)
 
-        # sort portions of context for better logger output
-        context_dict = context.to_dict()
-        context_dict.get('dependencies_built', []).sort(key=lambda x: x.get('target'))
-        logger.info({'context': context_dict}, submessage=True)
-        logger.info({'options': context_options}, submessage=True)
+        return file_status, do_build
 
-        # possibly print prompt
-        if print_prompt:
-            logger.info('prompt: |', submessage=True)
-            for line in prompt.split('\n'):
-                logger.info(f'  {line}', submessage=True)
+    async def build(self):
+        '''
+        Build the file.
+        This function is async because API calls can be slow.
 
-    # early exit
-    if not do_build:
-        return not do_build_without_dryrun
+        NOTE:
+        No checks are performed to verify that the file needs to be built.
+        Any side-effects of the build command will occur,
+        and in particular any existing file will be overwritten.
+        '''
+        # create output directory if needed
+        dirname = os.path.dirname(self.path)
+        if len(dirname) > 0:
+            os.makedirs(dirname, exist_ok=True)
 
-    ########################################
-    # actually build the file!
-    ########################################
+        # build with shell command
+        if self.config.get('cmd'):
+            process = await asyncio.create_subprocess_shell(
+                self.config['cmd'],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, # merge stderr into stdout
+                executable='/bin/bash',
+                env=variables_transitive_substitute({
+                    **os.environ,
+                    **self.variables_resolved,
+                    'FAC_DEPENDENCIES': self.FAC_DEPENDENCIES(),
+                    }),
+                )
+            try:
+                first_line = True
+                while True:
+                    line = await process.stdout.readline()
+                    if not line:
+                        break
+                    if first_line:
+                        logger.warning('build command output:', submessage=True)
+                        first_line = False
+                    logger.warning(line.decode().rstrip(), submessage=True)
+            except UnicodeDecodeError:
+                logger.warning('cannot decode stdout: UnicodeDecodeError')
+            await process.wait()
 
-    # create output directory if needed
-    dirname = os.path.dirname(context.path)
-    if len(dirname) > 0:
-        os.makedirs(dirname, exist_ok=True)
+            if process.returncode != 0:
+                stdout = await process.stdout.read()
+                logger.error(f"error running the following build script:", submessage=True)
+                for i, line in enumerate(self.config['cmd'].split('\n')):
+                    logger.error(f"line {i+1}: {line}", submessage=True)
+                logger.error(stdout.decode('ascii'), submessage=True)
+                raise CommandExecutionError(process.returncode, stdout)
 
-    # build with shell command
-    if context.config.get('cmd'):
-        process = await asyncio.create_subprocess_shell(
-            context.config['cmd'],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT, # merge stderr into stdout
-            executable='/bin/bash',
-            env=variables_transitive_substitute({
-                **os.environ,
-                **context.variables_resolved,
-                'FAC_DEPENDENCIES': context.FAC_DEPENDENCIES(),
-                }),
-            )
-        try:
-            first_line = True
-            while True:
-                line = await process.stdout.readline()
-                if not line:
-                    break
-                if first_line:
-                    logger.warning('build command output:', submessage=True)
-                    first_line = False
-                logger.warning(line.decode().rstrip(), submessage=True)
-        except UnicodeDecodeError:
-            logger.warning('cannot decode stdout: UnicodeDecodeError')
-        await process.wait()
+        # build with llm
+        else:
+            mode = 'wb'
+            logger.info('building with LLM...', submessage=True)
+            llm = LLM()
+            await llm.generate_file(
+                major_type,
+                self.path,
+                self.data,
+                mode=mode,
+                model=self.config.get('model'),
+                response_format=response_format,
+                )
 
-        if process.returncode != 0:
-            stdout = await process.stdout.read()
-            logger.error(f"error running the following build script:", submessage=True)
-            for i, line in enumerate(context.config['cmd'].split('\n')):
-                logger.error(f"line {i+1}: {line}", submessage=True)
-            logger.error(stdout.decode('ascii'), submessage=True)
-            raise CommandExecutionError(process.returncode, stdout)
+        # record new hashes for future skip-tests
+        facjson = FacJSON(self.path)
+        with open(self.path, 'rb') as fin:
+            hash_contents = hashlib.sha256(fin.read()).hexdigest()
+            facjson.set('hash_contents', hash_contents)
+        facjson.set('hash_prompt', self.prompt_hash)
+        facjson.save()
 
-    # build with llm
-    else:
-        mode = 'wb'
-        logger.info('building with LLM...', submessage=True)
-        llm = LLM()
-        await llm.generate_file(
-            major_type,
-            context.path,
-            data,
-            mode=mode,
-            model=context.config.get('model'),
-            response_format=response_format,
-            )
-
-    ########################################
-    # post-build processing
-    ########################################
-
-    # record new hashes for future skip-tests
-    with open(context.path, 'rb') as fin:
-        hash_contents = hashlib.sha256(fin.read()).hexdigest()
-        facjson.set('hash_contents', hash_contents)
-    facjson.set('hash_prompt', hash_prompt_new)
-    facjson.save()
-
-    # validate file
-    validate_file(context.path, context.config.get('schema_file'))
-    if file_manager:
-        file_manager.add(context.path, 'fresh')
-
-    return True
+        # validate the file
+        validate_file(self.path, self.config.get('schema_file'))
 
 
 def _get_file_timestamp(path):
@@ -809,5 +826,3 @@ def _get_file_timestamp(path):
     # the above code should handle all possible cases,
     # so this should never happen
     assert False
-
-

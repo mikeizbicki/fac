@@ -526,6 +526,14 @@ class BuildState(Routable):
             })
         self._add_context(context1)
 
+    async def maybe_build_context(self, context):
+        if context.normalized_target not in self.targets_dict:
+            logger.info(f'target not in self.target_dicts, cannot build', submessage=True)
+        else:
+            status, do_build = context.get_status()
+            if do_build:
+                await context.build()
+
     def process_all_buildable_par(self, max_procs=1):
         logger.debug(f'process_all_buildable()')
         self.assert_invariants()
@@ -539,11 +547,7 @@ class BuildState(Routable):
                 while len(self.contexts_buildable) > 0:
                     context = self.contexts_buildable.pop()
 
-                    if context.normalized_target not in self.targets_dict:
-                        logger.debug(f'target not in self.target_dicts, cannot build', submessage=True)
-                        future = executor.submit(lambda: True)
-                    else:
-                        future = executor.submit(asyncio.run, build_context(context, self.file_manager))
+                    future = executor.submit(asyncio.run, self.maybe_build_context(context))
                     futures[future] = context
 
                 for future in as_completed(futures):
@@ -582,12 +586,13 @@ class BuildState(Routable):
     def process_buildable(self, context):
         path = context.path
 
-        if context.normalized_target not in self.targets_dict:
-            pass
-            logger.debug(f'target not in self.target_dicts, cannot build', submessage=True)
-        else:
-            future = build_context(context)
-            asyncio.run(future)
+        #if context.normalized_target not in self.targets_dict:
+            #pass
+            #logger.debug(f'target not in self.target_dicts, cannot build', submessage=True)
+        #else:
+            #future = build_context(context)
+        future = self.maybe_build_context(context)
+        asyncio.run(future)
         if os.path.exists(context.path):
             self.contexts_built.add(context)
             self.file_manager.add(path, status='fresh')
