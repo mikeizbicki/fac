@@ -1,0 +1,328 @@
+/* git.css
+ *
+ * Styles for the git history sidebar component.
+ * Displays a graph view of commits similar to git log --graph --oneline --decorate --all
+ */
+
+.git-sidebar {
+  width: 350px;
+  min-width: 250px;
+  max-width: 500px;
+  background: #1e1e1e;
+  border-right: 1px solid #333;
+  padding: 10px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  position: relative;
+  overflow-y: auto;
+  overflow-x: visible;
+}
+
+.git-sidebar h2 {
+  margin: 0 0 10px 0;
+  padding: 5px 0;
+  font-size: 14px;
+  color: #ccc;
+  border-bottom: 1px solid #333;
+}
+
+.git-graph {
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1;
+  position: relative;
+}
+
+.git-commit {
+  display: flex;
+  align-items: stretch;
+  cursor: pointer;
+  border-radius: 3px;
+  position: relative;
+  min-height: 40px;
+}
+
+.git-commit:hover {
+  background: #2a2a2a;
+}
+
+.git-commit.is-head {
+  background: #1a3a1a;
+}
+
+.git-commit.is-head:hover {
+  background: #2a4a2a;
+}
+
+.git-graph-columns {
+  display: flex;
+  flex-shrink: 0;
+  position: relative;
+  align-self: stretch;
+}
+
+.git-graph-column {
+  width: 16px;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.git-graph-node {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+}
+
+.git-graph-line-vertical {
+  position: absolute;
+  width: 2px;
+  left: 7px;
+  z-index: 1;
+}
+
+.git-graph-line-vertical.top {
+  top: 0;
+  height: 50%;
+}
+
+.git-graph-line-vertical.bottom {
+  top: 50%;
+  height: 50%;
+}
+
+.git-graph-line-vertical.full {
+  top: 0;
+  height: 100%;
+}
+
+.git-graph-line-horizontal {
+  position: absolute;
+  height: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+}
+
+.git-commit-info {
+  flex: 1;
+  min-width: 0;
+  /*overflow: hidden;*/
+  padding: 6px 6px 6px 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.git-commit-header {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.git-hash {
+  color: #e8b84a;
+  font-weight: bold;
+}
+
+.git-refs {
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.git-branch {
+  background: #3a6a3a;
+  color: #8f8;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 10px;
+}
+
+.git-branch.remote {
+  background: #6a3a3a;
+  color: #f88;
+}
+
+.git-tag {
+  background: #6a6a3a;
+  color: #ff8;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 10px;
+}
+
+.git-head-indicator {
+  background: #3a8a8a;
+  color: #8ff;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: bold;
+}
+
+.git-message {
+  color: #ddd;
+  white-space: nowrap;
+  /*overflow: hidden;*/
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.git-timestamp {
+  color: #888;
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+/* Resize handle */
+.git-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: ew-resize;
+  background: transparent;
+}
+
+.git-resize-handle:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.git-resize-handle.dragging {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Hover tooltip for commit details */
+.git-commit-tooltip {
+  display: none;
+  position: fixed;
+  left: 360px;
+  top: 100px;
+  margin-left: 10px;
+  background: #252525;
+  border: 1px solid #444;
+  border-radius: 5px;
+  padding: 10px;
+  min-width: 300px;
+  max-width: 450px;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+
+.git-commit:hover .git-commit-tooltip {
+  display: block;
+}
+
+.git-tooltip-header {
+  border-bottom: 1px solid #444;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+}
+
+.git-tooltip-hash {
+  color: #e8b84a;
+  font-weight: bold;
+  font-size: 13px;
+}
+
+.git-tooltip-author {
+  color: #8af;
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.git-tooltip-date {
+  color: #888;
+  font-size: 11px;
+}
+
+.git-tooltip-message {
+  color: #ddd;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-size: 12px;
+  margin-bottom: 10px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.git-tooltip-stats {
+  border-top: 1px solid #444;
+  padding-top: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.git-tooltip-stats-header {
+  color: #aaa;
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+
+.git-stat-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  padding: 2px 0;
+}
+
+.git-stat-path {
+  color: #ddd;
+  flex: 1;
+  /*overflow: hidden;*/
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-stat-changes {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.git-stat-additions {
+  color: #8f8;
+}
+
+.git-stat-deletions {
+  color: #f88;
+}
+
+.git-stat-bar {
+  display: flex;
+  width: 50px;
+  height: 8px;
+  background: #333;
+  border-radius: 2px;
+  /*overflow: hidden;*/
+}
+
+.git-stat-bar-add {
+  background: #3a8a3a;
+}
+
+.git-stat-bar-del {
+  background: #8a3a3a;
+}
+
+/* Main layout adjustment */
+body {
+  display: flex;
+  margin: 0;
+  padding: 0;
+}
+
+#targets-container {
+  flex: 1;
+  min-width: 0;
+  padding: 10px;
+  box-sizing: border-box;
+}

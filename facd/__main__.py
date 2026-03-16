@@ -17,6 +17,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
+from facd import git_routes
+
 ################################################################################
 # FastAPI setup
 ################################################################################
@@ -34,6 +36,9 @@ async def lifespan(app: FastAPI):
     app.include_router(state.router)
     app.include_router(state.file_manager.router)
 
+    # register git routes
+    app.include_router(git_routes.router)
+
     # perform a dryrun to register all files with facd;
     # build_all=False allows facd startup to continue,
     # and the build_daemon will run the build concurrently
@@ -45,6 +50,7 @@ async def lifespan(app: FastAPI):
 
     # cleanup code here
     await state.built_paths.shutdown()
+    await git_routes.shutdown_git_routes()
 
 app = FastAPI(title="fac build server", lifespan=lifespan)
 
