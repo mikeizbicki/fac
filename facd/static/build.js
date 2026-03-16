@@ -31,6 +31,9 @@
         const header = nodeEl.querySelector('.tree-header');
         if (!header) return;
 
+        // Check if header menu already exists
+        if (header.querySelector('.header-menu')) return;
+
         const menu = document.createElement('div');
         menu.className = 'header-menu';
 
@@ -77,6 +80,9 @@
     }
 
     function addTargetBuildMenu(nodeEl) {
+        // Check if build menu already exists
+        if (nodeEl.querySelector('.target-build-menu')) return;
+
         const path = nodeEl.dataset.path;
 
         const buildMenu = document.createElement('div');
@@ -161,6 +167,17 @@
             if (!response.ok) throw new Error('Failed to edit file');
             return response.json();
         })
+        .then(() => {
+            // Success - clean up the editing UI
+            // The SSE will handle updating the content
+            overlay.remove();
+            textarea.remove();
+            actions.remove();
+            const contentDiv = contentWrapper.querySelector('.content');
+            if (contentDiv) {
+                contentDiv.style.display = 'block';
+            }
+        })
         .catch(error => {
             console.error('Error editing file:', error);
             overlay.remove();
@@ -185,6 +202,7 @@
     }
 
     window.registerComponent(function(nodeEl, status, isNew) {
+        // Only add menus on initial creation
         if (!isNew) return;
 
         const isTarget = nodeEl.dataset.isTarget === 'true';

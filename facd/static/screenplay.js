@@ -7,6 +7,7 @@
 //
 // Dependencies:
 // - fountain.min.js must be loaded before this script
+// - images.js and videos.js must be loaded before this script for media APIs
 // - build.js must be loaded after this script for build menus
 //
 // The component:
@@ -14,15 +15,17 @@
 // 2. Parses the XML to extract <shot> elements
 // 3. Renders each shot as Fountain HTML on a "paper" background
 // 4. Creates sticky notes with shot metadata and related targets
-// 5. Integrates with the overlay and build systems for target status
+// 5. Uses the standard node/component system for overlays and build menus
 
 (function() {
-    // Track screenplay nodes and their associated target paths
+    // Track screenplay nodes
     const screenplayNodes = new Map();
-    // Map from target path to its DOM element for status updates
+    // Map from target path to its DOM element
     const targetElements = new Map();
     // Cache for target content/metadata
     const targetCache = new Map();
+    // Track paths we've created to avoid re-notifying on our own updates
+    const ownedPaths = new Set();
 
     // Target patterns for each shot
     const SHOT_TARGETS = {
@@ -32,39 +35,33 @@
         video: 'shots/$SHOT_ID/shot_type=standard/raw.mp4'
     };
 
-    function getTargetPath(targetKey, shotId) {
-        return SHOT_TARGETS[targetKey].replace('$SHOT_ID', shotId);
+    function getTargetPath(key, shotId) {
+        return SHOT_TARGETS[key].replace('$SHOT_ID', shotId);
     }
 
     function parseScreenplayXml(xmlContent) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(xmlContent, 'text/xml');
         const shots = [];
-        const shotElements = doc.querySelectorAll('shot');
-        shotElements.forEach(shotEl => {
-            const shotId = shotEl.getAttribute('shot_id');
-            const referenceId = shotEl.getAttribute('reference_id') || '';
-            const text = shotEl.textContent || '';
-            if (shotId) {
-                shots.push({ shotId, referenceId, text });
-            }
+        doc.querySelectorAll('shot').forEach(el => {
+            const shotId = el.getAttribute('shot_id');
+            const referenceId = el.getAttribute('reference_id') || '';
+            const text = el.textContent || '';
+            if (shotId) shots.push({ shotId, referenceId, text });
         });
         return shots;
     }
 
     function renderFountain(text) {
         if (typeof fountain === 'undefined') {
-            console.warn('fountain.js not loaded, displaying raw text');
             const escaped = text
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
-                .replace(/\n/g, '<br>\n')
-                .replace(/  /g, '&nbsp;&nbsp;');
+                .replace(/\n/g, '<br>\n');
             return `<pre class="fountain-fallback">${escaped}</pre>`;
         }
-        const output = fountain.parse(text);
-        return output.html.script || '';
+        return fountain.parse(text).html.script || '';
     }
 
     function createStickyNote(shot) {
@@ -72,27 +69,19 @@
         sticky.className = 'screenplay-sticky-note';
         sticky.dataset.shotId = shot.shotId;
 
-        // Metadata grid
         const metaGrid = document.createElement('div');
         metaGrid.className = 'sticky-meta-grid';
 
-        // SHOT_ID row
-        const shotIdRow = createMetaRow('SHOT_ID', shot.shotId);
-        metaGrid.appendChild(shotIdRow);
+        // Static metadata rows
+        metaGrid.appendChild(createMetaRow('SHOT_ID', shot.shotId));
+        metaGrid.appendChild(createMetaRow('REFERENCE_ID', shot.referenceId || '—'));
 
-        // REFERENCE_ID row
-        const refIdRow = createMetaRow('REFERENCE_ID', shot.referenceId || '—');
-        metaGrid.appendChild(refIdRow);
-
-        // shot_type target row
+        // Target rows - these are tree nodes that get component callbacks
         const shotTypePath = getTargetPath('shot_type', shot.shotId);
-        const shotTypeRow = createTargetRow('shot_type', shotTypePath);
-        metaGrid.appendChild(shotTypeRow);
+        metaGrid.appendChild(createTargetRow('shot_type', shotTypePath));
 
-        // length_seconds target row
         const lengthPath = getTargetPath('length_seconds', shot.shotId);
-        const lengthRow = createTargetRow('length_seconds', lengthPath);
-        metaGrid.appendChild(lengthRow);
+        metaGrid.appendChild(createTargetRow('length_seconds', lengthPath));
 
         sticky.appendChild(metaGrid);
 
@@ -100,18 +89,13 @@
         const mediaSection = document.createElement('div');
         mediaSection.className = 'sticky-media-section';
 
-        // startframe.png
         const startframePath = getTargetPath('startframe', shot.shotId);
-        const imageContainer = createMediaContainer(startframePath, 'image');
-        mediaSection.appendChild(imageContainer);
+        mediaSection.appendChild(createMediaNode(startframePath, 'startframe.png', 'image/png'));
 
-        // raw.mp4
         const videoPath = getTargetPath('video', shot.shotId);
-        const videoContainer = createMediaContainer(videoPath, 'video');
-        mediaSection.appendChild(videoContainer);
+        mediaSection.appendChild(createMediaNode(videoPath, 'raw.mp4', 'video/mp4'));
 
         sticky.appendChild(mediaSection);
-
         return sticky;
     }
 
@@ -136,6 +120,7 @@
         const row = document.createElement('div');
         row.className = 'sticky-meta-row sticky-target-row tree-node path leaf';
         row.dataset.path = targetPath;
+        // Do not set data-is-target here - these are path nodes that may or may not exist yet
 
         const labelSpan = document.createElement('span');
         labelSpan.className = 'sticky-meta-label';
@@ -144,26 +129,41 @@
 
         const valueSpan = document.createElement('span');
         valueSpan.className = 'sticky-meta-value sticky-target-value';
-        valueSpan.dataset.targetPath = targetPath;
         valueSpan.textContent = '—';
         row.appendChild(valueSpan);
 
-        // Register for tracking
         targetElements.set(targetPath, row);
+        ownedPaths.add(targetPath);
 
-        // Trigger build.js to add header menu
-        notifyComponentsNewNode(row);
+        // Apply cached data if available
+        const cached = targetCache.get(targetPath);
+        if (cached) {
+            if (cached.content) valueSpan.textContent = cached.content.trim() || '—';
+            row.dataset.status = cached.status;
+            // If we have cached data with a real status, this is a path not a target
+            if (cached.status && cached.status !== 'unknown') {
+                delete row.dataset.isTarget;
+            }
+        } else {
+            // No cached data means this is a target (file doesn't exist yet)
+            row.dataset.isTarget = 'true';
+        }
+
+        // Notify components (deferred to ensure all are registered)
+        setTimeout(() => {
+            window.notifyComponents(row, row.dataset.status || 'unknown', true);
+        }, 0);
 
         return row;
     }
 
-    function createMediaContainer(targetPath, mediaType) {
+    function createMediaNode(targetPath, filename, mimeType) {
         const container = document.createElement('div');
-        container.className = `sticky-media-container tree-node path leaf has-${mediaType === 'image' ? 'image' : 'video'} expanded`;
+        container.className = 'sticky-media-container tree-node path leaf expanded';
         container.dataset.path = targetPath;
-        container.dataset.mimeType = mediaType === 'image' ? 'image/png' : 'video/mp4';
+        container.dataset.mimeType = mimeType;
+        // Start as a target (file may not exist); will be updated when we get status
 
-        // Header with label - build.js will add the menu
         const header = document.createElement('div');
         header.className = 'tree-header';
 
@@ -174,34 +174,55 @@
 
         const label = document.createElement('span');
         label.className = 'tree-label';
-        label.textContent = mediaType === 'image' ? 'startframe.png' : 'raw.mp4';
+        label.textContent = filename;
         header.appendChild(label);
 
         container.appendChild(header);
 
-        // Media container - matches image-container/video-container pattern
+        // Media wrapper - matches standard image/video container pattern
+        const isImage = mimeType.startsWith('image/');
         const mediaWrapper = document.createElement('div');
-        mediaWrapper.className = mediaType === 'image' ? 'image-container' : 'video-container';
-        mediaWrapper.dataset.targetPath = targetPath;
-        mediaWrapper.dataset.mediaType = mediaType;
+        mediaWrapper.className = isImage ? 'image-container' : 'video-container';
         container.appendChild(mediaWrapper);
 
-        // Register for tracking
-        targetElements.set(targetPath, container);
+        if (isImage) {
+            container.classList.add('has-image');
+            // Register with global image system
+            window.registerImageContainer(targetPath, mediaWrapper, 'leaf-image');
+        } else {
+            container.classList.add('has-video');
+            // Register with global video system
+            window.registerVideoContainer(targetPath, mediaWrapper, 'leaf-video');
+        }
 
-        // Trigger build.js to add header menu (isNew=true)
-        notifyComponentsNewNode(container);
+        targetElements.set(targetPath, container);
+        ownedPaths.add(targetPath);
+
+        // Load media if cached and available
+        const cached = targetCache.get(targetPath);
+        if (cached && (cached.status === 'fresh' || cached.status === 'stale')) {
+            container.dataset.status = cached.status;
+            // File exists, so this is a path not a target
+            delete container.dataset.isTarget;
+            loadMedia(targetPath, isImage);
+        } else {
+            // No data or unknown status - treat as target
+            container.dataset.isTarget = 'true';
+        }
+
+        setTimeout(() => {
+            window.notifyComponents(container, container.dataset.status || 'unknown', true);
+        }, 0);
 
         return container;
     }
 
-    function notifyComponentsNewNode(nodeEl) {
-        // Defer to next tick so all components are registered
-        setTimeout(() => {
-            for (const callback of window._componentCallbacks || []) {
-                callback(nodeEl, nodeEl.dataset.status || 'unknown', true);
-            }
-        }, 0);
+    function loadMedia(path, isImage) {
+        if (isImage) {
+            window.fetchImage(path, false).catch(() => {});
+        } else {
+            window.fetchVideo(path, false).catch(() => {});
+        }
     }
 
     function createShotElement(shot) {
@@ -209,16 +230,12 @@
         shotDiv.className = 'screenplay-shot';
         shotDiv.dataset.shotId = shot.shotId;
 
-        // Shot content (the paper)
         const content = document.createElement('div');
         content.className = 'screenplay-shot-content';
         content.innerHTML = renderFountain(shot.text);
         shotDiv.appendChild(content);
 
-        // Sticky note (margin)
-        const sticky = createStickyNote(shot);
-        shotDiv.appendChild(sticky);
-
+        shotDiv.appendChild(createStickyNote(shot));
         return shotDiv;
     }
 
@@ -226,183 +243,156 @@
         const path = nodeEl.dataset.path;
         if (path !== 'shooting-script.xml') return;
 
-        // Prevent collapsing
-        nodeEl.classList.add('screenplay-node');
-        nodeEl.classList.add('expanded');
+        nodeEl.classList.add('screenplay-node', 'expanded');
 
-        // Get the XML content
         const content = nodeEl.dataset.content;
         if (!content) return;
 
-        // Parse XML and extract shots
         const shots = parseScreenplayXml(content);
         if (shots.length === 0) return;
 
-        // Create screenplay container
-        let screenplayContainer = nodeEl.querySelector('.screenplay-container');
-        if (!screenplayContainer) {
-            screenplayContainer = document.createElement('div');
-            screenplayContainer.className = 'screenplay-container';
-            
-            // Insert after header
+        let container = nodeEl.querySelector('.screenplay-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.className = 'screenplay-container';
             const header = nodeEl.querySelector('.tree-header');
-            if (header) {
-                header.after(screenplayContainer);
-            } else {
-                nodeEl.appendChild(screenplayContainer);
+            if (header) header.after(container);
+            else nodeEl.appendChild(container);
+        }
+
+        // Clear old registrations
+        const oldData = screenplayNodes.get(path);
+        if (oldData) {
+            for (const p of oldData.shotPaths) {
+                // Unregister media containers
+                const el = targetElements.get(p);
+                if (el) {
+                    const imgContainer = el.querySelector('.image-container');
+                    const vidContainer = el.querySelector('.video-container');
+                    if (imgContainer) window.unregisterImageContainer(p, imgContainer);
+                    if (vidContainer) window.unregisterVideoContainer(p, vidContainer);
+                }
+                targetElements.delete(p);
+                ownedPaths.delete(p);
             }
         }
 
-        // Clear and rebuild
-        screenplayContainer.innerHTML = '';
+        container.innerHTML = '';
         const shotPaths = [];
 
         shots.forEach(shot => {
-            const shotEl = createShotElement(shot);
-            screenplayContainer.appendChild(shotEl);
-
-            // Collect all target paths for this shot
+            container.appendChild(createShotElement(shot));
             Object.keys(SHOT_TARGETS).forEach(key => {
                 shotPaths.push(getTargetPath(key, shot.shotId));
             });
         });
 
-        // Store association
         screenplayNodes.set(path, { nodeEl, shotPaths });
 
-        // Hide the default metadata display
         const metadata = nodeEl.querySelector(':scope > .metadata');
-        if (metadata) {
-            metadata.style.display = 'none';
-        }
+        if (metadata) metadata.style.display = 'none';
     }
 
-    function updateTargetContent(path, content, status, mimeType) {
-        targetCache.set(path, { content, status, mimeType });
-
+    function updateTargetElement(path, content, status, mimeType) {
         const element = targetElements.get(path);
         if (!element) return;
 
-        // Update status attribute for styling
         element.dataset.status = status;
 
-        // For text targets, update the value display
+        // Determine if this is a target (doesn't exist) or a path (exists)
+        // Files with status fresh/stale/building/queued exist or are being built
+        const isExistingPath = status === 'fresh' || status === 'stale';
+        if (isExistingPath) {
+            // This is an existing path, not a target
+            delete element.dataset.isTarget;
+        } else if (status === 'deleted' || status === 'unknown') {
+            // File doesn't exist, treat as target
+            element.dataset.isTarget = 'true';
+        }
+        // For building/queued, keep current state
+
+        // Update text value display
         const valueSpan = element.querySelector('.sticky-target-value');
         if (valueSpan && content) {
             valueSpan.textContent = content.trim() || '—';
         }
 
-        // For media targets, update the media container
-        const mediaContainer = element.querySelector('.image-container, .video-container');
-        if (mediaContainer) {
-            updateMediaContainer(mediaContainer, path, content, status, mimeType);
-        }
-    }
-
-    function updateMediaContainer(container, path, content, status, mimeType) {
-        const mediaType = container.dataset.mediaType;
-
-        // If status indicates content exists, load it
-        if (status === 'fresh' || status === 'stale') {
-            if (mediaType === 'image' && !container.querySelector('img')) {
-                loadImage(container, path);
-            } else if (mediaType === 'video' && !container.querySelector('video')) {
-                loadVideo(container, path);
+        // Handle media updates - use global fetch functions which handle container refresh
+        const isImage = element.dataset.mimeType?.startsWith('image/');
+        const isVideo = element.dataset.mimeType?.startsWith('video/');
+        
+        if (status === 'fresh') {
+            // Force refresh media
+            if (isImage) {
+                window.fetchImage(path, true).catch(() => {});
+            } else if (isVideo) {
+                window.fetchVideo(path, true).catch(() => {});
+            }
+        } else if (status === 'deleted') {
+            // Clear media from containers
+            if (isImage) {
+                window.clearImageFromContainers(path);
+            } else if (isVideo) {
+                window.clearVideoFromContainers(path);
+            }
+        } else if (isExistingPath) {
+            // Load media if not already loaded
+            if (isImage) {
+                window.fetchImage(path, false).catch(() => {});
+            } else if (isVideo) {
+                window.fetchVideo(path, false).catch(() => {});
             }
         }
+
+        // Notify other components (overlay, build) about status change
+        // but don't trigger ourselves again
+        window.notifyComponents(element, status, false);
     }
 
-    function loadImage(container, path) {
-        fetch(`/contents?path=${encodeURIComponent(path)}`)
-            .then(response => {
-                if (!response.ok) throw new Error('Not found');
-                return response.blob();
-            })
-            .then(blob => {
-                const url = URL.createObjectURL(blob);
-                const img = document.createElement('img');
-                img.src = url;
-                img.className = 'leaf-image';
-                container.innerHTML = '';
-                container.appendChild(img);
-            })
-            .catch(() => {
-                // Keep container empty for missing files
-            });
-    }
-
-    function loadVideo(container, path) {
-        fetch(`/contents?path=${encodeURIComponent(path)}`)
-            .then(response => {
-                if (!response.ok) throw new Error('Not found');
-                return response.blob();
-            })
-            .then(blob => {
-                const url = URL.createObjectURL(blob);
-                const video = document.createElement('video');
-                video.src = url;
-                video.className = 'leaf-video';
-                video.controls = true;
-                video.preload = 'metadata';
-                container.innerHTML = '';
-                container.appendChild(video);
-            })
-            .catch(() => {
-                // Keep container empty for missing files
-            });
-    }
-
-    function refreshScreenplayIfNeeded(nodeEl) {
-        const path = nodeEl.dataset.path;
-        if (path !== 'shooting-script.xml') return;
-
-        // Re-transform if content changed
-        transformToScreenplay(nodeEl);
-    }
-
-    // Check if a path is a target we care about for screenplay
     function isScreenplayTargetPath(path) {
-        // Check if path matches any of our target patterns
         const match = path.match(/^shots\/([^/]+)\//);
         if (!match) return false;
-
         const shotId = match[1];
-        return Object.values(SHOT_TARGETS).some(pattern => {
-            const expectedPath = pattern.replace('$SHOT_ID', shotId);
-            return path === expectedPath;
-        });
+        return Object.values(SHOT_TARGETS).some(pattern => 
+            path === pattern.replace('$SHOT_ID', shotId)
+        );
     }
 
-    // Store reference to all component callbacks for notifying sticky elements
-    window._componentCallbacks = window._componentCallbacks || [];
-
-    // Wrap registerComponent to capture all callbacks
-    const originalRegister = window.registerComponent;
-    window.registerComponent = function(callback) {
-        window._componentCallbacks.push(callback);
-        originalRegister(callback);
-    };
-
+    // Register component callback
     window.registerComponent(function(nodeEl, status, isNew) {
-        const nodePath = nodeEl.dataset.path;
-        if (!nodePath) return;
-        const path = nodePath;
+        const path = nodeEl.dataset.path;
+        if (!path) return;
 
         // Handle shooting-script.xml
         if (path === 'shooting-script.xml') {
-            if (isNew) {
-                transformToScreenplay(nodeEl);
-            } else if (status === 'fresh') {
-                refreshScreenplayIfNeeded(nodeEl);
-            }
+            if (isNew) transformToScreenplay(nodeEl);
+            else if (status === 'fresh') transformToScreenplay(nodeEl);
             return;
         }
 
-        // Handle screenplay target paths - update sticky note elements
+        // Skip if this is one of our own nodes - we handle them via SSE
+        if (ownedPaths.has(path)) return;
+
+        // Handle screenplay target paths from the main tree
         if (isScreenplayTargetPath(path)) {
-            const content = nodeEl.dataset.content || '';
-            const mimeType = nodeEl.dataset.mimeType || '';
-            updateTargetContent(path, content, status, mimeType);
+            targetCache.set(path, {
+                content: nodeEl.dataset.content || '',
+                status: status,
+                mimeType: nodeEl.dataset.mimeType || ''
+            });
+            updateTargetElement(path, nodeEl.dataset.content || '', status, nodeEl.dataset.mimeType || '');
         }
+    });
+
+    // Register SSE handler for screenplay targets
+    window.registerPathHandler(function(path, metadata, isNew) {
+        if (!isScreenplayTargetPath(path)) return;
+
+        targetCache.set(path, {
+            content: metadata.content || '',
+            status: metadata.status,
+            mimeType: metadata['mime-type'] || ''
+        });
+        updateTargetElement(path, metadata.content || '', metadata.status, metadata['mime-type'] || '');
     });
 })();
