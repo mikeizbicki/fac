@@ -22,7 +22,6 @@ from fac.BuildContext import *
 from fac.Config import *
 from fac.Errors import *
 from fac.FileManager import FileManager
-from fac.LLM import LLM, LLMError
 from fac.io_utils import *
 from fac.util.FastAPI import *
 from fac.util.freeze import *
@@ -526,87 +525,74 @@ class BuildState(Routable):
             })
         self._add_context(context1)
 
-    async def maybe_build_context(self, context):
+    async def _maybe_build_context(self, context):
+        '''
+        Build a single context if needed.
+
+        NOTE:
+        The difference between this function and BuildContext.build is:
+        - this function only builds when needed
+        - this function updates self.file_manager
+        - this function handles postreqs
+          (It doesn't build them directly, but adds them to the build system.
+          This ensures that any additional var/dep process get processed,
+          and that the build is scheduled properly.)
+        '''
         if context.normalized_target not in self.targets_dict:
-            logger.info(f'target not in self.target_dicts, cannot build', submessage=True)
+            logger.warning(f'target {context.normalized_target} not in self.target_dicts, cannot build')
         else:
             status, do_build = context.get_status()
             if do_build:
+                self.file_manager.add(context.path, status='building')
                 await context.build()
 
-    def process_all_buildable_par(self, max_procs=1):
+        if os.path.exists(context.path):
+            self.contexts_built.add(context)
+            self.file_manager.add(context.path, status='fresh')
+
+        for postreq in context.config.get('postreqs', []):
+            self.add_target(postreq)
+
+    def process_all_buildable(self, max_workers=20, threaded_build=True):
         logger.debug(f'process_all_buildable()')
         self.assert_invariants()
         self.process_all_waiting()
         self.assert_invariants()
 
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        with ThreadPoolExecutor(max_workers=max_procs) as executor:
+        # NOTE:
+        # we have a threaded and non-threaded implementation of this function;
+        # both versions should do the exact same thing;
+        # the non-threaded version is simpler (and so easier to understand),
+        # and also cannot have race conditions;
+        # it is generally slower because it cannot process builds in parallel,
+        # but is useful for debugging to ensure that the threaded version is correct
+        if not threaded_build:
             while len(self.contexts_buildable) > 0:
-                futures = {}
-                while len(self.contexts_buildable) > 0:
-                    context = self.contexts_buildable.pop()
-
-                    future = executor.submit(asyncio.run, self.maybe_build_context(context))
-                    futures[future] = context
-
-                for future in as_completed(futures):
-                    context = futures[future]
-                    path_valid = future.result()
-                    path = context.path
-                    if path_valid:
-                        self.contexts_built.add(context)
-                        self.file_manager.add(path, status='fresh')
-                    else:
-                        self.contexts_notbuilt.add(context)
-
-                    for postreq in context.config.get('postreqs', []):
-                        self.add_target(postreq)
-
+                context = self.contexts_buildable.pop()
+                asyncio.run(self._maybe_build_context(context))
                 self.assert_invariants()
                 self.process_all_waiting()
                 self.assert_invariants()
 
-    def process_all_buildable(self):
-        logger.debug(f'process_all_buildable()')
-        self.assert_invariants()
-        self.process_all_waiting()
-        self.assert_invariants()
-        assert len(self.contexts_buildable.to_list()) == len(set(self.contexts_buildable.to_list()))
-        tmp_contexts = set()
-        while len(self.contexts_buildable) > 0:
-            context = self.contexts_buildable.pop()
-            assert context not in tmp_contexts
-            tmp_contexts.add(context)
-            self.process_buildable(context)
-            self.assert_invariants()
-            self.process_all_waiting()
-            self.assert_invariants()
+        else:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                while len(self.contexts_buildable) > 0:
+                    futures = {}
+                    while len(self.contexts_buildable) > 0:
+                        context = self.contexts_buildable.pop()
+                        future = executor.submit(asyncio.run, self._maybe_build_context(context))
+                        futures[future] = context
 
-    def process_buildable(self, context):
-        path = context.path
+                    for future in as_completed(futures):
+                        context = futures[future]
+                        future.result()
 
-        #if context.normalized_target not in self.targets_dict:
-            #pass
-            #logger.debug(f'target not in self.target_dicts, cannot build', submessage=True)
-        #else:
-            #future = build_context(context)
-        future = self.maybe_build_context(context)
-        asyncio.run(future)
-        if os.path.exists(context.path):
-            self.contexts_built.add(context)
-            self.file_manager.add(path, status='fresh')
-
-        for postreq in context.config.get('postreqs', []):
-            self.add_target(
-                    postreq,
-                    )
-
-        return 1
+                    self.assert_invariants()
+                    self.process_all_waiting()
+                    self.assert_invariants()
 
     def process_all_dependencies(self):
-        '''
-        '''
         contexts = self.contexts_unresolved
         self.contexts_unresolved = set()
         logger.debug(f'process_all_dependencies()')

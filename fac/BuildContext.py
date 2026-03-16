@@ -15,6 +15,7 @@ import yaml
 
 # project imports
 from fac.Errors import *
+from fac.LLM import LLM, LLMError
 from fac.io_utils import *
 from fac.util.freeze import *
 from fac.util.targets import *
@@ -371,6 +372,16 @@ class BuildContext(BaseModel):
         assert len(self.dependencies_unresolved) == 0
 
     @cached_property
+    def mime_type(self):
+        '''
+        For a mime type 'text/markdown', returns a tuple 'text', 'markdown'.
+        '''
+        mimes = self.config['mime-type'].split('/')
+        if len(mimes) != 2:
+            logger.error(f"invalid mime-type: {self.config['mime-type']}")
+        return mimes
+
+    @cached_property
     def prompt(self):
         '''
         Returns the prompt in a format suitable for passing directly to the LLM class.
@@ -420,11 +431,7 @@ class BuildContext(BaseModel):
         # generate text prompt
         ########################################
 
-        # extract mime-type
-        mimes = self.config['mime-type'].split('/')
-        if len(mimes) != 2:
-            logger.error(f"invalid mime-type: {self.config['mime-type']}")
-        major_type, minor_type = mimes
+        major_type, minor_type = self.mime_type
 
         # first we generate the instructions for the llm,
         # which will be stored in the `prompt_cmd` variable.
@@ -754,12 +761,11 @@ class BuildContext(BaseModel):
             logger.info('building with LLM...', submessage=True)
             llm = LLM()
             await llm.generate_file(
-                major_type,
+                self.mime_type[0],
                 self.path,
-                self.data,
+                self.prompt,
                 mode=mode,
                 model=self.config.get('model'),
-                response_format=response_format,
                 )
 
         # record new hashes for future skip-tests

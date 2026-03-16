@@ -188,62 +188,15 @@ class LLM():
     def log_usage(self):
         logger.info(f'total_cost: ${self.usage_summary.total_cost():0.4f}')
 
-
-    '''
-    def text(self, messages, *,
-            tools=None,
-            callables=None,
-            response_format=None,
-            model=None,
-            seed=None,
-            max_iter=10,
-            ):
-        #return asyncio.run(self.text_async(
-            #messages,
-            #tools=tools,
-            #callables=callables,
-            #response_format=response_format,
-            #model=model,
-            #seed=seed,
-            #max_iter=max_iter
-        #))
-        try:
-            # Check if we're already in a running event loop
-            loop = asyncio.get_running_loop()
-            # If we are, we need to run in a new thread
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, self.text_async(
-                    messages,
-                    tools=tools,
-                    callables=callables,
-                    response_format=response_format,
-                    model=model,
-                    seed=seed,
-                    max_iter=max_iter
-                ))
-                return future.result()
-        except RuntimeError:
-            # No running event loop, use asyncio.run() normally
-            return asyncio.run(self.text_async(
-                messages,
-                tools=tools,
-                callables=callables,
-                response_format=response_format,
-                model=model,
-                seed=seed,
-                max_iter=max_iter
-            ))
-    '''
-
     async def text_async(self, messages, *,
             tools=None,
             callables=None,
-            response_format=None,
             model=None,
             seed=None,
             max_iter=10,
             ):
+        # FIXME:
+        # There is not currently a way to enforce that output must have a particular format (e.g. JSON schema).
 
         # if either tools/callables is provided, both must be
         assert ((tools is     None and callables is     None)
@@ -617,7 +570,7 @@ class LLM():
         return local_usage
 
 
-    async def generate_file(self, filetype, path, data, *, mode='xb', response_format, seed=None, model=None):
+    async def generate_file(self, filetype, path, data, *, mode='xb', seed=None, model=None):
         try:
             # generate the file
             _, extension = os.path.splitext(path)
@@ -628,7 +581,7 @@ class LLM():
             elif extension == '.mp4':
                 usage = await self.video_async(path, data)
             else:
-                text, usage = await self.text_async(data, model=model, response_format=response_format)
+                text, usage = await self.text_async(data, model=model)
                 blob = text.encode('utf-8')
                 with open(path, mode) as fout:
                     fout.write(blob)
