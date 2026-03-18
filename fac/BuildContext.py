@@ -632,12 +632,20 @@ class BuildContext(BaseModel):
         FIXME:
         Add explanation of how to prevent race conditions/invalid status states.
         '''
-        # if the file is up-to-date (i.e. all dependencies are older),
-        # then we will not rebuild it
+        do_build = True
         file_status = []
         updated_deps = []
+
+        # use build_if to determine if we should build
+        build_if = self.config.get('build_options', {}).get('build_if', 'True')
+        build_if = process_template(build_if, self.variables_resolved)
+        if build_if.lower() == 'false':
+            do_build = False
+            file_status.append('build_if:False')
+
+        # if the file is up-to-date (i.e. all dependencies are older),
+        # then we will not rebuild it
         try:
-            do_build = True
             context_path_committed_date = _get_file_timestamp(self.path)
             for dep in self.dependencies_built:
                 path = dep['target']
