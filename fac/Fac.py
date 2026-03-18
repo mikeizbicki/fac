@@ -24,8 +24,9 @@ from fac.Errors import *
 from fac.FileManager import FileManager
 from fac.io_utils import *
 from fac.util.FastAPI import *
-from fac.util.freeze import *
 from fac.util.PrioritySet import PrioritySet
+from fac.util.collapse import *
+from fac.util.freeze import *
 from fac.util.targets import *
 from fac.util.templates import *
 
@@ -94,8 +95,6 @@ class BuildState(Routable):
     ########################################
 
     def assert_invariants(self):
-        return # FIXME!!! DELETEME!!!
-
         # no context can be in more than one state
         states = [
                 self.contexts_unresolved,
@@ -424,15 +423,21 @@ class BuildState(Routable):
                     include_paths=include_paths,
                     mode=mode,
                     )
-            self.required_for[context].append(required_for)
-            self._add_context(context)
+            self._add_context(context, required_for=required_for)
 
-    def _add_context(self, context):
+    def _add_context(self, context, required_for):
         '''
         A BuildContext object should rarely be added directly to one of the states.
         Instead, this method can be used to correctly place it.
         '''
+        if context != required_for:
+            self.required_for[context].append(required_for)
+
+        context_orig = context
         for context in context.split():
+            if context_orig != context:
+                self.required_for[context].append(context_orig)
+
             # if we've already built the context,
             # do not add it anywhere
             if context in self.contexts_built:
@@ -523,7 +528,30 @@ class BuildState(Routable):
             'dependencies_built': dependencies_built1,
             'dependencies_building': dependencies_building1,
             })
-        self._add_context(context1)
+        self._add_context(context1, required_for=context)
+
+    def trace_required_for(self, context, denormalize_targets=False, collapse=True):
+        ret = {}
+        for rdep in self.required_for[context]:
+            dispvals = []
+            if rdep:
+                if denormalize_targets:
+                    dispvals = rdep.denormalized_target()
+                else:
+                    dispvals = [rdep.normalized_target]
+            else:
+                return '<user_action>'
+            for dispval in dispvals:
+                ret[dispval] = {}
+                if rdep == context:
+                    ret[dispval]['<self>'] = True
+                else:
+                    recursion = self.trace_required_for(rdep)
+                    if recursion == '<user_action>':
+                        ret[dispval]['<user_action>'] = True
+                    else:
+                        ret[dispval] |= recursion
+        return ret
 
     async def _maybe_build_context(self, context):
         '''
@@ -538,11 +566,22 @@ class BuildState(Routable):
           This ensures that any additional var/dep process get processed,
           and that the build is scheduled properly.)
         '''
+        status, do_build = context.get_status()
+        logger.info(f'{status} {context.path}')
+        #required_for = self.trace_required_for(context)
+        #logger.info({'required_for': flatten_singletons(required_for)}, submessage=True)
         if context.normalized_target not in self.targets_dict:
-            logger.warning(f'target {context.normalized_target} not in self.target_dicts, cannot build')
+            logger.warning(f'target {context.normalized_target} not in self.target_dicts, cannot build', submessage=True)
         else:
-            status, do_build = context.get_status()
+            #logger.info(f'hash: {hash(context)}', submessage=True)
             if do_build:
+
+                # sort portions of context for better logger output
+                context_dict = context.to_dict()
+                context_dict.get('dependencies_built', []).sort(key=lambda x: x.get('target'))
+                logger.info({'context': context_dict}, submessage=True)
+
+                # build context
                 self.file_manager.add(context.path, status='building')
                 await context.build()
 
@@ -645,7 +684,6 @@ class BuildState(Routable):
 
                     # resolve the dependency
                     else:
-
                         # if there are no variables in dep['target'],
                         # then it must reference an individual file;
                         # this file must be processed,
@@ -670,7 +708,7 @@ class BuildState(Routable):
                             # so that it gets properly recorded as a dependency
                             if len(matches) == 0:
                                 matches = [(dep['target'], {})]
-
+                        
                         for normalized_target, target_env in matches:
                             # construct the new variables_resolved;
                             # transitively substitute variables,
@@ -716,8 +754,7 @@ class BuildState(Routable):
                                     dependencies_unresolved=dependencies_unresolved,
                                     mode=context.dependencies_mode(),
                                     )
-                            self.required_for[context1].append(context)
-                            self._add_context(context1)
+                            self._add_context(context1, required_for=context)
 
                             dep_paths = substitute_variables(normalized_target, target_env)
                             # If any variable in target_env is empty,
@@ -733,7 +770,7 @@ class BuildState(Routable):
                     'dependencies_building': frozenset(dependencies_building1),
                     'dependencies_unresolved': frozenset(dependencies_unresolved1),
                     })
-                self._add_context(context1)
+                self._add_context(context1, required_for=context)
 
     def process_all_variable(self):
 
@@ -770,7 +807,7 @@ class BuildState(Routable):
                 if dep['target'] in expr:
                     has_dependencies = False
             if not has_dependencies:
-                self._add_context(context)
+                self._add_context(context, required_for=context)
                 continue
 
             # actually evaluate the variable
@@ -833,8 +870,7 @@ class BuildState(Routable):
                     include_paths=context.include_paths,
                     mode=context.mode,
                     )
-            self.required_for[context1].append(context)
-            self._add_context(context1)
+            self._add_context(context1, required_for=context)
 
 
 @dataclass

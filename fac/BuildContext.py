@@ -695,22 +695,6 @@ class BuildContext(BaseModel):
             file_status.append('dryrun')
             do_build = False
 
-        # log build
-        logger.info(f'{file_status} {self.path}')
-        if do_build:
-
-            # sort portions of context for better logger output
-            context_dict = self.to_dict()
-            context_dict.get('dependencies_built', []).sort(key=lambda x: x.get('target'))
-            logger.info({'context': context_dict}, submessage=True)
-            #logger.info({'options': context_options}, submessage=True)
-
-            # possibly print prompt
-            #if print_prompt:
-                #logger.info('prompt: |', submessage=True)
-                #for line in prompt.split('\n'):
-                    #logger.info(f'  {line}', submessage=True)
-
         return file_status, do_build
 
     async def build(self):
