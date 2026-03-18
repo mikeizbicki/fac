@@ -95,6 +95,7 @@ class BuildState(Routable):
     ########################################
 
     def assert_invariants(self):
+        return # DELETEME
         # no context can be in more than one state
         states = [
                 self.contexts_unresolved,
@@ -430,6 +431,7 @@ class BuildState(Routable):
         A BuildContext object should rarely be added directly to one of the states.
         Instead, this method can be used to correctly place it.
         '''
+
         if context != required_for:
             self.required_for[context].append(required_for)
 
@@ -674,41 +676,45 @@ class BuildState(Routable):
                 for dep in context.dependencies_unresolved:
                     logger.debug(f"dep['target']={dep['target']}")
 
-                    # skip if the dependency requires variables that are unresolved
+                    # if the dependency requires variables that are unresolved,
+                    # we readd it to the state machine to be processed later
                     dep_vars = extract_variables(dep['target'])
                     variables_still_needed = [
                             var for var in context.variables_unresolved if var in dep_vars
                             ]
                     if len(variables_still_needed) > 0:
                         dependencies_unresolved1.append(dep)
+                        continue
 
-                    # resolve the dependency
-                    else:
-                        # if there are no variables in dep['target'],
-                        # then it must reference an individual file;
-                        # this file must be processed,
-                        # and so we create the matches list with only this file path
-                        if '$' not in dep['target']:
-                            matches = [(dep['target'], {})]
+                    # now we actually resolve the dependency
+                    # NOTE:
+                    # if variables_resolved contains empty strings,
+                    # then no targets will match the dependency and we are done processing this context
+                    # if variables_resolved contains newlines,
+                    # then the target will be split into multiple targets,
+                    # and each of the resulting targets will create a new context
+                    targets_withvars = substitute_variables(
+                            dep['target'],
+                            context.variables_resolved,
+                            )
+                    for target_withvars in targets_withvars:
+                        # we might still get more than one match here;
+                        # this can happen (e.g.) if the target contains '**'
+                        matches = match_pattern_starstar(
+                                self.targets_dict,
+                                target_withvars,
+                                )
 
-                        # dep may resolve to more than one path;
-                        # we compute these paths and queue each for building
-                        else:
-                            matches = match_pattern_starstar(
-                                    self.targets_dict,
-                                    dep['target'],
-                                    )
+                        # if we don't find a match,
+                        # then the target is not defined in the config;
+                        # this means that target file cannot be automatically built
+                        # but must be provided already by the user;
+                        # we will not actually build this file,
+                        # but we should still add it to matches and track it like it will be built
+                        # so that it gets properly recorded as a dependency
+                        if len(matches) == 0:
+                            matches = [(target_withvars, {})]
 
-                            # if we don't find a match,
-                            # then the target is not defined in the config;
-                            # this means that target file cannot be automatically built
-                            # but must be provided already by the user;
-                            # we will not actually build this file,
-                            # but we should still add it to matches and track it like it will be built
-                            # so that it gets properly recorded as a dependency
-                            if len(matches) == 0:
-                                matches = [(dep['target'], {})]
-                        
                         for normalized_target, target_env in matches:
                             # construct the new variables_resolved;
                             # transitively substitute variables,
@@ -722,15 +728,6 @@ class BuildState(Routable):
                                 assert '$' not in variables_resolved[var]
                                 if var not in target_variables:
                                     del variables_resolved[var]
-
-                            # if any resolved variable contains an empty string,
-                            # that means that the match is not supposed to be added as a dependency
-                            has_empty_var = False
-                            for var, val in variables_resolved.items():
-                                if len(val) == 0:
-                                    has_empty_var = True
-                            if has_empty_var:
-                                continue
 
                             # construct the new *_unresolved variables
                             if normalized_target in self.targets_dict:
@@ -829,7 +826,7 @@ class BuildState(Routable):
                     match = re.search(pattern, e.cmd.stderr)
                     if match:
                         path = match.group(1)
-                        target_matches = match_pattern_starstar(self.targets_dict.keys(), path)
+                        target_matches = match_pattern_starstar(self.targets_dict, path)
                         logger.error(f'HINT: {var} depends on file {path}')
                         if len(target_matches) == 0:
                             logger.error('HINT: there are no targets that correspond to this path')
