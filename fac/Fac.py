@@ -95,72 +95,26 @@ class BuildState(Routable):
     ########################################
 
     def assert_invariants(self):
-        return # DELETEME
         # no context can be in more than one state
         states = [
                 self.contexts_unresolved,
-                self.contexts_buildable.to_list_nopriority(),
+                set(self.contexts_buildable.to_list_nopriority()),
                 self.contexts_waiting,
                 self.contexts_built,
                 ]
         for i, state in enumerate(states):
-            states_minus_i = states.copy()
-            states_minus_i.remove(state)
+            # this mildly fancy code maintains the O(1) lookup performance for sets
+            # this fanciness is needed for the assert checks to run in reasonable time
+            # more naive solutions are quadratic,
+            # but this solutions is linear runtime
+            states_minus_i = set().union(*(s for j, s in enumerate(states) if j != i))
             for context in state:
-                assert context not in itertools.chain(*states_minus_i)
-
-        # no two contexts share any memory
-        for context1 in itertools.chain(
-                self.contexts_unresolved,
-                self.contexts_buildable.to_list_nopriority(),
-                self.contexts_waiting,
-                self.contexts_built,
-                ):
-            for context2 in itertools.chain(
-                    self.contexts_unresolved,
-                    self.contexts_buildable.to_list_nopriority(),
-                    self.contexts_waiting,
-                    self.contexts_built,
-                    ):
-                if context1 is not context2:
-                    attributes_to_check = [
-                            #'variables_resolved',
-                            #'variables_unresolved',
-                            'dependencies_unresolved',
-                            'dependencies_building',
-                            'dependencies_built',
-                            ]
-                    for attr in attributes_to_check:
-                        try:
-                            is_empty = not vars(context1)[attr]
-                            is_different = vars(context1)[attr] is not vars(context2)[attr]
-                            assert is_empty or is_different
-                        except AssertionError as e:
-                            logger.error({'context1': context1.to_dict()})
-                            logger.error({'context2': context2.to_dict()})
-                            logger.error(f'attr={attr}')
-                            logger.error(f'is_empty={is_empty}',submessage=True)
-                            logger.error(f'is_different={is_different}',submessage=True)
-                            raise e
+                assert context not in states_minus_i
 
         # every built_path has a corresponding context
         # (and vice versa)
         context_paths = set([context.path for context in self.contexts_built])
         assert context_paths == set(self.file_manager.get_fresh_paths())
-
-        # all BuildContexts must satisfy their invariants
-        for context in itertools.chain(
-                self.contexts_unresolved,
-                self.contexts_buildable.to_list_nopriority(),
-                self.contexts_waiting,
-                self.contexts_built,
-                ):
-            context.assert_invariants()
-        for context in itertools.chain(
-                self.contexts_buildable.to_list_nopriority(),
-                self.contexts_built,
-                ):
-            context.assert_invariants_buildable()
 
     ########################################
     # visualize state
@@ -424,13 +378,61 @@ class BuildState(Routable):
                     include_paths=include_paths,
                     mode=mode,
                     )
-            self._add_context(context, required_for=required_for)
+            self._add_context(context, required_for=required_for, force_add=False)
 
-    def _add_context(self, context, required_for):
+    def _add_context(
+            self,
+            context: BuildContext,
+            required_for: BuildContext,
+            force_add=True,
+            ):
         '''
-        A BuildContext object should rarely be added directly to one of the states.
-        Instead, this method can be used to correctly place it.
+        A context should never be added directly to one of the states,
+        and this method should be used instead.
+        This method ensures that:
+        1. the context is placed in the correct state
+        2. the context is split into multiple contexts if needed
+            (this happens when variable definitions contain newlines)
+        3. reverse dependencies are tracked correctly
+        4. contexts are only added if they actually need to be built
+            (this is a performance optimization and not needed for correctness)
+
+        Arguments:
+            context: the context to be added to the system
+            required_for: the reverse dependency that created this context
+            force_add:
+                - if False, then context will not be added if it already exists
+                - if True, then the context will always be added
+                  NOTE:
+                  Set to True only when the context has been "temporarily removed" from a state for processing.
         '''
+
+        def maybe_add(queue):
+            # helper function that tracks which contexts have been added;
+            # because contexts are immutable:
+            # if the same context has been added to the same state,
+            # and the actions of that state do not depend on IO,
+            # we know that the same result will happen,
+            # and so we do not need to recompute the context
+            #
+            # using maybe_add to prevent duplicates is not required for correctness;
+            # it is a memoization-like optimization that speeds up the build system
+            #
+            # for this optimization to be correct,
+            # we require that variable evaluation be idempotent and side-effect-free
+            if not hasattr(self, '_contexts_history'):
+                self._contexts_history = set()
+            if not force_add and (queue, context) in self._contexts_history:
+                return
+            self._contexts_history.add((queue, context))
+            if queue == 'waiting':
+                self.contexts_waiting.add(context)
+            elif queue == 'buildable':
+                self.contexts_buildable.add(context)
+            elif queue == 'unresolved':
+                self.contexts_unresolved.add(context)
+            else:
+                assert False
 
         if context != required_for:
             self.required_for[context].append(required_for)
@@ -448,13 +450,13 @@ class BuildState(Routable):
             # if we haven't built the context,
             # then put it in the appropriate state
             if len(context.dependencies_building) > 0:
-                self.contexts_waiting.add(context)
+                maybe_add('waiting')
             else:
                 if (len(context.variables_unresolved) == 0 and
                    len(context.dependencies_unresolved) == 0):
-                    self.contexts_buildable.add(context)
+                    maybe_add('buildable')
                 else:
-                    self.contexts_unresolved.add(context)
+                    maybe_add('unresolved')
 
             # if the context has been resolved to a path,
             # register it as queued
@@ -530,7 +532,7 @@ class BuildState(Routable):
             'dependencies_built': dependencies_built1,
             'dependencies_building': dependencies_building1,
             })
-        self._add_context(context1, required_for=context)
+        self._add_context(context1, required_for=context, force_add=context1==context)
 
     def trace_required_for(self, context, denormalize_targets=False, collapse=True):
         ret = {}
@@ -751,7 +753,7 @@ class BuildState(Routable):
                                     dependencies_unresolved=dependencies_unresolved,
                                     mode=context.dependencies_mode(),
                                     )
-                            self._add_context(context1, required_for=context)
+                            self._add_context(context1, required_for=context, force_add=context1==context)
 
                             dep_paths = substitute_variables(normalized_target, target_env)
                             # If any variable in target_env is empty,
@@ -767,7 +769,7 @@ class BuildState(Routable):
                     'dependencies_building': frozenset(dependencies_building1),
                     'dependencies_unresolved': frozenset(dependencies_unresolved1),
                     })
-                self._add_context(context1, required_for=context)
+                self._add_context(context1, required_for=context, force_add=context1==context)
 
     def process_all_variable(self):
 
@@ -804,7 +806,7 @@ class BuildState(Routable):
                 if dep['target'] in expr:
                     has_dependencies = False
             if not has_dependencies:
-                self._add_context(context, required_for=context)
+                self._add_context(context, required_for=context, force_add=True)
                 continue
 
             # actually evaluate the variable
@@ -867,7 +869,7 @@ class BuildState(Routable):
                     include_paths=context.include_paths,
                     mode=context.mode,
                     )
-            self._add_context(context1, required_for=context)
+            self._add_context(context1, required_for=context, force_add=context1==context)
 
 
 @dataclass
