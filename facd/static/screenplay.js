@@ -45,9 +45,9 @@
         const shots = [];
         doc.querySelectorAll('shot').forEach(el => {
             const shotId = el.getAttribute('shot_id');
-            const referenceId = el.getAttribute('reference_id') || '';
+            const referenceShot = el.getAttribute('reference_shot') || '';
             const text = el.textContent || '';
-            if (shotId) shots.push({ shotId, referenceId, text });
+            if (shotId) shots.push({ shotId, referenceShot, text });
         });
         return shots;
     }
@@ -74,7 +74,7 @@
 
         // Static metadata rows
         metaGrid.appendChild(createMetaRow('SHOT_ID', shot.shotId));
-        metaGrid.appendChild(createMetaRow('REFERENCE_ID', shot.referenceId || '—'));
+        metaGrid.appendChild(createMetaRow('REFERENCE_SHOT', shot.referenceShot || '—'));
 
         // Target rows - these are tree nodes that get component callbacks
         const shotTypePath = getTargetPath('shot_type', shot.shotId);
