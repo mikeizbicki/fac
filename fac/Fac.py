@@ -337,7 +337,7 @@ class BuildState(Routable):
                 if state in states:
                     all_dryrun = True
                     for context in itertools.chain(
-                            self.contexts_buildable.to_list(),
+                            self.contexts_buildable.to_list_nopriority(),
                             self.contexts_waiting,
                             self.contexts_unresolved,
                             ):
@@ -553,7 +553,7 @@ class BuildState(Routable):
         for postreq in context.config.get('postreqs', []):
             self.add_target(postreq)
 
-    def process_all_buildable(self, max_workers=20, threaded_build=True):
+    def process_all_buildable(self, max_workers=20, threaded_build=False):
         logger.debug(f'process_all_buildable()')
         self.assert_invariants()
         self.process_all_waiting()
@@ -575,22 +575,52 @@ class BuildState(Routable):
                 self.assert_invariants()
 
         else:
+            '''
             from concurrent.futures import ThreadPoolExecutor, as_completed
+
+            # run all build tasks in parallel
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = []
                 while len(self.contexts_buildable) > 0:
-                    futures = {}
-                    while len(self.contexts_buildable) > 0:
-                        context = self.contexts_buildable.pop()
-                        future = executor.submit(asyncio.run, self._maybe_build_context(context))
-                        futures[future] = context
+                    context = self.contexts_buildable.pop()
+                    future = executor.submit(asyncio.run, self._maybe_build_context(context))
+                    futures.append(future)
+                executor.shutdown()
 
-                    for future in as_completed(futures):
-                        context = futures[future]
-                        future.result()
+            # once all threads have terminated, we raise any exceptions;
+            # if multiple threads raise exceptions, we should see them all;
+            # we allow all threads to finish running and only display errors
+            # after non-erroring threads terminate
+            # (API calls typically bill at the start of the call,
+            # and so this ensures that we do not "waste" the money from an API call
+            # by needlessly discarding the results)
+            exceptions = []
+            for future in futures:
+                try:
+                    future.result()
+                except Exception as e:
+                    exceptions.append(e)
+            if exceptions:
+                raise ExceptionGroup("Exceptions in build threads", exceptions)
+            '''
+            # FIXME:
+            # the code above doesn't work correctly;
+            # the code below is a bit more idiomatic,
+            # but still might have bugs;
+            # there's still a lot more work to do to make the async code "nice"
+            sem = asyncio.Semaphore(max_workers)
+            async def limited(context):
+                async with sem:
+                    return await self._maybe_build_context(context)
+            async def run_all():
+                tasks = [limited(ctx) for ctx in self.contexts_buildable.to_list_nopriority()]
+                await asyncio.gather(*tasks)
+            asyncio.run(run_all())
 
-                    self.assert_invariants()
-                    self.process_all_waiting()
-                    self.assert_invariants()
+            # assert all invariants hold
+            self.assert_invariants()
+            self.process_all_waiting()
+            self.assert_invariants()
 
     def process_all_dependencies(self):
         contexts = self.contexts_unresolved
