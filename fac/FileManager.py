@@ -15,6 +15,7 @@ from watchfiles import awatch, Change
 
 class EditFileRequest(BaseModel):
     content: str
+    message: str = None
 
 
 class FileManager(Routable):
