@@ -36,6 +36,7 @@
     border-bottom: 1px dashed #ccc;
     display: flex;
     gap: 20px;
+    position: relative;
 }
 
 .screenplay-shot:last-child {
@@ -46,6 +47,11 @@
 .screenplay-shot-content {
     flex: 1;
     min-width: 0;
+    cursor: pointer;
+}
+
+.screenplay-shot-content:hover {
+    background: rgba(255, 255, 200, 0.3);
 }
 
 /* Fountain.js rendered content styling */
@@ -89,6 +95,112 @@
     white-space: pre-wrap;
     font-family: 'Courier New', Courier, monospace;
     margin: 0;
+}
+
+/* Shot editing */
+.screenplay-shot-content.editing {
+    background: none;
+    cursor: default;
+}
+
+.screenplay-shot-content.editing:hover {
+    background: none;
+}
+
+.shot-edit-textarea {
+    width: 100%;
+    min-height: 150px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12pt;
+    line-height: 1.5;
+    padding: 8px;
+    border: 2px solid #4a90d9;
+    border-radius: 4px;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.shot-edit-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    justify-content: flex-end;
+}
+
+.shot-edit-actions button {
+    padding: 6px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.shot-edit-cancel {
+    background: #ccc;
+    color: #333;
+}
+
+.shot-edit-cancel:hover {
+    background: #bbb;
+}
+
+.shot-edit-submit {
+    background: #4a90d9;
+    color: white;
+}
+
+.shot-edit-submit:hover {
+    background: #3a7bc8;
+}
+
+/* Shot hover menu */
+.shot-hover-menu {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    display: none;
+    gap: 4px;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 4px 8px;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    z-index: 10;
+}
+
+.screenplay-shot:hover .shot-hover-menu {
+    display: flex;
+}
+
+.screenplay-shot.editing .shot-hover-menu {
+    display: none;
+}
+
+.shot-hover-menu button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px 6px;
+    font-size: 14px;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+    border-radius: 3px;
+}
+
+.shot-hover-menu button:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.05);
+}
+
+/* New shot placeholder */
+.screenplay-shot.new-shot {
+    border: 2px dashed #4a90d9;
+    background: rgba(74, 144, 217, 0.05);
+    padding: 10px;
+}
+
+.screenplay-shot.new-shot .screenplay-sticky-note {
+    opacity: 0.5;
 }
 
 /* Sticky note */

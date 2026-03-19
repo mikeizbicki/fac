@@ -16,6 +16,8 @@
 // 3. Renders each shot as Fountain HTML on a "paper" background
 // 4. Creates sticky notes with shot metadata and related targets
 // 5. Uses the standard node/component system for overlays and build menus
+// 6. Supports inline editing of shot text with double-click
+// 7. Provides hover menu for edit, delete, add above/below operations
 
 (function() {
     // Track screenplay nodes
@@ -26,6 +28,10 @@
     const targetCache = new Map();
     // Track paths we've created to avoid re-notifying on our own updates
     const ownedPaths = new Set();
+    // Store current shots data for reconstruction
+    let currentShots = [];
+    // Store the screenplay node element
+    let screenplayNodeEl = null;
 
     // Target patterns for each shot
     const SHOT_TARGETS = {
@@ -52,6 +58,30 @@
         return shots;
     }
 
+    function reconstructXml(shots) {
+        let xml = '<shooting-script>\n';
+        shots.forEach(shot => {
+            const refAttr = shot.referenceShot ? ` reference_shot="${escapeXmlAttr(shot.referenceShot)}"` : '';
+            xml += `  <shot shot_id="${escapeXmlAttr(shot.shotId)}"${refAttr}>${escapeXmlText(shot.text)}</shot>\n`;
+        });
+        xml += '</shooting-script>\n';
+        return xml;
+    }
+
+    function escapeXmlAttr(str) {
+        return str.replace(/&/g, '&amp;')
+                  .replace(/"/g, '&quot;')
+                  .replace(/'/g, '&apos;')
+                  .replace(/</g, '&lt;')
+                  .replace(/>/g, '&gt;');
+    }
+
+    function escapeXmlText(str) {
+        return str.replace(/&/g, '&amp;')
+                  .replace(/</g, '&lt;')
+                  .replace(/>/g, '&gt;');
+    }
+
     function renderFountain(text) {
         if (typeof fountain === 'undefined') {
             const escaped = text
@@ -62,6 +92,328 @@
             return `<pre class="fountain-fallback">${escaped}</pre>`;
         }
         return fountain.parse(text).html.script || '';
+    }
+
+    function generateNewShotId(baseShotId, direction, existingIds) {
+        const suffix = direction === 'above' ? '-' : '+';
+        let counter = 1;
+        let newId = baseShotId + suffix + counter;
+        while (existingIds.has(newId)) {
+            counter++;
+            newId = baseShotId + suffix + counter;
+        }
+        return newId;
+    }
+
+    function saveScreenplay(shots, message) {
+        const xmlContent = reconstructXml(shots);
+        return fetch('/edit_file/' + encodeURIComponent('shooting-script.xml'), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: xmlContent, message: message })
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('Failed to save screenplay');
+            return response.json();
+        });
+    }
+
+    function startEditingShot(shotDiv, shotIndex) {
+        const contentDiv = shotDiv.querySelector('.screenplay-shot-content');
+        if (!contentDiv || contentDiv.classList.contains('editing')) return;
+
+        const shot = currentShots[shotIndex];
+        if (!shot) return;
+
+        shotDiv.classList.add('editing');
+        contentDiv.classList.add('editing');
+        const originalHtml = contentDiv.innerHTML;
+
+        const textarea = document.createElement('textarea');
+        textarea.className = 'shot-edit-textarea';
+        textarea.value = shot.text;
+
+        const actions = document.createElement('div');
+        actions.className = 'shot-edit-actions';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'shot-edit-cancel';
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            cancelEditing(shotDiv, contentDiv, originalHtml);
+        });
+
+        const submitBtn = document.createElement('button');
+        submitBtn.className = 'shot-edit-submit';
+        submitBtn.textContent = 'Submit';
+        submitBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            submitShotEdit(shotDiv, contentDiv, shotIndex, textarea.value, originalHtml);
+        });
+
+        actions.appendChild(cancelBtn);
+        actions.appendChild(submitBtn);
+
+        contentDiv.innerHTML = '';
+        contentDiv.appendChild(textarea);
+        contentDiv.appendChild(actions);
+        textarea.focus();
+
+        // Handle escape key
+        textarea.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelEditing(shotDiv, contentDiv, originalHtml);
+            }
+        });
+    }
+
+    function cancelEditing(shotDiv, contentDiv, originalHtml) {
+        shotDiv.classList.remove('editing');
+        contentDiv.classList.remove('editing');
+        contentDiv.innerHTML = originalHtml;
+    }
+
+    function submitShotEdit(shotDiv, contentDiv, shotIndex, newText, originalHtml) {
+        const shot = currentShots[shotIndex];
+        if (!shot) return;
+
+        // Update the shot data
+        const updatedShots = currentShots.map((s, i) => {
+            if (i === shotIndex) {
+                return { ...s, text: newText };
+            }
+            return s;
+        });
+
+        // Show loading state
+        contentDiv.innerHTML = '<div class="status-spinner"></div>';
+
+        saveScreenplay(updatedShots, 'edit shot_id=' + shot.shotId)
+            .then(() => {
+                // Success - SSE will trigger re-render
+                shotDiv.classList.remove('editing');
+                contentDiv.classList.remove('editing');
+            })
+            .catch(error => {
+                console.error('Error saving shot edit:', error);
+                alert('Failed to save: ' + error.message);
+                cancelEditing(shotDiv, contentDiv, originalHtml);
+            });
+    }
+
+    function deleteShot(shotIndex) {
+        const shot = currentShots[shotIndex];
+        if (!shot) return;
+
+        if (!confirm('Are you sure you want to delete shot "' + shot.shotId + '"?')) return;
+
+        // Find shots that reference this one and update them
+        const deletedRefShot = shot.referenceShot;
+        const updatedShots = currentShots
+            .filter((s, i) => i !== shotIndex)
+            .map(s => {
+                if (s.referenceShot === shot.shotId) {
+                    return { ...s, referenceShot: deletedRefShot };
+                }
+                return s;
+            });
+
+        saveScreenplay(updatedShots, 'deleted shot_id=' + shot.shotId)
+            .catch(error => {
+                console.error('Error deleting shot:', error);
+                alert('Failed to delete: ' + error.message);
+            });
+    }
+
+    function addShotAbove(shotIndex) {
+        const shot = currentShots[shotIndex];
+        if (!shot) return;
+
+        const existingIds = new Set(currentShots.map(s => s.shotId));
+        const newShotId = generateNewShotId(shot.shotId, 'above', existingIds);
+
+        // Create temporary shot for editing
+        const newShot = {
+            shotId: newShotId,
+            referenceShot: shot.referenceShot,
+            text: '',
+            isNew: true
+        };
+
+        // Insert temporary shot and update original's reference
+        const tempShots = [...currentShots];
+        tempShots.splice(shotIndex, 0, newShot);
+        // Update original shot's reference to point to new shot
+        tempShots[shotIndex + 1] = { ...tempShots[shotIndex + 1], referenceShot: newShotId };
+
+        // Render with new shot in edit mode
+        renderShotsWithNewShot(tempShots, shotIndex, newShotId);
+    }
+
+    function addShotBelow(shotIndex) {
+        const shot = currentShots[shotIndex];
+        if (!shot) return;
+
+        const existingIds = new Set(currentShots.map(s => s.shotId));
+        const newShotId = generateNewShotId(shot.shotId, 'below', existingIds);
+
+        // Create temporary shot for editing
+        const newShot = {
+            shotId: newShotId,
+            referenceShot: shot.shotId,
+            text: '',
+            isNew: true
+        };
+
+        // Insert temporary shot after current
+        const tempShots = [...currentShots];
+        tempShots.splice(shotIndex + 1, 0, newShot);
+
+        // Update any shots that referenced the original to reference the new shot
+        for (let i = 0; i < tempShots.length; i++) {
+            if (i !== shotIndex + 1 && tempShots[i].referenceShot === shot.shotId) {
+                tempShots[i] = { ...tempShots[i], referenceShot: newShotId };
+            }
+        }
+
+        // Render with new shot in edit mode
+        renderShotsWithNewShot(tempShots, shotIndex + 1, newShotId);
+    }
+
+    function renderShotsWithNewShot(tempShots, newShotIndex, newShotId) {
+        const container = screenplayNodeEl.querySelector('.screenplay-container');
+        if (!container) return;
+
+        // Clear and re-render
+        clearTargetRegistrations();
+        container.innerHTML = '';
+
+        tempShots.forEach((shot, index) => {
+            const shotEl = createShotElement(shot, index, tempShots);
+            container.appendChild(shotEl);
+
+            // If this is the new shot, start editing immediately
+            if (index === newShotIndex && shot.isNew) {
+                shotEl.classList.add('new-shot');
+                startEditingNewShot(shotEl, tempShots, newShotIndex, newShotId);
+            }
+        });
+    }
+
+    function startEditingNewShot(shotDiv, tempShots, newShotIndex, newShotId) {
+        const contentDiv = shotDiv.querySelector('.screenplay-shot-content');
+        if (!contentDiv) return;
+
+        shotDiv.classList.add('editing');
+        contentDiv.classList.add('editing');
+
+        const textarea = document.createElement('textarea');
+        textarea.className = 'shot-edit-textarea';
+        textarea.placeholder = 'Enter shot text...';
+
+        const actions = document.createElement('div');
+        actions.className = 'shot-edit-actions';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'shot-edit-cancel';
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            // Re-render without the new shot
+            transformToScreenplay(screenplayNodeEl);
+        });
+
+        const submitBtn = document.createElement('button');
+        submitBtn.className = 'shot-edit-submit';
+        submitBtn.textContent = 'Submit';
+        submitBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            submitNewShot(tempShots, newShotIndex, newShotId, textarea.value);
+        });
+
+        actions.appendChild(cancelBtn);
+        actions.appendChild(submitBtn);
+
+        contentDiv.innerHTML = '';
+        contentDiv.appendChild(textarea);
+        contentDiv.appendChild(actions);
+        textarea.focus();
+
+        // Handle escape key
+        textarea.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                transformToScreenplay(screenplayNodeEl);
+            }
+        });
+    }
+
+    function submitNewShot(tempShots, newShotIndex, newShotId, text) {
+        // Update the text and remove isNew flag
+        const finalShots = tempShots.map((s, i) => {
+            if (i === newShotIndex) {
+                const { isNew, ...rest } = s;
+                return { ...rest, text: text };
+            }
+            return s;
+        });
+
+        saveScreenplay(finalShots, 'added shot_id=' + newShotId)
+            .catch(error => {
+                console.error('Error adding shot:', error);
+                alert('Failed to add shot: ' + error.message);
+                transformToScreenplay(screenplayNodeEl);
+            });
+    }
+
+    function createHoverMenu(shotIndex) {
+        const menu = document.createElement('div');
+        menu.className = 'shot-hover-menu';
+
+        // Edit button
+        const editBtn = document.createElement('button');
+        editBtn.innerHTML = '✏️';
+        editBtn.title = 'Edit shot';
+        editBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const shotDiv = menu.closest('.screenplay-shot');
+            if (shotDiv) startEditingShot(shotDiv, shotIndex);
+        });
+        menu.appendChild(editBtn);
+
+        // Add above button
+        const addAboveBtn = document.createElement('button');
+        addAboveBtn.innerHTML = '➕⬆️';
+        addAboveBtn.title = 'Add shot above';
+        addAboveBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            addShotAbove(shotIndex);
+        });
+        menu.appendChild(addAboveBtn);
+
+        // Add below button
+        const addBelowBtn = document.createElement('button');
+        addBelowBtn.innerHTML = '➕⬇️';
+        addBelowBtn.title = 'Add shot below';
+        addBelowBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            addShotBelow(shotIndex);
+        });
+        menu.appendChild(addBelowBtn);
+
+        // Delete button
+        const deleteBtn = document.createElement('button');
+        deleteBtn.innerHTML = '🗑️';
+        deleteBtn.title = 'Delete shot';
+        deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteShot(shotIndex);
+        });
+        menu.appendChild(deleteBtn);
+
+        return menu;
     }
 
     function createStickyNote(shot) {
@@ -225,46 +577,45 @@
         }
     }
 
-    function createShotElement(shot) {
+    function createShotElement(shot, index, shotsArray) {
         const shotDiv = document.createElement('div');
         shotDiv.className = 'screenplay-shot';
         shotDiv.dataset.shotId = shot.shotId;
+        shotDiv.dataset.shotIndex = index;
+
+        // Add hover menu
+        shotDiv.appendChild(createHoverMenu(index));
 
         const content = document.createElement('div');
         content.className = 'screenplay-shot-content';
         content.innerHTML = renderFountain(shot.text);
+
+        // Double-click to edit
+        content.addEventListener('dblclick', (e) => {
+            e.stopPropagation();
+            startEditingShot(shotDiv, index);
+        });
+
         shotDiv.appendChild(content);
 
-        shotDiv.appendChild(createStickyNote(shot));
+        // Only add sticky note for non-new shots
+        if (!shot.isNew) {
+            shotDiv.appendChild(createStickyNote(shot));
+        } else {
+            // Placeholder sticky for new shots
+            const placeholder = document.createElement('div');
+            placeholder.className = 'screenplay-sticky-note';
+            placeholder.innerHTML = '<em>New shot</em>';
+            shotDiv.appendChild(placeholder);
+        }
+
         return shotDiv;
     }
 
-    function transformToScreenplay(nodeEl) {
-        const path = nodeEl.dataset.path;
-        if (path !== 'shooting-script.xml') return;
-
-        nodeEl.classList.add('screenplay-node', 'expanded');
-
-        const content = nodeEl.dataset.content;
-        if (!content) return;
-
-        const shots = parseScreenplayXml(content);
-        if (shots.length === 0) return;
-
-        let container = nodeEl.querySelector('.screenplay-container');
-        if (!container) {
-            container = document.createElement('div');
-            container.className = 'screenplay-container';
-            const header = nodeEl.querySelector('.tree-header');
-            if (header) header.after(container);
-            else nodeEl.appendChild(container);
-        }
-
-        // Clear old registrations
-        const oldData = screenplayNodes.get(path);
+    function clearTargetRegistrations() {
+        const oldData = screenplayNodes.get('shooting-script.xml');
         if (oldData) {
             for (const p of oldData.shotPaths) {
-                // Unregister media containers
                 const el = targetElements.get(p);
                 if (el) {
                     const imgContainer = el.querySelector('.image-container');
@@ -276,12 +627,41 @@
                 ownedPaths.delete(p);
             }
         }
+    }
+
+    function transformToScreenplay(nodeEl) {
+        const path = nodeEl.dataset.path;
+        if (path !== 'shooting-script.xml') return;
+
+        screenplayNodeEl = nodeEl;
+        nodeEl.classList.add('screenplay-node', 'expanded');
+
+        const content = nodeEl.dataset.content;
+        if (!content) return;
+
+        const shots = parseScreenplayXml(content);
+        if (shots.length === 0) return;
+
+        // Store current shots for editing operations
+        currentShots = shots;
+
+        let container = nodeEl.querySelector('.screenplay-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.className = 'screenplay-container';
+            const header = nodeEl.querySelector('.tree-header');
+            if (header) header.after(container);
+            else nodeEl.appendChild(container);
+        }
+
+        // Clear old registrations
+        clearTargetRegistrations();
 
         container.innerHTML = '';
         const shotPaths = [];
 
-        shots.forEach(shot => {
-            container.appendChild(createShotElement(shot));
+        shots.forEach((shot, index) => {
+            container.appendChild(createShotElement(shot, index, shots));
             Object.keys(SHOT_TARGETS).forEach(key => {
                 shotPaths.push(getTargetPath(key, shot.shotId));
             });
