@@ -119,11 +119,6 @@
         });
     }
 
-    function autoResizeTextarea(textarea) {
-        textarea.style.height = 'auto';
-        textarea.style.height = textarea.scrollHeight + 'px';
-    }
-
     function startEditingShot(shotDiv, shotIndex) {
         const contentDiv = shotDiv.querySelector('.screenplay-shot-content');
         if (!contentDiv || contentDiv.classList.contains('editing')) return;
@@ -164,10 +159,6 @@
         contentDiv.innerHTML = '';
         contentDiv.appendChild(textarea);
         contentDiv.appendChild(actions);
-
-        // Auto-resize to fit content
-        autoResizeTextarea(textarea);
-        textarea.addEventListener('input', () => autoResizeTextarea(textarea));
 
         textarea.focus();
 
@@ -385,10 +376,6 @@
         contentDiv.innerHTML = '';
         contentDiv.appendChild(textarea);
         contentDiv.appendChild(actions);
-
-        // Auto-resize to fit content
-        autoResizeTextarea(textarea);
-        textarea.addEventListener('input', () => autoResizeTextarea(textarea));
 
         textarea.focus();
 

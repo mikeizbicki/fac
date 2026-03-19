@@ -148,7 +148,7 @@
 /* Shot hover menu - positioned to the left of sticky note */
 .shot-hover-menu {
     position: absolute;
-    right: 420px;
+    right: 220px;
     top: 0;
     display: none;
     flex-direction: column;
@@ -161,7 +161,7 @@
 }
 
 .screenplay-shot:hover > .shot-hover-menu {
-    display: flex;
+    display: block;
 }
 
 .screenplay-shot.editing > .shot-hover-menu {
