@@ -18,6 +18,7 @@
 // 5. Uses the standard node/component system for overlays and build menus
 // 6. Supports inline editing of shot text with double-click
 // 7. Provides hover menu for edit, delete, add above/below operations
+// 8. Provides merge button between shots to combine adjacent shots
 
 (function() {
     // Track screenplay nodes
@@ -118,6 +119,11 @@
         });
     }
 
+    function autoResizeTextarea(textarea) {
+        textarea.style.height = 'auto';
+        textarea.style.height = textarea.scrollHeight + 'px';
+    }
+
     function startEditingShot(shotDiv, shotIndex) {
         const contentDiv = shotDiv.querySelector('.screenplay-shot-content');
         if (!contentDiv || contentDiv.classList.contains('editing')) return;
@@ -158,6 +164,11 @@
         contentDiv.innerHTML = '';
         contentDiv.appendChild(textarea);
         contentDiv.appendChild(actions);
+
+        // Auto-resize to fit content
+        autoResizeTextarea(textarea);
+        textarea.addEventListener('input', () => autoResizeTextarea(textarea));
+
         textarea.focus();
 
         // Handle escape key
@@ -224,6 +235,41 @@
             .catch(error => {
                 console.error('Error deleting shot:', error);
                 alert('Failed to delete: ' + error.message);
+            });
+    }
+
+    function mergeShots(firstIndex, secondIndex) {
+        const firstShot = currentShots[firstIndex];
+        const secondShot = currentShots[secondIndex];
+        if (!firstShot || !secondShot) return;
+
+        // Merge text: concatenate with newline
+        const mergedText = firstShot.text + '\n' + secondShot.text;
+
+        // Build updated shots array
+        const updatedShots = [];
+        for (let i = 0; i < currentShots.length; i++) {
+            if (i === firstIndex) {
+                // Use first shot with merged text, keep original reference_shot
+                updatedShots.push({ ...firstShot, text: mergedText });
+            } else if (i === secondIndex) {
+                // Skip second shot (it's being merged)
+                continue;
+            } else {
+                // Update any shots that referenced the second shot
+                const s = currentShots[i];
+                if (s.referenceShot === secondShot.shotId) {
+                    updatedShots.push({ ...s, referenceShot: firstShot.shotId });
+                } else {
+                    updatedShots.push(s);
+                }
+            }
+        }
+
+        saveScreenplay(updatedShots, 'merged shot_id=' + secondShot.shotId + ' into shot_id=' + firstShot.shotId)
+            .catch(error => {
+                console.error('Error merging shots:', error);
+                alert('Failed to merge: ' + error.message);
             });
     }
 
@@ -339,6 +385,11 @@
         contentDiv.innerHTML = '';
         contentDiv.appendChild(textarea);
         contentDiv.appendChild(actions);
+
+        // Auto-resize to fit content
+        autoResizeTextarea(textarea);
+        textarea.addEventListener('input', () => autoResizeTextarea(textarea));
+
         textarea.focus();
 
         // Handle escape key
@@ -414,6 +465,18 @@
         menu.appendChild(deleteBtn);
 
         return menu;
+    }
+
+    function createMergeButton(shotIndex) {
+        const btn = document.createElement('button');
+        btn.className = 'shot-merge-button';
+        btn.innerHTML = '📄📄 → 📄';
+        btn.title = 'Merge with next shot';
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            mergeShots(shotIndex, shotIndex + 1);
+        });
+        return btn;
     }
 
     function createStickyNote(shot) {
@@ -607,6 +670,11 @@
             placeholder.className = 'screenplay-sticky-note';
             placeholder.innerHTML = '<em>New shot</em>';
             shotDiv.appendChild(placeholder);
+        }
+
+        // Add merge button if not the last shot
+        if (index < shotsArray.length - 1 && !shot.isNew) {
+            shotDiv.appendChild(createMergeButton(index));
         }
 
         return shotDiv;

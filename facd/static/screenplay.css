@@ -47,11 +47,6 @@
 .screenplay-shot-content {
     flex: 1;
     min-width: 0;
-    cursor: pointer;
-}
-
-.screenplay-shot-content:hover {
-    background: rgba(255, 255, 200, 0.3);
 }
 
 /* Fountain.js rendered content styling */
@@ -99,25 +94,21 @@
 
 /* Shot editing */
 .screenplay-shot-content.editing {
-    background: none;
-    cursor: default;
-}
-
-.screenplay-shot-content.editing:hover {
-    background: none;
+    /* No special styling needed */
 }
 
 .shot-edit-textarea {
     width: 100%;
-    min-height: 150px;
     font-family: 'Courier New', Courier, monospace;
     font-size: 12pt;
     line-height: 1.5;
-    padding: 8px;
+    padding: 0;
+    margin: 0;
     border: 2px solid #4a90d9;
     border-radius: 4px;
     resize: vertical;
     box-sizing: border-box;
+    overflow: hidden;
 }
 
 .shot-edit-actions {
@@ -154,25 +145,26 @@
     background: #3a7bc8;
 }
 
-/* Shot hover menu */
+/* Shot hover menu - positioned to the left of sticky note */
 .shot-hover-menu {
     position: absolute;
-    top: -8px;
-    right: -8px;
+    right: 420px;
+    top: 0;
     display: none;
+    flex-direction: column;
     gap: 4px;
     background: rgba(255, 255, 255, 0.95);
-    padding: 4px 8px;
+    padding: 4px;
     border-radius: 4px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     z-index: 10;
 }
 
-.screenplay-shot:hover .shot-hover-menu {
+.screenplay-shot:hover > .shot-hover-menu {
     display: flex;
 }
 
-.screenplay-shot.editing .shot-hover-menu {
+.screenplay-shot.editing > .shot-hover-menu {
     display: none;
 }
 
@@ -185,11 +177,46 @@
     opacity: 0.7;
     transition: opacity 0.15s;
     border-radius: 3px;
+    white-space: nowrap;
 }
 
 .shot-hover-menu button:hover {
     opacity: 1;
     background: rgba(0, 0, 0, 0.05);
+}
+
+/* Merge button on dotted line between shots */
+.shot-merge-button {
+    position: absolute;
+    bottom: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 12px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 5;
+    white-space: nowrap;
+}
+
+.screenplay-shot:hover > .shot-merge-button,
+.screenplay-shot:hover + .screenplay-shot > .shot-merge-button-hover-target,
+.shot-merge-button:hover {
+    opacity: 1;
+}
+
+/* Special class for detecting hover on next shot */
+.screenplay-shot:has(+ .screenplay-shot:hover) > .shot-merge-button {
+    opacity: 1;
+}
+
+.shot-merge-button:hover {
+    background: #f0f0f0;
+    opacity: 1;
 }
 
 /* New shot placeholder */
