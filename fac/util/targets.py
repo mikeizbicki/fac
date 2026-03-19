@@ -162,7 +162,10 @@ def substitute_variables(target: str, variables: dict[str, str]):
 
 
 # enable lru_caching whenever not using doctests
-# this is a bit janky, but works
+# this is needed because the doctests use dictionaries (which are not hashable)
+# instead of frozendict (which is hashable)
+# this is a bit janky, but works;
+# FIXME: it would probably be best to just add frozendict to all the test cases
 import inspect
 disable_cache = any('doctest' in str(frame.filename) for frame in inspect.stack())
 @lru_cache(maxsize=None) if not disable_cache else lambda f: f
