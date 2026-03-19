@@ -593,9 +593,7 @@ class BuildState(Routable):
 
             # if the context has been resolved to a path,
             # register it as queued
-            path = context.path_safe()
-            if path and context.mode != 'dryrun':
-                self.file_manager.add(path, 'queued')
+            self.file_manager.register_context(context, 'queued')
 
     def _finalize_jobs(self):
         states = [
@@ -740,12 +738,16 @@ class BuildState(Routable):
                 logger.info({'context': context_dict}, submessage=True)
 
                 # build context
-                self.file_manager.add(context.path, status='building')
+                self.file_manager.register_context(context, status='building')
                 await context.build()
 
         if os.path.exists(context.path):
             self.contexts_built.add(context)
-            self.file_manager.add(context.path, status='fresh')
+            self.file_manager.register_context(context, status='fresh')
+        else:
+            # this should only happen on a dry-run
+            self.contexts_notbuilt.add(context)
+            self.file_manager.register_context(context, status='does-not-exist')
 
         for postreq in context.config.get('postreqs', []):
             self.add_target(postreq)

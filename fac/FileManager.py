@@ -1,7 +1,8 @@
+from typing import AsyncGenerator
+from collections import defaultdict
 import asyncio
 import json
 import os
-from typing import AsyncGenerator
 
 from fac.util.FastAPI import *
 from fac.util.targets import *
@@ -20,6 +21,7 @@ class FileManager(Routable):
     def __init__(self, targets_dict):
         self.targets_dict = targets_dict
         self.files: dict[str, dict] = {}
+        self.rdeps = defaultdict(lambda: [])
         self._subscribers: list[asyncio.Queue] = []
         self._shutdown = False
         super().__init__()
@@ -27,31 +29,36 @@ class FileManager(Routable):
     def get_fresh_paths(self):
         return [path for path, metainfo in self.files.items() if metainfo['status'] == 'fresh']
 
-    def add(self, path, status):
-        self._validate_path(path)
+    def register_context(self, context, status):
+        # do not register a context that can't resolve to a path
+        if not context.path_safe():
+            return
 
-        # compute meta-info for path
-        targets = match_pattern_starstar(self.targets_dict, path)
-        if len(targets) == 0: # happens when path doesn't correspond
-            target = path
-            mime = 'unknown'
-        elif len(targets) == 1:
-            target, variables = targets[0]
-            mime = self.targets_dict[target]['mime-type']
-        else:
-            raise ValueError('path corresponds to multiple targets; this should never happen with a correct fac.yaml file')
+        # update rdeps
+        for dep in context.dependencies_built:
+            #self.rdeps[context.path].append(dep['target'])
+            self.rdeps[dep['target']].append(context.path)
 
         # actually add path
-        if path in self.files and self.files[path]['status'] == 'fresh' and status == 'queued':
+        if context.path in self.files and self.files[context.path]['status'] == 'fresh' and status == 'queued':
             # do not overwrite fresh status with queued status
             pass
         else:
-            self.files[path] = {
-                    'status': status,
-                    'target': target,
-                    'mime-type': mime,
-                    }
-            self._notify(path)
+            oldstatus = self.files.get(context.path, {}).get('status')
+            mime_type = self.targets_dict.get(context.normalized_target, {}).get('mime-type')
+            if status == 'fresh' or context.mode != 'dryrun':
+                self.files[context.path] = {
+                        'status': status,
+                        'target': context.normalized_target,
+                        'mime-type': mime_type,
+                        }
+                self._notify(context.path)
+
+        if context.mode != 'dryrun' and status == 'fresh':
+            for rdep in self.rdeps[context.path]:
+                if rdep in self.files:
+                    self.files[rdep]['status'] = 'stale'
+                self._notify(context.path)
 
     def _validate_path(self, path: str) -> None:
         '''
