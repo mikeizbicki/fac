@@ -343,8 +343,7 @@ class BuildState(Routable):
         Arguments:
         - target (str): the target to be built; all variables must be specified; suppo
    globstar (**)-style pattern matching
-        - include_prompt (str): allows specifying additional build instructions for th
-  arget
+        - include_prompt (str): allows specifying additional build instructions for the target
         - include_old (bool): should the old file be included if rebuilding?
         - mode (str):
             - "build": (default) build the file only if needed
@@ -961,7 +960,27 @@ class BuildSystem:
 
 ################################################################################
 
+from functools import lru_cache
+@lru_cache()
 def eval_var(var, expr, env):
+    '''
+    Evaluate the bash expression with the given environment variables.
+    Note that this is operation is more than just variable expansion,
+    but actually invokes a bash subshell.
+
+    NOTE:
+    These subshells are moderately expensive,
+    and so we use an lru_cache to speed up processing.
+    This requires that expr be idempotent and side-effect free to maintain correctness.
+    It's not obvious that the performance gains are really worth this restriction.
+
+    >>> eval_var('var', 'echo "hello $NAME"', frozendict({'NAME': 'world'}))
+    'hello world'
+    '''
+    # log the effictiveness of the cache;
+    # this will only get printed on cache-misses
+    logger.debug(f'eval_var.cache_info()={eval_var.cache_info()}')
+
     # evaluate expr in bash
     full_command = "set -eu; " + expr.strip()
     cmd = subprocess.run(
