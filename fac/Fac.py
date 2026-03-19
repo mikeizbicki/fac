@@ -128,7 +128,7 @@ class BuildState(Routable):
                 logger.error('you can clean the repo by committing all changes', submessage=True)
                 logger.error('you can clean the repo by deleting all changes with `git checkout . && git clean -fd`', submessage=True)
                 logger.error('you can allow running with a dirty repo using --allow_dirty or --auto_commit=False', submessage=True)
-            raise DirtyRepo()
+                raise DirtyRepo()
 
         # create important variables
         self.targets_dict = load_config(config_file)
