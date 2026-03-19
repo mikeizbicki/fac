@@ -4,8 +4,10 @@
 The Latin verb `facio` means to do/make, and fac is the imperative form.
 '''
 
-from dataclasses import fields
+from dataclasses import fields, dataclass
 import typing
+from fac.Config import *
+from fac.Fac import *
 
 def str2bool(v):
     '''
@@ -19,6 +21,54 @@ def str2bool(v):
         return False
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
+
+@dataclass
+class BuildSystem:
+    # general settings
+    config_file: str = 'fac.yaml'
+    debug: bool = False
+    trace: bool = False
+    jobs: int = 1
+
+    # debug actions
+    print_config: bool = False
+
+    # build settings
+    overwrite: bool = False
+    dryrun: bool = False
+    include_prompt: str = None
+    include_old: bool = False
+    include_paths: list[str] = None
+    allow_dirty: bool = False
+    auto_commit: bool = True
+
+    def __post_init__(self):
+        self.build_state = BuildState(
+                self.config_file,
+                allow_dirty=self.allow_dirty,
+                auto_commit=self.auto_commit,
+                )
+        if self.debug:
+            logger.setLevel('DEBUG')
+        if self.trace:
+            logger.setLevel('TRACE')
+
+    def build_targets(self, targets):
+        # actually build the targets
+        for target in targets:
+            mode = 'build'
+            if self.overwrite:
+                mode = 'overwrite'
+            if self.dryrun:
+                mode = 'dryrun'
+            self.build_state.add_target(
+                    target,
+                    include_prompt=self.include_prompt,
+                    include_old=self.include_old,
+                    include_paths=self.include_paths,
+                    mode=mode,
+                    )
+        self.build_state.build_all()
 
 
 def main():
@@ -35,7 +85,7 @@ def main():
     # the code below loops over these fields, and for each field we add it as an argparse parameter;
     # this means that the code below shouldn't need to be modified to add new parameters to the CLI;
     # whenever we add new fields to BuildSystem, they will automatically be added to the CLI
-    for field in fields(fac.Fac.BuildSystem):
+    for field in fields(BuildSystem):
         if field.name != 'targets':
             field.name, field.default, field.type
             name = f'--{field.name}'
@@ -68,7 +118,7 @@ def main():
     bs_args = dict(**vars(args))
     del bs_args['targets']
     del bs_args['dev']
-    build_system = fac.Fac.BuildSystem(**bs_args)
+    build_system = BuildSystem(**bs_args)
 
     try:
         build_system.build_targets(args.targets)

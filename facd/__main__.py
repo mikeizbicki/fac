@@ -7,7 +7,6 @@ import logging
 import uvicorn
 
 from fac.Logging import *
-from fac.Config import load_config
 from fac.Fac import BuildState
 
 from fastapi import FastAPI, APIRouter, HTTPException, Request
@@ -30,8 +29,7 @@ async def lifespan(app: FastAPI):
     # but not when the file is loaded in other contexts (e.g. doctests)
 
     # register state routes
-    targets_dict = load_config('fac.yaml')
-    state = BuildState(targets_dict)
+    state = BuildState()
     state.file_manager.start()
     app.include_router(state.router)
     app.include_router(state.file_manager.router)

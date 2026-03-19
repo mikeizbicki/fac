@@ -1,6 +1,5 @@
 # stdlib imports
 from collections import defaultdict
-from dataclasses import dataclass
 from typing import Any, Literal
 import asyncio
 import glob
@@ -36,6 +35,72 @@ from fac.Logging import *
 logger.setLevel(logging.INFO)
 
 
+class Job:
+    '''
+    Multiple jobs can be run sequentially or concurrently in BuildState.
+    This class tracks which paths/contexts correspond to which build jobs.
+    The main purpose of tracking is so we can commit all modified files at once and with an appropriate commit message.
+    '''
+    job_count = 0
+
+    def __init__(self, build_cmd, repo, auto_commit=True):
+        self.build_cmd = build_cmd
+        self.repo = repo
+        self.auto_commit = auto_commit
+        self.contexts = set()
+        self.paths = set()
+        self.start_time = time.time()
+        self.end_time = None
+        self.job_id = Job.job_count
+        Job.job_count += 1
+
+    def register_context(self, context):
+        self.contexts.add(context)
+        if context.path_safe():
+            self.paths.add(context.path_safe())
+
+    def assert_invariants_finalizable(self):
+        # ensure finalize has not already been called
+        assert self.end_time is None
+
+        # ensure that all contexts have corresponding built paths
+        for context in self.contexts:
+            if context.path_safe() and context.mode != 'dryrun':
+                assert context.path_safe() in self.paths
+
+    def finalize(self):
+        '''
+        This method is called after all paths are finally built.
+        The main purpose is to commit all built paths to git.
+        '''
+        self.assert_invariants_finalizable()
+
+        self.end_time = time.time()
+
+        # add/commit the built targets
+        def try_add(path):
+            try:
+                self.repo.git.add(path)
+            except git.exc.GitCommandError:
+                pass
+        if self.auto_commit:
+            try_add('fac.yaml')
+            try_add('.fac.jsonl')
+            for path in self.paths:
+                dirname = os.path.dirname(path)
+                filename = os.path.basename(path)
+                try_add(path)
+                try_add(f'./{dirname}/.{filename}.facjson')
+                try_add(f'./{dirname}/.{filename}.fac.log')
+            commit_message=f'[bot] {self.build_cmd}'
+
+            # the if condition below checks if we actually added files;
+            # we only commit if files were actually added;
+            # otherwise a large ugly warning will appear
+            if self.repo.index.diff('HEAD'):
+                self.repo.git.commit('-m', commit_message)
+
+
 class BuildState(Routable):
     '''
     The build system should be thought of like a state machine,
@@ -43,11 +108,38 @@ class BuildState(Routable):
     The main work of this class is done in the process_* methods,
     which process the contexts in the corresponding state.
     '''
-    def __init__(self, targets_dict):
+    def __init__(self, config_file='fac.yaml', allow_dirty=False, auto_commit=True):
         super().__init__()
 
-        self.targets_dict = targets_dict
-        self.file_manager = FileManager(targets_dict)
+        # ensure sane git environment
+        self.repo = git.Repo('.')
+        self.auto_commit = auto_commit
+        if auto_commit == False:
+            allow_dirty = True
+        self.allow_dirty = allow_dirty
+        if self.repo.working_dir != os.getcwd():
+            logger.error('must be in root of git repo')
+            raise DirtyRepo()
+        if self.repo.is_dirty(untracked_files=True):
+            if allow_dirty:
+                logger.warning('git repo is dirty but proceeding with --allow_dirty')
+            else:
+                logger.error('git repo is dirty')
+                logger.error('you can clean the repo by committing all changes', submessage=True)
+                logger.error('you can clean the repo by deleting all changes with `git checkout . && git clean -fd`', submessage=True)
+                logger.error('you can allow running with a dirty repo using --allow_dirty or --auto_commit=False', submessage=True)
+            raise DirtyRepo()
+
+        # create important variables
+        self.targets_dict = load_config(config_file)
+        self.file_manager = FileManager(self.targets_dict)
+
+        # FIXME:
+        # we need our own dedicated event loop here because
+        # we are mixing async/sync code;
+        # eventually we should move the whole interface to async to fix this wart
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
 
         # the states
         self.contexts_unresolved = set()
@@ -60,6 +152,12 @@ class BuildState(Routable):
         # keys: a BuildContext
         # values: a list of BuildContext instances that require the key
         self.required_for = defaultdict(lambda: [])
+
+        # the jobs
+        self.jobs_running: list[Job] = []
+        self.jobs_finalized: list[Job] = []
+        self.context_to_job = {}
+        self.path_to_job = {}
 
     @route('/list_targets', ['GET'], response_model=dict[str, Any])
     def list_targets(self):
@@ -225,7 +323,7 @@ class BuildState(Routable):
         '''
         states = [
             self.contexts_built,
-            self.contexts_buildable, 
+            self.contexts_buildable,
             self.contexts_waiting,
             self.contexts_unresolved,
             ]
@@ -238,7 +336,7 @@ class BuildState(Routable):
     def build_daemon(self):
         '''
         Creates a daemon thread that will continuously build any targets added with `add_target`.
-        This method is used by facd to ensure that the /add_targets endpoint results in builds.
+        This method is used by facd to ensure that the /add_target endpoint results in builds.
 
         FIXME:
         It is not safe to run build_all manually after build_daemon has been called.
@@ -286,6 +384,8 @@ class BuildState(Routable):
                 self.assert_invariants()
                 #self.debug_print(f'iter={len(states) + 1}')
 
+                self._finalize_jobs()
+
                 # sanity infinite loop check
                 state = self._state_hash()
                 if state in states:
@@ -322,8 +422,9 @@ class BuildState(Routable):
         Perform a dryrun on all targets in the fac.yaml.
         The dryrun lets fac know which files are already built.
         '''
-        for target in self.targets_dict:
-            self.add_target(target, mode='dryrun')
+        #for target in self.targets_dict:
+            #self.add_target(target, mode='dryrun')
+        self.add_target('**', mode='dryrun')
         if build_all:
             self.build_all()
 
@@ -356,8 +457,33 @@ class BuildState(Routable):
             logger.error(f'target {target} has no match in fac.yaml')
             raise FACError()
 
+        # get job info
+        if required_for is None:
+            str_mode = ''
+            if mode == 'overwrite':
+                str_mode = ' --overwrite'
+            if mode == 'dryrun':
+                str_mode = ' --dryrun'
+            str_include_prompt = ''
+            if include_prompt:
+                str_include_prompt = f' --include_prompt={str(include_prompt)}'
+            str_include_old = ''
+            if include_old:
+                str_include_old = f' --include_old={str(include_old)}'
+            str_include_paths = ''
+            if include_paths:
+                str_include_paths = f' --include_paths={str(include_paths)}'
+            build_cmd = f'fac {target}{str_mode}{str_include_prompt}{str_include_old}{str_include_paths}'
+            job = Job(build_cmd, self.repo, auto_commit=self.auto_commit)
+            self.jobs_running.append(job)
+        else:
+            job = self.context_to_job[context]
+
+        # create the contexts
         for normalized_target, target_env in matches:
-            # build variables_unresolved
+
+            # variables_unresolved starts off the config,
+            # but we pre-resolve every variable in target_env
             variables_unresolved = dict(copy.deepcopy(self.targets_dict[normalized_target]['variables']))
             for var in target_env:
                 if var in variables_unresolved:
@@ -377,13 +503,14 @@ class BuildState(Routable):
                     include_paths=include_paths,
                     mode=mode,
                     )
-            self._add_context(context, required_for=required_for, force_add=False)
+            self._add_context(context, required_for=required_for, force_add=False, job=job)
 
     def _add_context(
             self,
             context: BuildContext,
             required_for: BuildContext,
             force_add=True,
+            job=None,
             ):
         '''
         A context should never be added directly to one of the states,
@@ -405,7 +532,6 @@ class BuildState(Routable):
                   NOTE:
                   Set to True only when the context has been "temporarily removed" from a state for processing.
         '''
-
         def maybe_add(queue):
             # helper function that tracks which contexts have been added;
             # because contexts are immutable:
@@ -441,6 +567,14 @@ class BuildState(Routable):
             if context_orig != context:
                 self.required_for[context].append(context_orig)
 
+            # register context with current job
+            if job is None:
+                job = self.context_to_job[required_for]
+            job.register_context(context)
+            self.context_to_job[context] = job
+            if context.path_safe():
+                self.path_to_job[context.path_safe()] = job
+
             # if we've already built the context,
             # do not add it anywhere
             if context in self.contexts_built:
@@ -462,6 +596,27 @@ class BuildState(Routable):
             path = context.path_safe()
             if path and context.mode != 'dryrun':
                 self.file_manager.add(path, 'queued')
+
+    def _finalize_jobs(self):
+        states = [
+                self.contexts_unresolved,
+                set(self.contexts_buildable.to_list_nopriority()),
+                self.contexts_waiting,
+                ]
+        jobs_running = self.jobs_running
+        self.jobs_running = []
+        for job in jobs_running:
+            done = True
+            for context in job.contexts:
+                for state in states:
+                    if context in state:
+                        done = False
+            if done:
+                logger.info(f'finalizing job {job.job_id}')
+                job.finalize()
+                self.jobs_finalized.append(job)
+            else:
+                self.jobs_running.append(job)
 
     def process_all_waiting(self):
         logger.debug(f'process_all_waiting()')
@@ -611,7 +766,7 @@ class BuildState(Routable):
         if not threaded_build:
             while len(self.contexts_buildable) > 0:
                 context = self.contexts_buildable.pop()
-                asyncio.run(self._maybe_build_context(context))
+                self.loop.run_until_complete(self._maybe_build_context(context))
                 self.assert_invariants()
                 self.process_all_waiting()
                 self.assert_invariants()
@@ -657,7 +812,7 @@ class BuildState(Routable):
             async def run_all():
                 tasks = [limited(ctx) for ctx in self.contexts_buildable.to_list_nopriority()]
                 await asyncio.gather(*tasks)
-            asyncio.run(run_all())
+            self.loop.run_until_complete(run_all())
 
             # assert all invariants hold
             self.assert_invariants()
@@ -869,93 +1024,6 @@ class BuildState(Routable):
                     mode=context.mode,
                     )
             self._add_context(context1, required_for=context, force_add=context1==context)
-
-
-@dataclass
-class BuildSystem:
-    # general settings
-    config_file: str = 'fac.yaml'
-    debug: bool = False
-    trace: bool = False
-    jobs: int = 1
-
-    # debug actions
-    print_config: bool = False
-
-    # build settings
-    overwrite: bool = False
-    dryrun: bool = False
-    include_prompt: str = None
-    include_old: bool = False
-    include_paths: list[str] = None
-    allow_dirty: bool = False
-    auto_commit: bool = True
-
-    def __post_init__(self):
-        self.targets_dict = freeze(load_config(self.config_file))
-        self.build_state = BuildState(self.targets_dict)
-        if self.debug:
-            logger.setLevel('DEBUG')
-        if self.trace:
-            logger.setLevel('TRACE')
-        if self.print_config:
-            pprint_targets(self.targets_dict)
-
-    def build_targets(self, targets):
-        '''
-        This is the primary interface into the build system.
-        Each of the input targets will be built,
-        and the results committed to git.
-        '''
-
-        # ensure sane git environment
-        repo = git.Repo('.')
-        if repo.working_dir != os.getcwd():
-            logger.error('must be in root of git repo to run fac')
-            raise DirtyRepo()
-        if self.auto_commit and not self.allow_dirty and repo.is_dirty(untracked_files=True):
-            logger.error('git repo is dirty; clean repo or use --allow_dirty')
-            raise DirtyRepo()
-
-        # actually build the targets
-        for target in targets:
-            mode = 'build'
-            if self.overwrite:
-                mode = 'overwrite'
-            if self.dryrun:
-                mode = 'dryrun'
-            self.build_state.add_target(
-                    target,
-                    include_prompt=self.include_prompt,
-                    include_old=self.include_old,
-                    include_paths=self.include_paths,
-                    mode=mode,
-                    )
-        self.build_state.build_all()
-
-        # add/commit the built targets
-        def try_add(path):
-            try:
-                repo.git.add(path)
-            except git.exc.GitCommandError:
-                pass
-        if self.auto_commit:
-            try_add('fac.yaml')
-            try_add('.fac.jsonl')
-            for path in self.build_state.file_manager.get_fresh_paths():
-                dirname = os.path.dirname(path)
-                filename = os.path.basename(path)
-                try_add(path)
-                try_add(f'./{dirname}/.{filename}.facjson')
-                try_add(f'./{dirname}/.{filename}.fac.log')
-            commit_message=f'[bot] fac'
-            for target in targets:
-                commit_message += f" '{target}'"
-            if repo.index.diff('HEAD'):
-                # NOTE:
-                # we only commit if files were actually added;
-                # otherwise a large ugly warning will appear
-                repo.git.commit('-m', commit_message)
 
 
 ################################################################################
