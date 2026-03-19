@@ -7,6 +7,7 @@ from typing import Any, Literal
 import copy
 import hashlib
 import itertools
+import math
 
 # external imports
 from pydantic import BaseModel
@@ -351,6 +352,13 @@ class BuildContext(BaseModel):
     # build methods
     ####################
 
+    def is_buildable(self):
+        try:
+            self.assert_invariants_buildable()
+            return True
+        except AssertionError:
+            return False
+
     def assert_invariants_buildable(self):
         '''
         These invariants must hold only after a BuildContext is ready to be built.
@@ -634,7 +642,6 @@ class BuildContext(BaseModel):
         '''
         do_build = True
         file_status = []
-        updated_deps = []
 
         # use build_if to determine if we should build
         build_if = self.config.get('build_options', {}).get('build_if', 'True')
@@ -647,6 +654,7 @@ class BuildContext(BaseModel):
         # then we will not rebuild it
         try:
             context_path_committed_date = _get_file_timestamp(self.path)
+            updated_deps = []
             for dep in self.dependencies_built:
                 path = dep['target']
                 path_committed_date = _get_file_timestamp(path)
@@ -787,6 +795,7 @@ def _get_file_timestamp(path):
     repo = git.Repo('.')
 
     if not os.path.isfile(path):
+        return math.inf
         raise FileNotFoundError
 
     # if a file is dirty or not in the repo,

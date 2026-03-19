@@ -20,45 +20,51 @@ class EditFileRequest(BaseModel):
 class FileManager(Routable):
     def __init__(self, targets_dict):
         self.targets_dict = targets_dict
-        self.files: dict[str, dict] = {}
-        self.rdeps = defaultdict(lambda: [])
+        self.path2context = {}
+        self.path2status = {}
+        self.rdeps = defaultdict(lambda: set())
         self._subscribers: list[asyncio.Queue] = []
         self._shutdown = False
         super().__init__()
 
     def get_fresh_paths(self):
-        return [path for path, metainfo in self.files.items() if metainfo['status'] == 'fresh']
+        return [path for path, status in self.path2status.items() if status == 'fresh']
 
     def register_context(self, context, status):
         # do not register a context that can't resolve to a path
         if not context.path_safe():
             return
 
+        self.path2context[context.path] = context
+
         # update rdeps
         for dep in context.dependencies_built:
-            #self.rdeps[context.path].append(dep['target'])
-            self.rdeps[dep['target']].append(context.path)
+            self.rdeps[dep['target']].add(context.path)
 
         # actually add path
-        if context.path in self.files and self.files[context.path]['status'] == 'fresh' and status == 'queued':
+        if context.path in self.path2status and self.path2status[context.path] == 'fresh' and status == 'queued':
             # do not overwrite fresh status with queued status
             pass
         else:
-            oldstatus = self.files.get(context.path, {}).get('status')
-            mime_type = self.targets_dict.get(context.normalized_target, {}).get('mime-type')
             if status == 'fresh' or context.mode != 'dryrun':
-                self.files[context.path] = {
-                        'status': status,
-                        'target': context.normalized_target,
-                        'mime-type': mime_type,
-                        }
-                self._notify(context.path)
+                mime_type = self.targets_dict.get(context.normalized_target, {}).get('mime-type')
+                self._set_status(context.path, status)
 
-        if context.mode != 'dryrun' and status == 'fresh':
-            for rdep in self.rdeps[context.path]:
-                if rdep in self.files:
-                    self.files[rdep]['status'] = 'stale'
-                self._notify(context.path)
+    def _set_status(self, path, status, handle_rdeps=True):
+        if handle_rdeps:
+            for rdep in self.rdeps[path]:
+                if rdep in self.path2status:
+                    self._set_status(rdep, 'stale', handle_rdeps=False)
+                    #rdep_context = self.path2context[rdep]
+                    #if rdep_context.is_buildable():
+                        #status = rdep_context.get_status()
+                        #if 'out-of-date' in status:
+                            #self._set_status(rdep, 'stale', handle_rdeps=False)
+                        #else:
+                            #self._set_status(rdep, 'fresh', handle_rdeps=False)
+
+        self.path2status[path] = status
+        self._notify(path)
 
     def _validate_path(self, path: str) -> None:
         '''
@@ -71,20 +77,6 @@ class FileManager(Routable):
         normalized = os.path.normpath(path)
         if normalized.startswith(".."):
             raise HTTPException(status_code=400, detail="Directory traversal is not allowed")
-
-    '''
-    FIXME:
-    add/remove?
-
-    def __contains__(self, path: str) -> bool:
-        return path in self.files
-
-    def __len__(self) -> int:
-        return len(self.files)
-
-    def __iter__(self):
-        return iter(self.files)
-    '''
 
     ##############################
     # async helpers
@@ -113,20 +105,29 @@ class FileManager(Routable):
                 path = os.path.relpath(abs_path)
                 targets = match_pattern_starstar(self.targets_dict, path)
                 path_matches_target = len(targets) > 0
-                if path not in self.files and not path_matches_target:
+                if path not in self.path2status and not path_matches_target:
                     continue
                 if change_type == Change.deleted:
-                    self.files[path]['status'] = 'deleted'
+                    self._set_status(path, 'deleted')
                 else:
-                    self.files[path]['status'] = 'fresh'
-                self._notify(path)
+                    self._set_status(path, 'fresh')
 
     ##############################
     # FastAPI endpoints
     ##############################
 
     def _file_event(self, path: str) -> dict:
-        info = self.files[path]
+        context = self.path2context.get(path)
+        if context:
+            target = context.normalized_target
+        else:
+            target = path
+        mime_type = self.targets_dict.get(target, {}).get('mime-type')
+        info = {
+            'status': self.path2status[path],
+            'target': target,
+            'mime-type': mime_type,
+            }
         if info['mime-type'].startswith('text'):
             try:
                 with open(path, "r") as f:
@@ -151,9 +152,9 @@ class FileManager(Routable):
         self._subscribers.append(queue)
         try:
             # NOTE:
-            # we make a copy of self.files so that async changes to the dict
+            # we make a copy of self.path2status so that async changes to the dict
             # don't result in errors
-            files_copy = dict(self.files)
+            files_copy = dict(self.path2status)
             for path in files_copy:
                 if await request.is_disconnected():
                     return
@@ -229,15 +230,8 @@ class FileManager(Routable):
         '''
         self._validate_path(path)
 
-        if path not in self.files:
+        if path not in self.path2status:
             raise HTTPException(status_code=404, detail=f"File not tracked: {path}")
-
-        mime_type = self.files[path].get("mime-type", "")
-        if not mime_type.startswith("text/"):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Cannot edit file with mime-type '{mime_type}'. Only text/* files are editable."
-            )
 
         # Ensure parent directory exists
         parent_dir = os.path.dirname(path)
@@ -247,8 +241,7 @@ class FileManager(Routable):
         with open(path, "w") as f:
             f.write(body.content)
 
-        self.files[path]["status"] = "fresh"
-        self._notify(path)
+        self._set_status(path, 'fresh')
 
         return {"status": "ok", "path": path}
 
@@ -267,13 +260,13 @@ class FileManager(Routable):
         '''
         self._validate_path(path)
 
-        if path not in self.files:
+        if path not in self.path2status:
             raise HTTPException(status_code=404, detail=f"File not tracked: {path}")
 
         if os.path.exists(path):
             os.remove(path)
 
-        self.files[path]["status"] = "deleted"
-        self._notify(path)
+        #self._set_status(path, "deleted")
+        #self._notify(path)
 
         return {"status": "ok", "path": path}
