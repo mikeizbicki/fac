@@ -199,9 +199,9 @@ class BuildState(Routable):
             'succeeded': set(),
             }
 
-        # reverse lookups
         self.context_to_job = {}
         self.path_to_job = {}
+        self.jobs_callbacks = []
 
     def assert_invariants_jobs(self):
         # job can be in more than one state
@@ -220,25 +220,14 @@ class BuildState(Routable):
                     assert context.path in self.path_to_job
                     assert context.path in self.path_to_job[context.path].paths
 
-    @route('/get_jobs', ['GET'])
-    def get_jobs(self):
-        '''
-        Returns a list of jobs.
-        Each job is represented by a dictionary:
-        - job_id: an integer jobid (newer jobs have higher numbers)
-        - state: one of 'queued', 'running', 'failed', 'succeeded'
-        - enqueued_time: time the job was first queued (always non-null)
-        - start_time: time the job started running (null if in queued state)
-        - end_time: time the job stopped running (null if in queued or running states)
-        - paths: a list of dictionaries; each dict has the following keys:
-            - path: a string that is the path managed by the job
-            - status: one of: queued, building, up-to-date
-            - mode: one of: dryrun, build, overwrite
+    def add_callback(self, f):
+        self.jobs_callbacks.append(f)
 
-        FIXME:
-        For now, this endpoint will need to be polled at 1-second intervals to get updates in job status.
-        In the future, we will use SSE to send these status updates to the client.
-        '''
+    def run_callbacks(self):
+        for f in self.jobs_callbacks:
+            f()
+
+    def get_jobs(self):
         ret = []
         for state, jobs in self.jobs.items():
             for job in jobs:
@@ -276,6 +265,7 @@ class BuildState(Routable):
                 logger.info(f'finalizing job {job.job_id}')
                 job.finalize()
                 self.jobs['succeeded'].add(job)
+                self.run_callbacks()
             else:
                 self.jobs['running'].add(job)
         self.assert_invariants_jobs()
