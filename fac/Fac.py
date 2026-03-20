@@ -153,11 +153,7 @@ class BuildState(Routable):
         # values: a list of BuildContext instances that require the key
         self.required_for = defaultdict(lambda: [])
 
-        # the jobs
-        self.jobs_running: list[Job] = []
-        self.jobs_finalized: list[Job] = []
-        self.context_to_job = {}
-        self.path_to_job = {}
+        self._init_jobs()
 
     @route('/list_targets', ['GET'], response_model=dict[str, Any])
     def list_targets(self):
@@ -189,6 +185,85 @@ class BuildState(Routable):
         return self.targets_dict
 
     ########################################
+    # jobs
+    ########################################
+    
+    def _init_jobs(self):
+        # the keys are states and the values are the jobs in that state
+        self.jobs: dict[str, set[Job]] = {
+            'queued': set(),
+            'running': set(),
+            'failed': set(),
+            'succeeded': set(),
+            }
+
+        # reverse lookups
+        self.context_to_job = {}
+        self.path_to_job = {}
+
+    def assert_invariants_jobs(self):
+        pass
+
+    @route('/get_jobs', ['GET'])
+    def get_jobs(self):
+        '''
+        Returns a list of jobs.
+        Each job is represented by a dictionary:
+        - job_id: an integer jobid (newer jobs have higher numbers)
+        - state: one of 'queued', 'running', 'failed', 'succeeded'
+        - enqueued_time: time the job was first queued (always non-null)
+        - start_time: time the job started running (null if in queued state)
+        - end_time: time the job stopped running (null if in queued or running states)
+        - paths: a list of dictionaries; each dict has the following keys:
+            - path: a string that is the path managed by the job
+            - status: one of: queued, building, up-to-date
+            - mode: one of: dryrun, build, overwrite
+
+        FIXME:
+        For now, this endpoint will need to be polled at 1-second intervals to get updates in job status.
+        In the future, we will use SSE to send these status updates to the client.
+        '''
+        ret = []
+        for state, jobs in self.jobs.items():
+            job_dict = {
+                'job_id': job_id,
+                'state': state,
+                'enqueued_time': start_time,
+                'start_time': start_time,
+                'end_time': end_time,
+                'paths': [ {
+                    'path': path,
+                    'status': 'building' if state == 'running' else 'up-to-date',
+                    'mode': 'build',
+                    }
+                    for path in paths
+                    ],
+                }
+            ret.append(job_dict)
+        return ret
+
+    def _finalize_jobs(self):
+        states = [
+                self.contexts_unresolved,
+                set(self.contexts_buildable.to_list_nopriority()),
+                self.contexts_waiting,
+                ]
+        jobs_running = self.jobs['running']
+        self.jobs_running = []
+        for job in jobs_running:
+            done = True
+            for context in job.contexts:
+                for state in states:
+                    if context in state:
+                        done = False
+            if done:
+                logger.info(f'finalizing job {job.job_id}')
+                job.finalize()
+                self.jobs['succeeded'].add(job)
+            else:
+                self.jobs['running'].add(job)
+
+    ########################################
     # sanity checking
     ########################################
 
@@ -212,8 +287,8 @@ class BuildState(Routable):
         # every built_path has a corresponding context (and vice versa)
         # FIXME:
         # removed for testing; add back in
-        #context_paths = set([context.path for context in self.contexts_built])
-        #assert context_paths == set(self.file_manager.get_fresh_paths())
+        context_paths = set([context.path for context in self.contexts_built])
+        assert context_paths == set(self.file_manager.get_fresh_paths())
 
     ########################################
     # visualize state
@@ -476,7 +551,7 @@ class BuildState(Routable):
                 str_include_paths = f' --include_paths={str(include_paths)}'
             build_cmd = f'fac {target}{str_mode}{str_include_prompt}{str_include_old}{str_include_paths}'
             job = Job(build_cmd, self.repo, auto_commit=self.auto_commit)
-            self.jobs_running.append(job)
+            self.jobs['running'].add(job)
         else:
             job = self.context_to_job[context]
 
@@ -595,27 +670,6 @@ class BuildState(Routable):
             # if the context has been resolved to a path,
             # register it as queued
             self.file_manager.register_context(context, 'queued')
-
-    def _finalize_jobs(self):
-        states = [
-                self.contexts_unresolved,
-                set(self.contexts_buildable.to_list_nopriority()),
-                self.contexts_waiting,
-                ]
-        jobs_running = self.jobs_running
-        self.jobs_running = []
-        for job in jobs_running:
-            done = True
-            for context in job.contexts:
-                for state in states:
-                    if context in state:
-                        done = False
-            if done:
-                logger.info(f'finalizing job {job.job_id}')
-                job.finalize()
-                self.jobs_finalized.append(job)
-            else:
-                self.jobs_running.append(job)
 
     def process_all_waiting(self):
         logger.debug(f'process_all_waiting()')
