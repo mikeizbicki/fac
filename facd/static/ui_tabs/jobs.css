@@ -1,0 +1,230 @@
+/* jobs.css
+ *
+ * Styles for the jobs monitoring component.
+ * Displays build jobs with status indicators and file paths.
+ */
+
+.jobs-container {
+    height: 100%;
+    background: #1e1e1e;
+    padding: 10px;
+    box-sizing: border-box;
+    overflow-y: auto;
+}
+
+.jobs-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.jobs-empty {
+    color: #888;
+    text-align: center;
+    padding: 20px;
+    font-style: italic;
+}
+
+.jobs-error {
+    color: #f88;
+    text-align: center;
+    padding: 20px;
+}
+
+.job-item {
+    background: #252525;
+    border: 1px solid #444;
+    border-radius: 5px;
+    padding: 10px;
+    font-family: monospace;
+    font-size: 12px;
+}
+
+.job-item.job-queued {
+    border-left: 3px solid #888;
+    background: #252530;
+}
+
+.job-item.job-running {
+    border-left: 3px solid #58f;
+    background: #252535;
+}
+
+.job-item.job-succeeded {
+    border-left: 3px solid #5a5;
+    background: #253025;
+}
+
+.job-item.job-failed {
+    border-left: 3px solid #a55;
+    background: #302525;
+}
+
+.job-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.job-status-icon {
+    font-size: 14px;
+    width: 18px;
+    text-align: center;
+}
+
+.job-status-icon.spinning {
+    color: #888;
+    display: inline-block;
+    animation: spin 1s linear infinite;
+}
+
+.job-status-icon.success {
+    color: #8f8;
+}
+
+.job-status-icon.failed {
+    color: #f88;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.job-id {
+    color: #e8b84a;
+    font-weight: bold;
+}
+
+.job-state {
+    color: #aaa;
+    text-transform: uppercase;
+    font-size: 10px;
+    padding: 2px 6px;
+    background: #333;
+    border-radius: 3px;
+}
+
+.job-queued .job-state {
+    background: #444;
+    color: #aaa;
+}
+
+.job-running .job-state {
+    background: #335;
+    color: #8af;
+}
+
+.job-succeeded .job-state {
+    background: #353;
+    color: #8f8;
+}
+
+.job-failed .job-state {
+    background: #533;
+    color: #f88;
+}
+
+.job-duration {
+    color: #888;
+    font-size: 11px;
+    margin-left: auto;
+}
+
+.job-times {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #333;
+}
+
+.job-time-label {
+    color: #666;
+    font-size: 10px;
+}
+
+.job-time-value {
+    color: #aaa;
+    font-size: 10px;
+}
+
+.job-paths {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.job-paths-header {
+    color: #888;
+    font-size: 10px;
+    margin-bottom: 4px;
+}
+
+.job-paths-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.job-path {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px;
+    background: #2a2a2a;
+    border-radius: 3px;
+}
+
+.job-path.path-queued {
+    border-left: 2px solid #666;
+}
+
+.job-path.path-building {
+    border-left: 2px solid #58f;
+    background: #2a2a35;
+}
+
+.job-path.path-uptodate {
+    border-left: 2px solid #5a5;
+}
+
+.job-path-name {
+    color: #ddd;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.job-path-status {
+    color: #888;
+    font-size: 10px;
+    flex-shrink: 0;
+}
+
+.job-path-mode {
+    font-size: 9px;
+    padding: 1px 4px;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+.job-path-mode.mode-build {
+    background: #335;
+    color: #8af;
+}
+
+.job-path-mode.mode-overwrite {
+    background: #553;
+    color: #fa8;
+}
+
+.job-path-mode.mode-dryrun {
+    background: #444;
+    color: #aaa;
+}
