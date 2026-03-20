@@ -1,0 +1,109 @@
+/* logs.css
+ *
+ * Styles for the logs streaming component.
+ * Displays build system logs in a terminal-like interface.
+ */
+
+.logs-container {
+  height: 100%;
+  background: #1e1e1e;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.logs-output {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: auto;
+  padding: 10px;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  color: #ddd;
+}
+
+.logs-output::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.logs-output::-webkit-scrollbar-track {
+  background: #2a2a2a;
+}
+
+.logs-output::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 4px;
+}
+
+.logs-output::-webkit-scrollbar-thumb:hover {
+  background: #666;
+}
+
+.logs-line {
+  padding: 1px 0;
+}
+
+.logs-line.logs-info {
+  color: #ddd;
+}
+
+.logs-line.logs-warning {
+  color: #e8b84a;
+}
+
+.logs-line.logs-error {
+  color: #f88;
+}
+
+.logs-line.logs-success {
+  color: #8f8;
+}
+
+.logs-line.logs-debug {
+  color: #888;
+}
+
+.logs-timestamp {
+  color: #888;
+  margin-right: 8px;
+}
+
+.logs-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 10px;
+  background: #252525;
+  border-top: 1px solid #444;
+}
+
+.logs-clear-btn {
+  background: #3a3a3a;
+  color: #ddd;
+  border: 1px solid #555;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-family: monospace;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.logs-clear-btn:hover {
+  background: #4a4a4a;
+  border-color: #666;
+}
+
+.logs-clear-btn:active {
+  background: #555;
+}
+
+.logs-empty {
+  color: #666;
+  font-style: italic;
+  padding: 20px;
+  text-align: center;
+}
