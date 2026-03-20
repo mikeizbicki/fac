@@ -38,6 +38,8 @@
 //
 // window.clearAllNodes() - Clear all nodes from registry (does not remove from DOM)
 //
+// window.clearNodeFromRegistry(path) - Remove a single node from registry only
+//
 // Component System API:
 // ---------------------
 // window.registerComponent(callback) - Register a callback for node events:
@@ -118,6 +120,15 @@
         }
         pendingRemovals.clear();
         nodeRegistry.clear();
+    };
+
+    window.clearNodeFromRegistry = function(path) {
+        // Cancel any pending removal for this path
+        if (pendingRemovals.has(path)) {
+            clearTimeout(pendingRemovals.get(path).timeoutId);
+            pendingRemovals.delete(path);
+        }
+        nodeRegistry.delete(path);
     };
 
     //

@@ -113,7 +113,17 @@ function findOrCreateIntermediateNode(container, name, fullPath, order, isVarSco
 }
 
 function insertPathNode(path, metadata) {
-    // Skip if node already exists
+    // If a target node exists for this path, remove it first
+    if (targetNodePaths.has(path)) {
+        const targetEl = window.getNode(path);
+        if (targetEl) {
+            targetEl.remove();
+            window.clearNodeFromRegistry(path);
+        }
+        targetNodePaths.delete(path);
+    }
+
+    // Skip if path node already exists
     if (window.hasNode(path)) {
         window.updateNode(path, {
             status: metadata.status,
@@ -156,7 +166,7 @@ function insertPathNode(path, metadata) {
 }
 
 function insertTargetNode(concretePath, targetPattern) {
-    // Skip if node already exists
+    // Skip if any node already exists for this path
     if (window.hasNode(concretePath)) {
         return;
     }
@@ -224,20 +234,18 @@ function showSiblingTargets(path, matchingTarget) {
     }
 }
 
-function showTargetNode(target) {
-    if (!targetNodePaths.has(target) && !window.hasNode(target)) {
-        insertTargetNode(target, target);
-    } else {
-        const el = window.getNode(target);
-        if (el) el.style.display = '';
-    }
-}
+function showTargetNodeForPath(path) {
+    const matchingTarget = findMatchingTarget(path);
+    if (!matchingTarget) return;
 
-function hideTargetNode(path) {
-    const el = window.getNode(path);
-    if (el && targetNodePaths.has(path)) {
-        el.style.display = 'none';
+    // For non-variable targets, just show the target itself
+    if (extractVariables(matchingTarget).length === 0) {
+        insertTargetNode(matchingTarget, matchingTarget);
+        return;
     }
+
+    // For variable targets, show the concrete path as a target
+    insertTargetNode(path, matchingTarget);
 }
 
 function handlePathEvent(path, metadata) {
@@ -258,11 +266,8 @@ function handlePathEvent(path, metadata) {
             delete pathMetadata[path];
 
             window.removeNode(path, { animate: true }).then(() => {
-                // After removal, show target node if needed
-                const matchingTarget = findMatchingTarget(path);
-                if (matchingTarget && matchingTarget === path) {
-                    showTargetNode(matchingTarget);
-                }
+                // After removal, show target node for this path
+                showTargetNodeForPath(path);
             });
         }
     } else {
@@ -272,11 +277,6 @@ function handlePathEvent(path, metadata) {
 
         if (isNew) {
             const matchingTarget = findMatchingTarget(path);
-
-            // Hide target node for this concrete path if it exists
-            if (targetNodePaths.has(path)) {
-                hideTargetNode(path);
-            }
 
             insertPathNode(path, metadata);
 
