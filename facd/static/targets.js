@@ -7,6 +7,8 @@
 // files generated from those targets). Nodes are expandable/collapsible,
 // with all nodes expanded by default.
 //
+// This component registers itself as a tab in the main pane.
+//
 // Component System API:
 // ---------------------
 // window.registerComponent(callback) - Register a callback for status changes:
@@ -36,12 +38,15 @@
 // IMPORTANT:
 // Coding agents must not change this API without asking for permission.
 
+(function() {
+
 let targets = {};
 let targetOrder = [];
 let knownPaths = new Set();
 let nodeElements = {};
 let targetNodeElements = {};
 let pathMetadata = {};
+let rootContainer = null;
 
 // Pending operations queue per path to handle race conditions
 let pendingOperations = {};
@@ -335,8 +340,7 @@ function getOrCreateChildContainer(node) {
 
 function insertNodeIntoDom(path, metadata) {
     const parts = path.split('/');
-    const container = document.getElementById('targets-container');
-    let currentContainer = container;
+    let currentContainer = rootContainer;
     const orderIndex = getPathOrderIndex(path);
 
     for (let i = 0; i < parts.length - 1; i++) {
@@ -353,8 +357,7 @@ function insertNodeIntoDom(path, metadata) {
 function insertTargetNodeIntoDom(concretePath, targetPattern) {
     const parts = concretePath.split('/');
     const targetParts = targetPattern.split('/');
-    const container = document.getElementById('targets-container');
-    let currentContainer = container;
+    let currentContainer = rootContainer;
     const orderIndex = getTargetOrderIndex(targetPattern);
 
     for (let i = 0; i < parts.length - 1; i++) {
@@ -601,8 +604,7 @@ function createVariableScopeForm(container, targetPattern) {
 }
 
 function buildInitialTree() {
-    const container = document.getElementById('targets-container');
-    container.innerHTML = '';
+    rootContainer.innerHTML = '';
     nodeElements = {};
     targetNodeElements = {};
 
@@ -648,8 +650,7 @@ function buildInitialTree() {
 }
 
 function insertVariableScopeNode(prefix, targetPattern) {
-    const container = document.getElementById('targets-container');
-    let currentContainer = container;
+    let currentContainer = rootContainer;
     const parts = prefix.split('/').filter(p => p);
     const orderIndex = getTargetOrderIndex(targetPattern);
 
@@ -670,18 +671,35 @@ function loadTargets() {
         });
 }
 
-// Register path handler for SSE events
-window.registerPathHandler(function(path, metadata, isNew) {
-    const status = metadata.status;
-    const isActuallyNew = !knownPaths.has(path);
+function init(tabContainer) {
+    rootContainer = document.createElement('div');
+    rootContainer.className = 'targets-container';
+    rootContainer.id = 'targets-container';
+    tabContainer.appendChild(rootContainer);
 
-    if (status === 'deleted') {
-        if (knownPaths.has(path)) {
-            queueOperation(path, (onComplete) => handleDeleteOperation(path, onComplete));
+    // Register path handler for SSE events
+    window.registerPathHandler(function(path, metadata, isNew) {
+        const status = metadata.status;
+        const isActuallyNew = !knownPaths.has(path);
+
+        if (status === 'deleted') {
+            if (knownPaths.has(path)) {
+                queueOperation(path, (onComplete) => handleDeleteOperation(path, onComplete));
+            }
+        } else {
+            queueOperation(path, (onComplete) => handleCreateOrUpdateOperation(path, metadata, isActuallyNew, onComplete));
         }
-    } else {
-        queueOperation(path, (onComplete) => handleCreateOrUpdateOperation(path, metadata, isActuallyNew, onComplete));
-    }
+    });
+
+    loadTargets();
+}
+
+// Register as a tab
+window.registerTab({
+    id: 'targets',
+    label: 'Targets',
+    pane: 'main',
+    render: init
 });
 
-loadTargets();
+})();

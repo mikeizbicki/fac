@@ -1,6 +1,6 @@
 // git.js
 //
-// This component displays the git history in a sidebar on the left side of the page.
+// This component displays the git history as a tab.
 // It monitors the /git_events SSE endpoint and redraws the commit graph whenever
 // the repository state changes.
 //
@@ -11,11 +11,11 @@
 // - Highlights HEAD commit
 // - Hover over a commit to see full message and diff stats
 // - Click on a commit to checkout that commit
-// - Drag the right edge of the sidebar to resize it
 
 (function() {
   let eventSource = null;
   let commits = [];
+  let container = null;
 
   // Colors for different branch lanes
   const LANE_COLORS = [
@@ -29,61 +29,18 @@
     '#e8e84a', // lime
   ];
 
-  function init() {
-    createSidebar();
-    connectToGitEvents();
-  }
-
-  function createSidebar() {
-    const sidebar = document.createElement('div');
-    sidebar.className = 'git-sidebar';
-    sidebar.id = 'git-sidebar';
-
-    const header = document.createElement('h2');
-    header.textContent = 'Git History';
-    sidebar.appendChild(header);
+  function init(tabContainer) {
+    container = document.createElement('div');
+    container.className = 'git-container';
 
     const graph = document.createElement('div');
     graph.className = 'git-graph';
     graph.id = 'git-graph';
-    sidebar.appendChild(graph);
+    container.appendChild(graph);
 
-    // Resize handle
-    const resizeHandle = document.createElement('div');
-    resizeHandle.className = 'git-resize-handle';
-    sidebar.appendChild(resizeHandle);
+    tabContainer.appendChild(container);
 
-    setupResizeHandle(sidebar, resizeHandle);
-
-    // Insert sidebar as the first child of body
-    document.body.insertBefore(sidebar, document.body.firstChild);
-  }
-
-  function setupResizeHandle(sidebar, handle) {
-    let startX, startWidth;
-
-    function onMouseDown(e) {
-      startX = e.clientX;
-      startWidth = sidebar.offsetWidth;
-      handle.classList.add('dragging');
-      document.addEventListener('mousemove', onMouseMove);
-      document.addEventListener('mouseup', onMouseUp);
-      e.preventDefault();
-    }
-
-    function onMouseMove(e) {
-      const delta = e.clientX - startX;
-      const newWidth = Math.max(250, Math.min(500, startWidth + delta));
-      sidebar.style.width = newWidth + 'px';
-    }
-
-    function onMouseUp() {
-      handle.classList.remove('dragging');
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-    }
-
-    handle.addEventListener('mousedown', onMouseDown);
+    connectToGitEvents();
   }
 
   function connectToGitEvents() {
@@ -185,7 +142,6 @@
             activeLanes.push(null);
           }
           // Mark that this lane will start fresh with the parent
-          // We need to track that the parent is the first commit in this new lane
           if (!laneFirstCommit.has(newLane)) {
             laneFirstCommit.set(newLane, parentHash);
           }
@@ -215,10 +171,10 @@
   }
 
   function renderGraph() {
-    const container = document.getElementById('git-graph');
-    if (!container) return;
+    const graphContainer = document.getElementById('git-graph');
+    if (!graphContainer) return;
 
-    container.innerHTML = '';
+    graphContainer.innerHTML = '';
 
     const { laneData, maxLanes } = computeLanes(commits);
 
@@ -228,7 +184,7 @@
       const isFirst = (i === 0);
       const isLast = (i === commits.length - 1);
       const commitEl = createCommitElement(commit, lanes, maxLanes, isFirst, isLast);
-      container.appendChild(commitEl);
+      graphContainer.appendChild(commitEl);
     }
   }
 
@@ -245,11 +201,6 @@
 
     const numCols = Math.max(lanes.totalLanes, 1);
     
-    // Determine if there's an incoming connection from above for each lane
-    // A lane has incoming from above if it's in continuingLanes or mergeFromLanes
-    // The commit's own lane has incoming if it's not the first commit in the repo
-    // or if there are merge lines coming in
-    
     for (let col = 0; col < numCols; col++) {
       const colDiv = document.createElement('div');
       colDiv.className = 'git-graph-column';
@@ -263,7 +214,6 @@
       // Check if this lane just started (it's a branch target but wasn't continuing from above)
       const isNewBranch = isBranchTarget && !isContinuing && !isMergeSource;
 
-      
       // Determine what lines to draw
       let drawTop = false;
       let drawBottom = false;
@@ -286,10 +236,6 @@
         // Line coming from above, ending here with horizontal to commit
         drawTop = true;
         drawBottom = false;
-      } else if (isNewBranch) {
-        // New branch starting here - only draw bottom, not top
-        drawTop = false;
-        drawBottom = true;
       } else if (isBranchTarget) {
         drawTop = false;
         drawBottom = true;
@@ -349,18 +295,6 @@
           }
         }
       }
-
-  // Position tooltip on hover
-  div.addEventListener('mouseenter', function(e) {
-    const rect = div.getBoundingClientRect();
-    tooltip.style.left = (rect.right - 5) + 'px';
-    tooltip.style.top = rect.top + 'px';
-    // Keep tooltip on screen vertically
-    const tooltipRect = tooltip.getBoundingClientRect();
-    if (tooltipRect.bottom > window.innerHeight) {
-      tooltip.style.top = (window.innerHeight - tooltipRect.height - 10) + 'px';
-    }
-  });
 
       graphCols.appendChild(colDiv);
     }
@@ -432,6 +366,20 @@
     // Tooltip for hover
     const tooltip = createTooltip(commit);
     div.appendChild(tooltip);
+
+    // Position tooltip on hover
+    div.addEventListener('mouseenter', function(e) {
+      const rect = div.getBoundingClientRect();
+      tooltip.style.left = (rect.right + 5) + 'px';
+      tooltip.style.top = rect.top + 'px';
+      // Keep tooltip on screen vertically
+      requestAnimationFrame(() => {
+        const tooltipRect = tooltip.getBoundingClientRect();
+        if (tooltipRect.bottom > window.innerHeight) {
+          tooltip.style.top = (window.innerHeight - tooltipRect.height - 10) + 'px';
+        }
+      });
+    });
 
     // Click handler for checkout
     div.addEventListener('click', function() {
@@ -606,10 +554,11 @@
     });
   }
 
-  // Initialize when DOM is ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
+  // Register as a tab
+  window.registerTab({
+    id: 'git',
+    label: 'Git History',
+    pane: 'sidebar',
+    render: init
+  });
 })();
