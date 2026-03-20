@@ -1,13 +1,13 @@
 // jobs.js
 //
-// This component displays build jobs from the /get_jobs endpoint.
+// This component displays build jobs from the /monitor_jobs SSE endpoint.
 // Shows job status (queued, running, succeeded, failed) with visual indicators,
 // job metadata (times, job_id), and the list of paths being built.
 // Jobs are sorted by job_id with newest first.
 
 (function() {
     let container = null;
-    let pollInterval = null;
+    let eventSource = null;
 
     function formatTime(isoString) {
         if (!isoString) return '-';
@@ -112,24 +112,43 @@
         return div.innerHTML;
     }
 
-    async function fetchJobs() {
-        try {
-            const response = await fetch('/get_jobs');
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-            const jobs = await response.json();
-            
-            // Sort by job_id descending (newest first)
-            jobs.sort((a, b) => b.job_id - a.job_id);
-            
-            renderJobs(jobs);
-        } catch (error) {
-            console.error('jobs.js: Failed to fetch jobs', error);
-            if (container) {
-                container.innerHTML = `<div class="jobs-error">Failed to load jobs: ${escapeHtml(error.message)}</div>`;
-            }
+    function connectSSE() {
+        if (eventSource) {
+            eventSource.close();
         }
+
+        eventSource = new EventSource('/monitor_jobs');
+
+        eventSource.onmessage = function(event) {
+            try {
+                const data = JSON.parse(event.data);
+                
+                if (data.error) {
+                    console.error('jobs.js: Server error', data.error);
+                    if (container) {
+                        container.querySelector('.jobs-list').innerHTML = 
+                            `<div class="jobs-error">Server error: ${escapeHtml(data.error)}</div>`;
+                    }
+                    return;
+                }
+
+                // Sort by job_id descending (newest first)
+                data.sort((a, b) => b.job_id - a.job_id);
+                renderJobs(data);
+            } catch (error) {
+                console.error('jobs.js: Failed to parse SSE data', error);
+            }
+        };
+
+        eventSource.onerror = function(error) {
+            console.error('jobs.js: SSE connection error', error);
+            if (container) {
+                const jobsList = container.querySelector('.jobs-list');
+                if (jobsList && jobsList.children.length === 0) {
+                    jobsList.innerHTML = '<div class="jobs-error">Connection lost. Reconnecting...</div>';
+                }
+            }
+        };
     }
 
     function renderJobs(jobs) {
@@ -150,21 +169,21 @@
         container = containerEl;
         container.innerHTML = `
             <div class="jobs-container">
-                <div class="jobs-list"></div>
+                <div class="jobs-list">
+                    <div class="jobs-loading">Connecting...</div>
+                </div>
             </div>
         `;
-        fetchJobs();
     }
 
     function onActivate() {
-        fetchJobs();
-        pollInterval = setInterval(fetchJobs, 1000);
+        connectSSE();
     }
 
     function onDeactivate() {
-        if (pollInterval) {
-            clearInterval(pollInterval);
-            pollInterval = null;
+        if (eventSource) {
+            eventSource.close();
+            eventSource = null;
         }
     }
 

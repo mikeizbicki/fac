@@ -19,6 +19,7 @@ from pydantic import BaseModel
 
 from fastapi.responses import FileResponse
 from facd import git_routes
+from facd import monitor_jobs
 
 ################################################################################
 # FastAPI setup
@@ -38,6 +39,10 @@ async def lifespan(app: FastAPI):
 
     # register git routes
     app.include_router(git_routes.router)
+
+    # register monitor_jobs routes and set build state reference
+    monitor_jobs.set_build_state(state)
+    app.include_router(monitor_jobs.router)
 
     # perform a dryrun to register all files with facd;
     # build_all=False allows facd startup to continue,
