@@ -1,34 +1,23 @@
 // monitor_files.js
 //
 // This module connects to the /monitor_files SSE endpoint and dispatches
-// path events to registered handlers. It tracks which paths have been seen
-// to provide an isNew flag to handlers.
+// path events to registered handlers. It is purely responsible for the SSE
+// connection and data parsing—it does not track state or manage the DOM.
 //
 // API:
 // window.registerPathHandler(callback) - Register a callback for path events:
-//   callback(path, metadata, isNew) called on each SSE message
+//   callback(path, metadata) called on each SSE message
 //   - path: string path of the file
 //   - metadata: { target, status, "mime-type", content }
-//   - isNew: true if this path has not been seen before
+//
+// The handlers are responsible for determining what to do with the event,
+// including tracking whether a path is "new" in their own context.
 
 (function() {
-    const seenPaths = new Set();
     const pathHandlers = [];
 
     window.registerPathHandler = function(callback) {
         pathHandlers.push(callback);
-    };
-
-    window.markPathSeen = function(path) {
-        seenPaths.add(path);
-    };
-
-    window.markPathUnseen = function(path) {
-        seenPaths.delete(path);
-    };
-
-    window.isPathSeen = function(path) {
-        return seenPaths.has(path);
     };
 
     function monitorFiles() {
@@ -45,14 +34,15 @@
                 content: data.content
             };
 
-            const isNew = !seenPaths.has(path);
-
-            // Don't update seenPaths here - let targets.js manage it
-            // to handle delete+create race conditions properly
-
             for (const handler of pathHandlers) {
-                handler(path, metadata, isNew);
+                handler(path, metadata);
             }
+        };
+
+        eventSource.onerror = () => {
+            console.error('monitor_files SSE connection error, reconnecting...');
+            eventSource.close();
+            setTimeout(monitorFiles, 3000);
         };
     }
 

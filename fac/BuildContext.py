@@ -650,9 +650,13 @@ class BuildContext(BaseModel):
             do_build = False
             file_status.append('build_if:False')
 
-        # if the file is up-to-date (i.e. all dependencies are older),
-        # then we will not rebuild it
-        try:
+        # build files that don't already exist
+        if not os.path.exists(self.path):
+            file_status.append('new')
+
+        # if the file already exists, we must check if it is up-to-date
+        # (i.e. all dependencies are older),
+        else:
             context_path_committed_date = _get_file_timestamp(self.path)
             updated_deps = []
             for dep in self.dependencies_built:
@@ -667,8 +671,6 @@ class BuildContext(BaseModel):
             else:
                 file_status.append('out-of-date')
                 file_status.extend(['dep:' + dep for dep in updated_deps])
-        except FileNotFoundError:
-            file_status.append('new')
 
         # NOTE:
         # sometimes it is not necessary to rebuild a file even if the dependencies have been updated;

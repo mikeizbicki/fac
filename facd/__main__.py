@@ -10,12 +10,14 @@ from fac.Logging import *
 from fac.Fac import BuildState
 
 from fastapi import FastAPI, APIRouter, HTTPException, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
+from fastapi.responses import FileResponse
 from facd import git_routes
 
 ################################################################################
@@ -56,14 +58,19 @@ app = FastAPI(title="fac build server", lifespan=lifespan)
 static_path = files("facd") / "static"
 app.mount("/static", StaticFiles(directory=static_path), name="static")
 
-# preparte templates
-templates_path = files("facd") / "templates"
+# prepare templates
+templates_path = files("facd") / "static"
 templates = Jinja2Templates(directory=str(templates_path))
 
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
+
+
+@app.get("/favicon.ico")
+def favicon():
+    return FileResponse(static_path / "favicon.ico")
 
 
 ################################################################################
@@ -85,7 +92,8 @@ class BroadcastHandler(logging.Handler):
 # Attach handler to your build system logger
 #logger = logging.getLogger("fac")  # adjust to match your logger name
 handler = BroadcastHandler()
-handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+#handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+handler.setFormatter(logging.Formatter('%(message)s'))
 logger.addHandler(handler)
 
 async def log_generator():

@@ -15,6 +15,7 @@ from watchfiles import awatch, Change
 
 class EditFileRequest(BaseModel):
     content: str
+    message: str = None
 
 
 class FileManager(Routable):
@@ -122,7 +123,7 @@ class FileManager(Routable):
             target = context.normalized_target
         else:
             target = path
-        mime_type = self.targets_dict.get(target, {}).get('mime-type')
+        mime_type = self.targets_dict.get(target, {}).get('mime-type', 'unknown')
         info = {
             'status': self.path2status[path],
             'target': target,

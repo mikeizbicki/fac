@@ -1,15 +1,15 @@
 // images.js
 //
 // This component handles display of image files in the target tree.
-// When a path node has mime-type image/*, it fetches the image from
-// /contents and displays it as an img tag.
+// When a path node has mime-type image/*, it registers for image loading
+// and displays it as an img tag.
 //
 // For leaf nodes: image is visible only when expanded.
 // For intermediate nodes: when collapsed, shows all descendant images
 // side-by-side in a single row with max 2in dimension.
 //
 // Provides global API for image loading to avoid duplicate fetches:
-// - window.imageCache: Map of path -> { url, version }
+// - window.imageCache: Map of path -> url
 // - window.fetchImage(path, forceRefresh): Returns promise of blob URL
 // - window.registerImageContainer(path, container, className): Auto-updates on refresh
 
@@ -24,7 +24,6 @@
         if (!forceRefresh && imageCache[path]) {
             return Promise.resolve(imageCache[path]);
         }
-        // Revoke old URL if refreshing
         if (forceRefresh && imageCache[path]) {
             URL.revokeObjectURL(imageCache[path]);
             delete imageCache[path];
@@ -46,7 +45,6 @@
         if (!registeredContainers[path]) {
             registeredContainers[path] = [];
         }
-        // Avoid duplicate registrations
         const existing = registeredContainers[path].find(r => r.container === container);
         if (!existing) {
             registeredContainers[path].push({ container, className });
@@ -89,17 +87,15 @@
         const path = nodeEl.dataset.path;
         if (!path) return;
 
+        // Find the image container created by nodes.js
         let imageContainer = nodeEl.querySelector('.image-container');
-        if (imageContainer) return;
-
-        imageContainer = document.createElement('div');
-        imageContainer.className = 'image-container';
-        
-        // Insert image container as first child for full-bleed effect
-        nodeEl.insertBefore(imageContainer, nodeEl.firstChild);
-        
-        // Add class to indicate this node has an image
-        nodeEl.classList.add('has-image');
+        if (!imageContainer) {
+            // Fallback: create container if not present
+            imageContainer = document.createElement('div');
+            imageContainer.className = 'image-container';
+            nodeEl.insertBefore(imageContainer, nodeEl.firstChild);
+            nodeEl.classList.add('has-image');
+        }
 
         window.registerImageContainer(path, imageContainer, 'leaf-image');
 
@@ -116,7 +112,6 @@
         if (!path) return;
 
         if (status === 'fresh') {
-            // Refresh the image when content changes
             window.fetchImage(path, true).then(url => {
                 refreshAllContainers(path, url);
             }).catch(() => {});
@@ -142,11 +137,9 @@
         if (!nodeEl.classList.contains('intermediate')) return;
 
         let preview = nodeEl.querySelector(':scope > .collapsed-image-preview');
-        
+
         if (nodeEl.classList.contains('expanded')) {
-            if (preview) {
-                preview.remove();
-            }
+            if (preview) preview.remove();
             return;
         }
 

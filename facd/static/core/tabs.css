@@ -1,0 +1,188 @@
+/* Visual indicator for drag insertion point */
+.tab-button.drag-insert-before {
+    box-shadow: -3px 0 0 0 var(--accent-color, #007bff);
+}
+
+.tab-button.drag-insert-after {
+    box-shadow: 3px 0 0 0 var(--accent-color, #007bff);
+}
+
+.tab-button.dragging {
+    opacity: 0.5;
+}
+/* tabs.css
+ *
+ * Styles for the modular tab system.
+ * Supports two panes (sidebar and main) with draggable tabs.
+ * Tabs can be moved between panes via drag-and-drop.
+ * On narrow screens, sidebar collapses and all tabs go to main pane.
+ */
+
+/* Main layout container */
+.app-container {
+    display: flex;
+    height: 100vh;
+    width: 100%;
+    overflow: hidden;
+}
+
+/* Pane base styles */
+.tab-pane {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Sidebar pane */
+.tab-pane.sidebar-pane {
+    width: 350px;
+    min-width: 250px;
+    max-width: 500px;
+    background: #1e1e1e;
+    border-right: 1px solid #333;
+    flex-shrink: 0;
+    position: relative;
+}
+
+/* Main pane */
+.tab-pane.main-pane {
+    flex: 1;
+    min-width: 0;
+    background: #fafafa;
+}
+
+/* Tab bar */
+.tab-bar {
+    display: flex;
+    background: #2a2a2a;
+    border-bottom: 1px solid #444;
+    min-height: 36px;
+    flex-shrink: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.main-pane .tab-bar {
+    background: #e8e8e8;
+    border-bottom: 1px solid #ccc;
+}
+
+/* Individual tab */
+.tab-button {
+    padding: 8px 16px;
+    border: none;
+    background: transparent;
+    color: #888;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: background 0.15s, color 0.15s;
+    user-select: none;
+}
+
+.tab-button:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ccc;
+}
+
+.main-pane .tab-button {
+    color: #666;
+}
+
+.main-pane .tab-button:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: #333;
+}
+
+.tab-button.active {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    border-bottom: 2px solid #4a90d9;
+}
+
+.main-pane .tab-button.active {
+    background: #fff;
+    color: #333;
+    border-bottom: 2px solid #4a90d9;
+}
+
+/* Dragging states */
+.tab-button.dragging {
+    opacity: 0.5;
+}
+
+.tab-bar.drag-over {
+    background: rgba(74, 144, 217, 0.2);
+}
+
+/* Tab content area */
+.tab-content-area {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+}
+
+.tab-content {
+    display: none;
+    height: 100%;
+    width: 100%;
+    overflow: auto;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* Sidebar resize handle */
+.pane-resize-handle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 6px;
+    height: 100%;
+    cursor: ew-resize;
+    background: transparent;
+    z-index: 10;
+}
+
+.pane-resize-handle:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.pane-resize-handle.dragging {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* Responsive: collapse sidebar on narrow screens */
+@media (max-width: 768px) {
+    .tab-pane.sidebar-pane {
+        display: none;
+    }
+
+    .tab-pane.main-pane {
+        width: 100%;
+    }
+
+    /* Show all tabs in main pane when sidebar is hidden */
+    .tab-pane.main-pane .tab-bar .tab-button.sidebar-tab {
+        display: inline-block;
+    }
+}
+
+/* Hide sidebar tabs in main pane on wide screens */
+@media (min-width: 769px) {
+    .tab-pane.main-pane .tab-bar .tab-button.sidebar-tab {
+        display: none;
+    }
+}
+
+/* Empty pane placeholder */
+.tab-pane-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #666;
+    font-style: italic;
+}
