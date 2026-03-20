@@ -1,30 +1,108 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>fac build server</title>
-    <link rel="stylesheet" href="/static/style.css">
-    <link rel="stylesheet" href="/static/git.css">
-    <link rel="stylesheet" href="/static/targets.css">
-    <link rel="stylesheet" href="/static/videos.css">
-    <link rel="stylesheet" href="/static/build.css">
-    <link rel="stylesheet" href="/static/overlay.css">
-    <link rel="stylesheet" href="/static/images.css">
-    <link rel="stylesheet" href="/static/screenplay.css">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>facd - Build System Dashboard</title>
+    
+    <!-- Core styles -->
+    <link rel="stylesheet" href="/static/tabs.css">
+    
+    <!-- Component styles (commented out until converted) -->
+    <!-- <link rel="stylesheet" href="/static/git.css"> -->
+    <!-- <link rel="stylesheet" href="/static/targets.css"> -->
+    <!-- <link rel="stylesheet" href="/static/overlay.css"> -->
+    <!-- <link rel="stylesheet" href="/static/build.css"> -->
+    <!-- <link rel="stylesheet" href="/static/images.css"> -->
+    <!-- <link rel="stylesheet" href="/static/videos.css"> -->
+    <!-- <link rel="stylesheet" href="/static/screenplay.css"> -->
+    
+    <style>
+        /* Temporary placeholder styles */
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+        
+        .placeholder-content {
+            padding: 20px;
+            color: #666;
+        }
+        
+        .placeholder-content h2 {
+            margin-top: 0;
+            color: #333;
+        }
+    </style>
 </head>
 <body>
-    <div id="targets-container"></div>
-    <script src="/static/git.js"></script>
-    <script src="/static/monitor_files.js"></script>
-    <script src="/static/nodes.js"></script>
-    <script src="/static/targets.js"></script>
-    <script src="/static/screenplay.js"></script>
-    <script src="/static/build.js"></script>
-    <script src="/static/overlay.js"></script>
-    <script src="/static/images.js"></script>
-    <script src="/static/videos.js"></script>
+    <div class="app-container">
+        <!-- Panes will be created by tabs.js -->
+    </div>
 
-    <!--<script src="/static/fountain.min.js"></script>-->
+    <!-- Core scripts -->
+    <script src="/static/tabs.js"></script>
+    
+    <!-- Component scripts (commented out until converted) -->
+    <!-- <script src="/static/nodes.js"></script> -->
+    <!-- <script src="/static/monitor_files.js"></script> -->
+    <!-- <script src="/static/targets.js"></script> -->
+    <!-- <script src="/static/overlay.js"></script> -->
+    <!-- <script src="/static/build.js"></script> -->
+    <!-- <script src="/static/images.js"></script> -->
+    <!-- <script src="/static/videos.js"></script> -->
+    <!-- <script src="/static/fountain.min.js"></script> -->
+    <!-- <script src="/static/screenplay.js"></script> -->
+    <!-- <script src="/static/git.js"></script> -->
+    
+    <!-- Temporary placeholder tabs for testing -->
+    <script>
+        // Register placeholder tabs to demonstrate the tab system
+        window.registerTab({
+            id: 'git',
+            label: 'Git History',
+            pane: 'sidebar',
+            render: function(container) {
+                container.innerHTML = `
+                    <div class="placeholder-content" style="background: #1e1e1e; color: #ccc; height: 100%;">
+                        <h2 style="color: #ccc;">Git History</h2>
+                        <p>Git history component will be displayed here.</p>
+                        <p style="color: #888; font-size: 12px;">Drag this tab to the main pane to move it.</p>
+                    </div>
+                `;
+            }
+        });
+        
+        window.registerTab({
+            id: 'targets',
+            label: 'Targets',
+            pane: 'main',
+            render: function(container) {
+                container.innerHTML = `
+                    <div class="placeholder-content">
+                        <h2>Build Targets</h2>
+                        <p>The targets tree view will be displayed here.</p>
+                        <p style="color: #888; font-size: 12px;">This tab can be dragged to the sidebar.</p>
+                    </div>
+                `;
+            }
+        });
+        
+        window.registerTab({
+            id: 'screenplay',
+            label: 'Screenplay',
+            pane: 'main',
+            render: function(container) {
+                container.innerHTML = `
+                    <div class="placeholder-content">
+                        <h2>Screenplay</h2>
+                        <p>The screenplay paper view will be displayed here.</p>
+                        <p style="color: #888; font-size: 12px;">This tab can be dragged to the sidebar.</p>
+                    </div>
+                `;
+            }
+        });
+    </script>
 </body>
 </html>
