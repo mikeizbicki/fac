@@ -6,6 +6,8 @@
 //
 // Features:
 // - Tabs can be dragged between panes
+// - Tabs can be reordered within a pane by dragging
+// - Tab positions and order are persisted to localStorage
 // - On narrow screens (<768px), sidebar collapses and all tabs show in main pane
 // - Easy API to register new tabs from other components
 //
@@ -14,7 +16,7 @@
 //   options: {
 //     id: string,           // Unique identifier for the tab
 //     label: string,        // Display label on tab button
-//     pane: 'sidebar'|'main', // Which pane to initially place tab in
+//     pane: 'sidebar'|'main', // Which pane to initially place tab in (default if no saved state)
 //     render: function(container), // Called to render tab content
 //     onActivate: function(),      // Optional: called when tab becomes active
 //     onDeactivate: function()     // Optional: called when tab becomes inactive
@@ -24,6 +26,7 @@
 // window.getActiveTab(pane) - Get the active tab id for a pane
 
 (function() {
+    const STORAGE_KEY = 'tabsState';
     const tabs = {};
     const paneState = {
         sidebar: { tabs: [], activeTab: null },
@@ -33,10 +36,43 @@
     let sidebarPane = null;
     let mainPane = null;
     let initialized = false;
+    let savedState = null;
+
+    function loadState() {
+        try {
+            const stored = localStorage.getItem(STORAGE_KEY);
+            if (stored) {
+                savedState = JSON.parse(stored);
+            }
+        } catch (e) {
+            console.warn('tabs.js: Failed to load state from localStorage', e);
+            savedState = null;
+        }
+    }
+
+    function saveState() {
+        try {
+            const state = {
+                sidebar: {
+                    tabs: paneState.sidebar.tabs.slice(),
+                    activeTab: paneState.sidebar.activeTab
+                },
+                main: {
+                    tabs: paneState.main.tabs.slice(),
+                    activeTab: paneState.main.activeTab
+                }
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        } catch (e) {
+            console.warn('tabs.js: Failed to save state to localStorage', e);
+        }
+    }
 
     function init() {
         if (initialized) return;
         initialized = true;
+
+        loadState();
 
         const container = document.querySelector('.app-container');
         if (!container) {
@@ -97,10 +133,13 @@
     }
 
     function setupDragAndDrop() {
+        let draggedTabId = null;
+
         document.addEventListener('dragstart', (e) => {
             if (e.target.classList.contains('tab-button')) {
+                draggedTabId = e.target.dataset.tabId;
                 e.target.classList.add('dragging');
-                e.dataTransfer.setData('text/plain', e.target.dataset.tabId);
+                e.dataTransfer.setData('text/plain', draggedTabId);
                 e.dataTransfer.effectAllowed = 'move';
             }
         });
@@ -109,8 +148,12 @@
             if (e.target.classList.contains('tab-button')) {
                 e.target.classList.remove('dragging');
             }
+            draggedTabId = null;
             document.querySelectorAll('.tab-bar').forEach(bar => {
                 bar.classList.remove('drag-over');
+            });
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('drag-insert-before', 'drag-insert-after');
             });
         });
 
@@ -119,20 +162,68 @@
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'move';
                 bar.classList.add('drag-over');
+
+                // Clear previous insert indicators
+                bar.querySelectorAll('.tab-button').forEach(btn => {
+                    btn.classList.remove('drag-insert-before', 'drag-insert-after');
+                });
+
+                // Find insertion point
+                const insertInfo = getInsertPosition(bar, e.clientX);
+                if (insertInfo.element) {
+                    if (insertInfo.position === 'before') {
+                        insertInfo.element.classList.add('drag-insert-before');
+                    } else {
+                        insertInfo.element.classList.add('drag-insert-after');
+                    }
+                }
             });
 
-            bar.addEventListener('dragleave', () => {
-                bar.classList.remove('drag-over');
+            bar.addEventListener('dragleave', (e) => {
+                // Only remove drag-over if we're actually leaving the bar
+                if (!bar.contains(e.relatedTarget)) {
+                    bar.classList.remove('drag-over');
+                    bar.querySelectorAll('.tab-button').forEach(btn => {
+                        btn.classList.remove('drag-insert-before', 'drag-insert-after');
+                    });
+                }
             });
 
             bar.addEventListener('drop', (e) => {
                 e.preventDefault();
                 bar.classList.remove('drag-over');
+                bar.querySelectorAll('.tab-button').forEach(btn => {
+                    btn.classList.remove('drag-insert-before', 'drag-insert-after');
+                });
+
                 const tabId = e.dataTransfer.getData('text/plain');
                 const targetPane = bar.dataset.pane;
-                moveTabToPane(tabId, targetPane);
+                const insertInfo = getInsertPosition(bar, e.clientX);
+
+                moveTabToPane(tabId, targetPane, insertInfo);
             });
         });
+    }
+
+    function getInsertPosition(bar, clientX) {
+        const buttons = Array.from(bar.querySelectorAll('.tab-button:not(.dragging)'));
+        
+        if (buttons.length === 0) {
+            return { element: null, position: null, index: 0 };
+        }
+
+        for (let i = 0; i < buttons.length; i++) {
+            const btn = buttons[i];
+            const rect = btn.getBoundingClientRect();
+            const midpoint = rect.left + rect.width / 2;
+
+            if (clientX < midpoint) {
+                return { element: btn, position: 'before', index: i };
+            }
+        }
+
+        // After all buttons
+        return { element: buttons[buttons.length - 1], position: 'after', index: buttons.length };
     }
 
     function setupResponsiveHandler() {
@@ -182,46 +273,71 @@
         return paneName === 'sidebar' ? sidebarPane : mainPane;
     }
 
-    function moveTabToPane(tabId, targetPane) {
+    function moveTabToPane(tabId, targetPane, insertInfo) {
         const tab = tabs[tabId];
         if (!tab) return;
 
         const currentPane = tab.pane;
-        if (currentPane === targetPane) return;
+        const samePane = currentPane === targetPane;
 
-        // Remove from current pane
+        // Remove from current pane's tab list
         const currentState = paneState[currentPane];
+        const currentIndex = currentState.tabs.indexOf(tabId);
         currentState.tabs = currentState.tabs.filter(id => id !== tabId);
-        if (currentState.activeTab === tabId) {
-            currentState.activeTab = currentState.tabs[0] || null;
+
+        // Calculate insert index
+        let insertIndex = insertInfo ? insertInfo.index : paneState[targetPane].tabs.length;
+        
+        // Adjust index if moving within same pane and moving to a later position
+        if (samePane && insertInfo && currentIndex < insertIndex) {
+            insertIndex--;
         }
 
-        // Add to target pane
+        // Add to target pane at specific position
         const targetState = paneState[targetPane];
-        targetState.tabs.push(tabId);
+        targetState.tabs.splice(insertIndex, 0, tabId);
         tab.pane = targetPane;
+
+        // Handle active tab in current pane if it was moved
+        if (!samePane && currentState.activeTab === tabId) {
+            currentState.activeTab = currentState.tabs[0] || null;
+        }
 
         // Move DOM elements
         const btn = document.querySelector(`.tab-button[data-tab-id="${tabId}"]`);
         const content = document.querySelector(`.tab-content[data-tab-id="${tabId}"]`);
+        const targetBar = getPane(targetPane).querySelector('.tab-bar');
         
         if (btn) {
             btn.classList.toggle('sidebar-tab', targetPane === 'sidebar');
-            getPane(targetPane).querySelector('.tab-bar').appendChild(btn);
+            
+            // Insert at correct position in DOM
+            const allButtons = Array.from(targetBar.querySelectorAll('.tab-button'));
+            const buttonAtIndex = allButtons.filter(b => b !== btn)[insertIndex];
+            
+            if (buttonAtIndex) {
+                targetBar.insertBefore(btn, buttonAtIndex);
+            } else {
+                targetBar.appendChild(btn);
+            }
         }
         
-        if (content) {
+        if (content && !samePane) {
             getPane(targetPane).querySelector('.tab-content-area').appendChild(content);
         }
 
-        // Activate the moved tab in its new pane
-        activateTabInPane(tabId, targetPane);
-        
-        // Update the old pane
-        if (currentState.activeTab) {
-            activateTabInPane(currentState.activeTab, currentPane);
+        // Activate the moved tab in its new pane (if moving between panes)
+        if (!samePane) {
+            activateTabInPane(tabId, targetPane);
+            
+            // Update the old pane
+            if (currentState.activeTab) {
+                activateTabInPane(currentState.activeTab, currentPane);
+            }
         }
+
         updateAllPanes();
+        saveState();
     }
 
     function activateTabInPane(tabId, pane) {
@@ -251,6 +367,8 @@
         if (tab && tab.onActivate) {
             tab.onActivate();
         }
+
+        saveState();
     }
 
     function updateAllPanes() {
@@ -262,18 +380,42 @@
         });
     }
 
+    function getSavedTabInfo(tabId, defaultPane) {
+        if (!savedState) return { pane: defaultPane, index: -1 };
+
+        for (const pane of ['sidebar', 'main']) {
+            const index = savedState[pane].tabs.indexOf(tabId);
+            if (index !== -1) {
+                return { pane, index, activeTab: savedState[pane].activeTab };
+            }
+        }
+
+        return { pane: defaultPane, index: -1 };
+    }
+
     window.registerTab = function(options) {
         if (!initialized) init();
 
-        const { id, label, pane, render, onActivate, onDeactivate } = options;
+        const { id, label, pane: defaultPane, render, onActivate, onDeactivate } = options;
         
         if (tabs[id]) {
             console.warn(`Tab "${id}" already registered`);
             return;
         }
 
+        // Check saved state for this tab's position
+        const savedInfo = getSavedTabInfo(id, defaultPane);
+        const pane = savedInfo.pane;
+
         tabs[id] = { id, label, pane, render, onActivate, onDeactivate };
-        paneState[pane].tabs.push(id);
+
+        // Insert at saved position or append
+        const state = paneState[pane];
+        if (savedInfo.index !== -1 && savedInfo.index <= state.tabs.length) {
+            state.tabs.splice(savedInfo.index, 0, id);
+        } else {
+            state.tabs.push(id);
+        }
 
         const paneEl = getPane(pane);
         const tabBar = paneEl.querySelector('.tab-bar');
@@ -281,7 +423,15 @@
 
         // Create tab button
         const btn = createTabButton(id, label, pane);
-        tabBar.appendChild(btn);
+        
+        // Insert button at correct position
+        const existingButtons = tabBar.querySelectorAll('.tab-button');
+        const insertIndex = state.tabs.indexOf(id);
+        if (insertIndex < existingButtons.length) {
+            tabBar.insertBefore(btn, existingButtons[insertIndex]);
+        } else {
+            tabBar.appendChild(btn);
+        }
 
         // Create tab content
         const content = createTabContent(id);
@@ -292,8 +442,10 @@
             render(content);
         }
 
-        // Activate if first tab in pane
-        if (paneState[pane].tabs.length === 1) {
+        // Activate based on saved state or if first tab
+        const shouldActivate = (savedInfo.activeTab === id) || 
+                               (paneState[pane].tabs.length === 1);
+        if (shouldActivate) {
             activateTabInPane(id, pane);
         }
     };
