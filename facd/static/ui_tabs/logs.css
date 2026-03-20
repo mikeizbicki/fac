@@ -20,8 +20,7 @@
   font-family: monospace;
   font-size: 12px;
   line-height: 1.4;
-  white-space: pre-wrap;
-  word-wrap: break-word;
+  white-space: pre;
   color: #ddd;
 }
 
