@@ -28,6 +28,7 @@ let knownPaths = new Set();
 let targetNodePaths = new Set();  // Track which target nodes are shown
 let pathMetadata = {};
 let rootContainer = null;
+let isInitialized = false;  // Track whether initial tree build has happened
 
 // Variable helpers
 function extractVariables(pattern) {
@@ -230,6 +231,13 @@ function hideTargetNode(path) {
 }
 
 function handlePathEvent(path, metadata) {
+    // Queue metadata but don't process events until initial tree is built
+    if (!isInitialized) {
+        knownPaths.add(path);
+        pathMetadata[path] = metadata;
+        return;
+    }
+
     const status = metadata.status;
 
     if (status === 'deleted') {
@@ -384,7 +392,9 @@ function createVariableScopeForm(container, targetPattern) {
 }
 
 function buildInitialTree() {
+    // Clear both DOM and node registry
     rootContainer.innerHTML = '';
+    window.clearAllNodes();
     targetNodePaths.clear();
 
     // Insert non-variable targets that don't have existing paths
@@ -425,6 +435,9 @@ function buildInitialTree() {
             showSiblingTargets(path, matchingTarget);
         }
     }
+
+    // Mark as initialized so future SSE events are processed immediately
+    isInitialized = true;
 }
 
 function insertVariableScopeNode(prefix, targetPattern) {

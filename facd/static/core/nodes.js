@@ -36,6 +36,8 @@
 // window.getAllNodes() - Get all registered nodes
 //   Returns: Map<path, Element>
 //
+// window.clearAllNodes() - Clear all nodes from registry (does not remove from DOM)
+//
 // Component System API:
 // ---------------------
 // window.registerComponent(callback) - Register a callback for node events:
@@ -107,6 +109,15 @@
 
     window.getAllNodes = function() {
         return new Map(nodeRegistry);
+    };
+
+    window.clearAllNodes = function() {
+        // Cancel any pending removals
+        for (const [path, pending] of pendingRemovals) {
+            clearTimeout(pending.timeoutId);
+        }
+        pendingRemovals.clear();
+        nodeRegistry.clear();
     };
 
     //
