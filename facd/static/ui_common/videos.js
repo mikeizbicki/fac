@@ -1,8 +1,8 @@
 // videos.js
 //
 // This component handles display of video files in the target tree.
-// When a path node has mime-type video/*, it fetches the video from
-// /contents and displays it as a video element with controls.
+// When a path node has mime-type video/*, it registers for video loading
+// and displays it as a video element with controls.
 //
 // For leaf nodes: video is visible only when expanded.
 // Works in both standard tree view and custom views like screenplay.
@@ -22,7 +22,6 @@
         if (!forceRefresh && videoCache[path]) {
             return Promise.resolve(videoCache[path]);
         }
-        // Revoke old URL if refreshing
         if (forceRefresh && videoCache[path]) {
             URL.revokeObjectURL(videoCache[path]);
             delete videoCache[path];
@@ -43,7 +42,6 @@
         if (!registeredContainers[path]) {
             registeredContainers[path] = [];
         }
-        // Avoid duplicate registrations
         const existing = registeredContainers[path].find(r => r.container === container);
         if (!existing) {
             registeredContainers[path].push({ container, className });
@@ -88,17 +86,15 @@
         const path = nodeEl.dataset.path;
         if (!path) return;
 
+        // Find the video container created by nodes.js
         let videoContainer = nodeEl.querySelector('.video-container');
-        if (videoContainer) return;
-
-        videoContainer = document.createElement('div');
-        videoContainer.className = 'video-container';
-        
-        // Insert video container as first child for full-bleed effect
-        nodeEl.insertBefore(videoContainer, nodeEl.firstChild);
-        
-        // Add class to indicate this node has a video
-        nodeEl.classList.add('has-video');
+        if (!videoContainer) {
+            // Fallback: create container if not present
+            videoContainer = document.createElement('div');
+            videoContainer.className = 'video-container';
+            nodeEl.insertBefore(videoContainer, nodeEl.firstChild);
+            nodeEl.classList.add('has-video');
+        }
 
         window.registerVideoContainer(path, videoContainer, 'leaf-video');
 
@@ -115,7 +111,6 @@
         if (!path) return;
 
         if (status === 'fresh') {
-            // Refresh the video when content changes
             window.fetchVideo(path, true).then(url => {
                 refreshAllContainers(path, url);
             }).catch(() => {});
