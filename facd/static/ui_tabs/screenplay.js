@@ -10,21 +10,22 @@
 // 3. Parses the XML to extract <shot> elements
 // 4. Renders each shot as Fountain HTML on a "paper" background
 // 5. Creates sticky notes with shot metadata and related targets
-// 6. Uses standard node/component system for overlays and build menus
+// 6. Uses the nodes.js API for target nodes, getting overlays and build menus for free
 //
 // Dependencies:
 // - fountain.min.js must be loaded before this script
-// - images.js and videos.js must be loaded for media APIs
-// - build.js must be loaded for build menus
-// - overlay.js must be loaded for status overlays
+// - nodes.js must be loaded for the node API
+// - images.js and videos.js for media display
+// - build.js for build menus
+// - overlay.js for status overlays
 
 (function() {
     // Container for the screenplay tab
     let container = null;
     // Store current shots data for editing operations
     let currentShots = [];
-    // Map from target path to its DOM element for status updates
-    const targetElements = new Map();
+    // Track paths we've registered for this view
+    let registeredPaths = new Set();
 
     // Target patterns for each shot
     const SHOT_TARGETS = {
@@ -297,7 +298,7 @@
         const paperContainer = container.querySelector('.screenplay-paper');
         if (!paperContainer) return;
 
-        clearTargetRegistrations();
+        clearRegisteredPaths();
         paperContainer.innerHTML = '';
 
         tempShots.forEach((shot, index) => {
@@ -442,6 +443,7 @@
         metaGrid.appendChild(createMetaRow('SHOT_ID', shot.shotId));
         metaGrid.appendChild(createMetaRow('REFERENCE_SHOT', shot.referenceShot || '—'));
 
+        // Create target rows using the node API
         const shotTypePath = getTargetPath('shot_type', shot.shotId);
         metaGrid.appendChild(createTargetRow('shot_type', shotTypePath));
 
@@ -481,11 +483,9 @@
     }
 
     function createTargetRow(label, targetPath) {
-        // Create a standard tree-node that other components can hook into
+        // Create a container for the row
         const row = document.createElement('div');
-        row.className = 'sticky-meta-row sticky-target-row tree-node path leaf';
-        row.dataset.path = targetPath;
-        row.dataset.isTarget = 'true';
+        row.className = 'sticky-meta-row sticky-target-row';
 
         const labelSpan = document.createElement('span');
         labelSpan.className = 'sticky-meta-label';
@@ -495,81 +495,79 @@
         const valueSpan = document.createElement('span');
         valueSpan.className = 'sticky-meta-value sticky-target-value';
         valueSpan.textContent = '—';
+        valueSpan.dataset.targetPath = targetPath;
         row.appendChild(valueSpan);
 
-        targetElements.set(targetPath, row);
+        // Create a hidden node for this target using the nodes.js API
+        // The node won't be visible but will receive status updates
+        const nodeEl = window.createNode(targetPath, {
+            type: 'target',
+            isLeaf: true,
+            order: 0,
+            parent: null,  // Don't attach to DOM tree
+            label: label,
+        });
 
-        // Notify components that this node exists
-        setTimeout(() => {
-            window.notifyComponents(row, 'unknown', true);
-        }, 0);
+        // Hide the node itself - we only want the value display
+        nodeEl.style.display = 'none';
+        row.appendChild(nodeEl);
+
+        registeredPaths.add(targetPath);
 
         return row;
     }
 
     function createMediaNode(targetPath, filename, mimeType) {
-        // Create a standard tree-node for media that components can hook into
-        const nodeEl = document.createElement('div');
-        nodeEl.className = 'sticky-media-container tree-node path leaf expanded';
-        nodeEl.dataset.path = targetPath;
-        nodeEl.dataset.mimeType = mimeType;
-        nodeEl.dataset.isTarget = 'true';
+        // Create a wrapper for the media node
+        const wrapper = document.createElement('div');
+        wrapper.className = 'sticky-media-wrapper';
 
-        const header = document.createElement('div');
-        header.className = 'tree-header';
+        // Use the nodes.js API to create a proper node
+        const nodeEl = window.createNode(targetPath, {
+            type: 'target',
+            mimeType: mimeType,
+            isLeaf: true,
+            order: 0,
+            parent: wrapper,
+            label: filename,
+        });
 
-        const toggle = document.createElement('button');
-        toggle.className = 'tree-toggle';
-        toggle.innerHTML = '&#9654;';
-        header.appendChild(toggle);
+        // Add expanded class so content is visible
+        nodeEl.classList.add('expanded');
 
-        const label = document.createElement('span');
-        label.className = 'tree-label';
-        label.textContent = filename;
-        header.appendChild(label);
-
-        nodeEl.appendChild(header);
-
-        // Create container for media - images.js/videos.js will populate this
+        // Register media container for updates
         const isImage = mimeType.startsWith('image/');
-        const mediaWrapper = document.createElement('div');
-        mediaWrapper.className = isImage ? 'image-container' : 'video-container';
-        nodeEl.appendChild(mediaWrapper);
+        const mediaContainer = nodeEl.querySelector(isImage ? '.image-container' : '.video-container');
 
-        if (isImage) {
-            nodeEl.classList.add('has-image');
-            if (window.registerImageContainer) {
-                window.registerImageContainer(targetPath, mediaWrapper, 'leaf-image');
-            }
-        } else {
-            nodeEl.classList.add('has-video');
-            if (window.registerVideoContainer) {
-                window.registerVideoContainer(targetPath, mediaWrapper, 'leaf-video');
+        if (mediaContainer) {
+            if (isImage && window.registerImageContainer) {
+                window.registerImageContainer(targetPath, mediaContainer, 'leaf-image');
+            } else if (!isImage && window.registerVideoContainer) {
+                window.registerVideoContainer(targetPath, mediaContainer, 'leaf-video');
             }
         }
 
-        targetElements.set(targetPath, nodeEl);
+        registeredPaths.add(targetPath);
 
-        // Notify components that this node exists
-        setTimeout(() => {
-            window.notifyComponents(nodeEl, 'unknown', true);
-        }, 0);
-
-        return nodeEl;
+        return wrapper;
     }
 
-    function clearTargetRegistrations() {
-        for (const [path, el] of targetElements) {
-            const imgContainer = el.querySelector('.image-container');
-            const vidContainer = el.querySelector('.video-container');
-            if (imgContainer && window.unregisterImageContainer) {
-                window.unregisterImageContainer(path, imgContainer);
-            }
-            if (vidContainer && window.unregisterVideoContainer) {
-                window.unregisterVideoContainer(path, vidContainer);
+    function clearRegisteredPaths() {
+        for (const path of registeredPaths) {
+            const nodeEl = window.getNode(path);
+            if (nodeEl) {
+                const imgContainer = nodeEl.querySelector('.image-container');
+                const vidContainer = nodeEl.querySelector('.video-container');
+                if (imgContainer && window.unregisterImageContainer) {
+                    window.unregisterImageContainer(path, imgContainer);
+                }
+                if (vidContainer && window.unregisterVideoContainer) {
+                    window.unregisterVideoContainer(path, vidContainer);
+                }
+                window.clearNodeFromRegistry(path);
             }
         }
-        targetElements.clear();
+        registeredPaths.clear();
     }
 
     function createShotElement(shot, index, shotsArray) {
@@ -617,7 +615,7 @@
             container.appendChild(paperContainer);
         }
 
-        clearTargetRegistrations();
+        clearRegisteredPaths();
         paperContainer.innerHTML = '';
 
         if (currentShots.length === 0) {
@@ -639,41 +637,36 @@
         renderScreenplay();
     }
 
-    function handleTargetUpdate(path, metadata, status) {
-        const el = targetElements.get(path);
-        if (!el) return;
+    function handleTargetUpdate(path, metadata) {
+        const nodeEl = window.getNode(path);
+        if (!nodeEl) return;
 
-        // Update status
-        el.dataset.status = status;
+        const status = metadata.status;
 
-        // Determine if this is a target or existing path
-        const isExistingPath = status === 'fresh' || status === 'stale';
-        if (isExistingPath) {
-            delete el.dataset.isTarget;
-        } else if (status === 'deleted' || status === 'unknown') {
-            el.dataset.isTarget = 'true';
-        }
+        // Update the node via the standard API
+        window.updateNode(path, {
+            status: status,
+            mimeType: metadata['mime-type'],
+            content: metadata.content,
+        });
 
-        // Update text value display for text targets
-        const valueSpan = el.querySelector('.sticky-target-value');
+        // Update the visible value display for text targets
+        const valueSpan = document.querySelector(`.sticky-target-value[data-target-path="${path}"]`);
         if (valueSpan && metadata.content) {
             valueSpan.textContent = metadata.content.trim() || '—';
         }
 
-        // Update content data attribute
-        if (metadata.content !== undefined) {
-            el.dataset.content = metadata.content;
-        }
+        // Handle media loading
+        const mimeType = nodeEl.dataset.mimeType;
+        const isImage = mimeType?.startsWith('image/');
+        const isVideo = mimeType?.startsWith('video/');
 
-        // Handle media loading via global APIs
-        const isImage = el.dataset.mimeType?.startsWith('image/');
-        const isVideo = el.dataset.mimeType?.startsWith('video/');
-
-        if (status === 'fresh') {
+        if (status === 'fresh' || status === 'stale') {
+            // Load or refresh media
             if (isImage && window.fetchImage) {
-                window.fetchImage(path, true).catch(() => {});
+                window.fetchImage(path, status === 'fresh').catch(() => {});
             } else if (isVideo && window.fetchVideo) {
-                window.fetchVideo(path, true).catch(() => {});
+                window.fetchVideo(path, status === 'fresh').catch(() => {});
             }
         } else if (status === 'deleted') {
             if (isImage && window.clearImageFromContainers) {
@@ -681,16 +674,7 @@
             } else if (isVideo && window.clearVideoFromContainers) {
                 window.clearVideoFromContainers(path);
             }
-        } else if (isExistingPath) {
-            if (isImage && window.fetchImage) {
-                window.fetchImage(path, false).catch(() => {});
-            } else if (isVideo && window.fetchVideo) {
-                window.fetchVideo(path, false).catch(() => {});
-            }
         }
-
-        // Notify other components (overlay, build) about status change
-        window.notifyComponents(el, status, false);
     }
 
     function isScreenplayTargetPath(path) {
@@ -708,14 +692,14 @@
         tabContainer.appendChild(container);
 
         // Register SSE handler for file updates
-        window.registerPathHandler(function(path, metadata, isNew) {
+        window.registerPathHandler(function(path, metadata) {
             if (path === 'shooting-script.xml') {
                 handleScreenplayUpdate(metadata.content);
                 return;
             }
 
-            if (isScreenplayTargetPath(path)) {
-                handleTargetUpdate(path, metadata, metadata.status);
+            if (isScreenplayTargetPath(path) && registeredPaths.has(path)) {
+                handleTargetUpdate(path, metadata);
             }
         });
 
