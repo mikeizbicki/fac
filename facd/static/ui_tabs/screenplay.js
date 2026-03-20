@@ -12,6 +12,10 @@
 // 5. Creates sticky notes with shot metadata and related targets
 // 6. Uses the nodes.js API for target nodes, getting overlays and build menus for free
 //
+// The nodes.js API handles the path/target duality automatically - when we
+// create a target node, it will be converted to a path node when the file
+// is created, and back to a target node when deleted.
+//
 // Dependencies:
 // - fountain.min.js must be loaded before this script
 // - nodes.js must be loaded for the node API
@@ -494,23 +498,41 @@
 
         const valueSpan = document.createElement('span');
         valueSpan.className = 'sticky-meta-value sticky-target-value';
-        valueSpan.textContent = '—';
         valueSpan.dataset.targetPath = targetPath;
         row.appendChild(valueSpan);
 
-        // Create a hidden node for this target using the nodes.js API
-        // The node won't be visible but will receive status updates
+        // Create a node for this target - nodes.js will handle path/target duality
+        // Start as target type, will be converted to path when file exists
         const nodeEl = window.createNode(targetPath, {
             type: 'target',
             isLeaf: true,
             order: 0,
-            parent: null,  // Don't attach to DOM tree
+            parent: null,
             label: label,
         });
 
-        // Hide the node itself - we only want the value display
-        nodeEl.style.display = 'none';
-        row.appendChild(nodeEl);
+        if (nodeEl) {
+            // Hide the node itself - we only want the value display
+            nodeEl.style.display = 'none';
+            row.appendChild(nodeEl);
+
+            // Update value display based on current state
+            if (window.isFilePath(targetPath)) {
+                const content = nodeEl.dataset.content;
+                valueSpan.textContent = content ? content.trim() : '—';
+            } else {
+                valueSpan.textContent = '—';
+            }
+        } else {
+            // Node already exists (as a path), get its content
+            const existingNode = window.getNode(targetPath);
+            if (existingNode) {
+                const content = existingNode.dataset.content;
+                valueSpan.textContent = content ? content.trim() : '—';
+            } else {
+                valueSpan.textContent = '—';
+            }
+        }
 
         registeredPaths.add(targetPath);
 
@@ -522,7 +544,8 @@
         const wrapper = document.createElement('div');
         wrapper.className = 'sticky-media-wrapper';
 
-        // Use the nodes.js API to create a proper node
+        // Use the nodes.js API to create a node
+        // Start as target, nodes.js will convert to path when file exists
         const nodeEl = window.createNode(targetPath, {
             type: 'target',
             mimeType: mimeType,
@@ -532,18 +555,54 @@
             label: filename,
         });
 
-        // Add expanded class so content is visible
-        nodeEl.classList.add('expanded');
+        if (nodeEl) {
+            // Add expanded class so content is visible
+            nodeEl.classList.add('expanded');
 
-        // Register media container for updates
-        const isImage = mimeType.startsWith('image/');
-        const mediaContainer = nodeEl.querySelector(isImage ? '.image-container' : '.video-container');
+            // Register media container for updates
+            const isImage = mimeType.startsWith('image/');
+            const mediaContainer = nodeEl.querySelector(isImage ? '.image-container' : '.video-container');
 
-        if (mediaContainer) {
-            if (isImage && window.registerImageContainer) {
-                window.registerImageContainer(targetPath, mediaContainer, 'leaf-image');
-            } else if (!isImage && window.registerVideoContainer) {
-                window.registerVideoContainer(targetPath, mediaContainer, 'leaf-video');
+            if (mediaContainer) {
+                if (isImage && window.registerImageContainer) {
+                    window.registerImageContainer(targetPath, mediaContainer, 'leaf-image');
+                    // Load image if file exists
+                    if (window.isFilePath(targetPath) && window.fetchImage) {
+                        window.fetchImage(targetPath, false).catch(() => {});
+                    }
+                } else if (!isImage && window.registerVideoContainer) {
+                    window.registerVideoContainer(targetPath, mediaContainer, 'leaf-video');
+                    // Load video if file exists
+                    if (window.isFilePath(targetPath) && window.fetchVideo) {
+                        window.fetchVideo(targetPath, false).catch(() => {});
+                    }
+                }
+            }
+        } else {
+            // Node already exists, find it and add to wrapper
+            const existingNode = window.getNode(targetPath);
+            if (existingNode && existingNode.parentElement) {
+                // Clone the display but don't move the original
+                const clone = existingNode.cloneNode(true);
+                clone.classList.add('expanded');
+                wrapper.appendChild(clone);
+
+                // Register clone's media container
+                const isImage = mimeType.startsWith('image/');
+                const mediaContainer = clone.querySelector(isImage ? '.image-container' : '.video-container');
+                if (mediaContainer) {
+                    if (isImage && window.registerImageContainer) {
+                        window.registerImageContainer(targetPath, mediaContainer, 'leaf-image');
+                        if (window.fetchImage) {
+                            window.fetchImage(targetPath, false).catch(() => {});
+                        }
+                    } else if (!isImage && window.registerVideoContainer) {
+                        window.registerVideoContainer(targetPath, mediaContainer, 'leaf-video');
+                        if (window.fetchVideo) {
+                            window.fetchVideo(targetPath, false).catch(() => {});
+                        }
+                    }
+                }
             }
         }
 
@@ -564,7 +623,10 @@
                 if (vidContainer && window.unregisterVideoContainer) {
                     window.unregisterVideoContainer(path, vidContainer);
                 }
-                window.clearNodeFromRegistry(path);
+                // Only clear from registry if the node is hidden (screenplay-owned)
+                if (nodeEl.style.display === 'none') {
+                    window.clearNodeFromRegistry(path);
+                }
             }
         }
         registeredPaths.clear();
@@ -638,17 +700,14 @@
     }
 
     function handleTargetUpdate(path, metadata) {
-        const nodeEl = window.getNode(path);
-        if (!nodeEl) return;
-
-        const status = metadata.status;
-
-        // Update the node via the standard API
-        window.updateNode(path, {
-            status: status,
-            mimeType: metadata['mime-type'],
-            content: metadata.content,
-        });
+        // Update the node if it exists
+        if (window.hasNode(path)) {
+            window.updateNode(path, {
+                status: metadata.status,
+                mimeType: metadata['mime-type'],
+                content: metadata.content,
+            });
+        }
 
         // Update the visible value display for text targets
         const valueSpan = document.querySelector(`.sticky-target-value[data-target-path="${path}"]`);
@@ -657,12 +716,15 @@
         }
 
         // Handle media loading
-        const mimeType = nodeEl.dataset.mimeType;
+        const nodeEl = window.getNode(path);
+        if (!nodeEl) return;
+
+        const mimeType = nodeEl.dataset.mimeType || metadata['mime-type'];
         const isImage = mimeType?.startsWith('image/');
         const isVideo = mimeType?.startsWith('video/');
+        const status = metadata.status;
 
         if (status === 'fresh' || status === 'stale') {
-            // Load or refresh media
             if (isImage && window.fetchImage) {
                 window.fetchImage(path, status === 'fresh').catch(() => {});
             } else if (isVideo && window.fetchVideo) {

@@ -11,21 +11,15 @@
 // Tree Invariant:
 // ---------------
 // We maintain an invariant that for every path, exactly one node will be
-// displayed in the tree. For example, consider the set of targets:
-//   "/characters/$CHARACTER/about.json"
-//   "/characters/$CHARACTER/voice.json"
-//   "/characters/$CHARACTER/character_sheet.png"
-// If the path "/characters/Barbaros/about.json" exists, then we will have
-// a corresponding path node but no corresponding target node. But if
-// "/characters/Barbaros/about.json" exists and "/characters/Barbaros/voice.json"
-// does not exist, then we will need a target node for "/characters/Barbaros/voice.json".
+// displayed in the tree. This is now enforced by nodes.js - when we call
+// createNode() with type 'target', it will return null if a path node
+// already exists, and when we call createNode() with type 'path', it will
+// convert any existing target node.
 
 (function() {
 
 let targets = {};
 let targetOrder = [];
-let knownPaths = new Set();
-let targetNodePaths = new Set();  // Track which target nodes are shown
 let pathMetadata = {};
 let rootContainer = null;
 let isInitialized = false;  // Track whether initial tree build has happened
@@ -113,26 +107,6 @@ function findOrCreateIntermediateNode(container, name, fullPath, order, isVarSco
 }
 
 function insertPathNode(path, metadata) {
-    // If a target node exists for this path, remove it first
-    if (targetNodePaths.has(path)) {
-        const targetEl = window.getNode(path);
-        if (targetEl) {
-            targetEl.remove();
-            window.clearNodeFromRegistry(path);
-        }
-        targetNodePaths.delete(path);
-    }
-
-    // Skip if path node already exists
-    if (window.hasNode(path)) {
-        window.updateNode(path, {
-            status: metadata.status,
-            mimeType: metadata['mime-type'],
-            content: metadata.content,
-        });
-        return;
-    }
-
     const parts = path.split('/');
     let currentContainer = rootContainer;
     const orderIndex = getPathOrderIndex(path);
@@ -152,7 +126,7 @@ function insertPathNode(path, metadata) {
         currentContainer = window.getNodeChildContainer(domNode);
     }
 
-    // Create leaf node
+    // Create leaf node - nodes.js handles target->path conversion
     window.createNode(path, {
         type: 'path',
         mimeType: metadata['mime-type'],
@@ -166,11 +140,6 @@ function insertPathNode(path, metadata) {
 }
 
 function insertTargetNode(concretePath, targetPattern) {
-    // Skip if any node already exists for this path
-    if (window.hasNode(concretePath)) {
-        return;
-    }
-
     const parts = concretePath.split('/');
     const targetParts = targetPattern.split('/');
     let currentContainer = rootContainer;
@@ -191,6 +160,7 @@ function insertTargetNode(concretePath, targetPattern) {
         currentContainer = window.getNodeChildContainer(domNode);
     }
 
+    // Create target node - nodes.js will return null if path already exists
     window.createNode(concretePath, {
         type: 'target',
         isLeaf: true,
@@ -198,8 +168,6 @@ function insertTargetNode(concretePath, targetPattern) {
         parent: currentContainer,
         label: parts[parts.length - 1],
     });
-
-    targetNodePaths.add(concretePath);
 }
 
 function showSiblingTargets(path, matchingTarget) {
@@ -228,7 +196,8 @@ function showSiblingTargets(path, matchingTarget) {
         });
         const concretePathStr = concreteParts.join('/');
 
-        if (!knownPaths.has(concretePathStr) && !targetNodePaths.has(concretePathStr)) {
+        // nodes.js will handle not creating if path already exists
+        if (!window.hasNode(concretePathStr)) {
             insertTargetNode(concretePathStr, sibling);
         }
     }
@@ -252,8 +221,8 @@ function handlePathEvent(path, metadata) {
     // Queue metadata but don't process events until initial tree is built
     if (!isInitialized) {
         if (metadata.status !== 'deleted') {
-            knownPaths.add(path);
             pathMetadata[path] = metadata;
+            window.markPathAsFile(path);
         }
         return;
     }
@@ -261,19 +230,22 @@ function handlePathEvent(path, metadata) {
     const status = metadata.status;
 
     if (status === 'deleted') {
-        if (knownPaths.has(path)) {
-            knownPaths.delete(path);
-            delete pathMetadata[path];
+        window.unmarkPathAsFile(path);
+        delete pathMetadata[path];
 
-            window.removeNode(path, { animate: true }).then(() => {
-                // After removal, show target node for this path
+        // Convert to target node instead of removing completely
+        const matchingTarget = findMatchingTarget(path);
+        if (matchingTarget) {
+            window.removeNode(path, { animate: true, convertToTarget: false }).then(() => {
                 showTargetNodeForPath(path);
             });
+        } else {
+            window.removeNode(path, { animate: true });
         }
     } else {
-        const isNew = !knownPaths.has(path);
-        knownPaths.add(path);
+        const isNew = !window.isFilePath(path);
         pathMetadata[path] = metadata;
+        window.markPathAsFile(path);
 
         if (isNew) {
             const matchingTarget = findMatchingTarget(path);
@@ -412,12 +384,16 @@ function buildInitialTree() {
     // Clear both DOM and node registry
     rootContainer.innerHTML = '';
     window.clearAllNodes();
-    targetNodePaths.clear();
+
+    // Re-mark all known paths as files
+    for (const path of Object.keys(pathMetadata)) {
+        window.markPathAsFile(path);
+    }
 
     // Insert non-variable targets that don't have existing paths
     for (const target of targetOrder) {
         const vars = extractVariables(target);
-        if (vars.length === 0 && !knownPaths.has(target)) {
+        if (vars.length === 0 && !window.isFilePath(target)) {
             insertTargetNode(target, target);
         }
     }
@@ -442,8 +418,8 @@ function buildInitialTree() {
         }
     }
 
-    // Insert all known paths (iterate over a copy since we're not modifying)
-    const pathsToInsert = Array.from(knownPaths);
+    // Insert all known paths
+    const pathsToInsert = Object.keys(pathMetadata);
     for (const path of pathsToInsert) {
         const metadata = pathMetadata[path];
         if (metadata) {

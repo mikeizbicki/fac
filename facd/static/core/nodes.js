@@ -4,6 +4,11 @@
 // It maintains a registry of all nodes and provides factory functions for
 // creating standardized DOM structures that ui_common components can hook into.
 //
+// It also handles the path/target duality: for any given path, only one node
+// (either a path node or a target node) should be visible. When a file exists,
+// we show a path node; when it doesn't exist but matches a target pattern,
+// we show a target node.
+//
 // Node Registry API:
 // -------------------
 // window.createNode(path, options) - Create and register a new node
@@ -26,6 +31,12 @@
 // window.removeNode(path, options) - Remove a node from the registry and DOM
 //   options: { animate: boolean }  // Whether to animate removal (default: true)
 //   Returns: Promise that resolves when removal is complete
+//
+// window.convertNodeToPath(path, metadata) - Convert a target node to a path node
+//   Called when a file is created for a path that had a target node
+//
+// window.convertNodeToTarget(path) - Convert a path node back to a target node
+//   Called when a file is deleted
 //
 // window.getNode(path) - Get a node element by path
 //   Returns: Element or undefined
@@ -77,6 +88,9 @@
     // Node registry: path -> Element
     const nodeRegistry = new Map();
 
+    // Track which paths are files (vs targets)
+    const knownFilePaths = new Set();
+
     // Component callbacks
     const componentCallbacks = [];
 
@@ -113,6 +127,10 @@
         return new Map(nodeRegistry);
     };
 
+    window.isFilePath = function(path) {
+        return knownFilePaths.has(path);
+    };
+
     window.clearAllNodes = function() {
         // Cancel any pending removals
         for (const [path, pending] of pendingRemovals) {
@@ -120,6 +138,7 @@
         }
         pendingRemovals.clear();
         nodeRegistry.clear();
+        knownFilePaths.clear();
     };
 
     window.clearNodeFromRegistry = function(path) {
@@ -129,6 +148,15 @@
             pendingRemovals.delete(path);
         }
         nodeRegistry.delete(path);
+        knownFilePaths.delete(path);
+    };
+
+    window.markPathAsFile = function(path) {
+        knownFilePaths.add(path);
+    };
+
+    window.unmarkPathAsFile = function(path) {
+        knownFilePaths.delete(path);
     };
 
     //
@@ -147,11 +175,37 @@
             label = path.split('/').pop() || path,
         } = options;
 
-        // If node already exists, just update it
+        // If this is a target node but a file already exists for this path,
+        // don't create the target node
+        if (type === 'target' && knownFilePaths.has(path)) {
+            // Return existing path node if it exists
+            const existing = nodeRegistry.get(path);
+            if (existing) return existing;
+            // Otherwise don't create anything
+            return null;
+        }
+
+        // If this is a path node, mark it as a file
+        if (type === 'path') {
+            knownFilePaths.add(path);
+        }
+
+        // If node already exists, handle type conversion or update
         if (nodeRegistry.has(path)) {
             const existing = nodeRegistry.get(path);
-            window.updateNode(path, { status, mimeType, content });
-            return existing;
+            const existingIsTarget = existing.dataset.isTarget === 'true';
+
+            if (type === 'path' && existingIsTarget) {
+                // Convert target to path
+                return convertTargetToPath(path, existing, { mimeType, status, content, order });
+            } else if (type === 'target' && !existingIsTarget) {
+                // Path exists, don't create target
+                return existing;
+            } else {
+                // Same type, just update
+                window.updateNode(path, { status, mimeType, content });
+                return existing;
+            }
         }
 
         // Cancel any pending removal for this path
@@ -232,6 +286,97 @@
         return div;
     };
 
+    function convertTargetToPath(path, targetEl, options) {
+        const { mimeType = '', status = '', content, order } = options;
+        const parent = targetEl.parentElement;
+
+        // Remove target-specific attributes/classes
+        delete targetEl.dataset.isTarget;
+        targetEl.classList.remove('target');
+        targetEl.classList.add('path');
+
+        // Add path-specific attributes
+        if (mimeType) targetEl.dataset.mimeType = mimeType;
+        if (status) targetEl.dataset.status = status;
+        if (content !== undefined) targetEl.dataset.content = content;
+
+        // Add metadata container if not present
+        let metadata = targetEl.querySelector(':scope > .metadata');
+        if (!metadata) {
+            metadata = createMetadataContainer(mimeType, status, content);
+            targetEl.appendChild(metadata);
+        }
+
+        // Add media containers if needed
+        if (mimeType) {
+            if (mimeType.startsWith('image/') && !targetEl.querySelector('.image-container')) {
+                const imageContainer = document.createElement('div');
+                imageContainer.className = 'image-container';
+                targetEl.insertBefore(imageContainer, targetEl.firstChild);
+                targetEl.classList.add('has-image');
+            } else if (mimeType.startsWith('video/') && !targetEl.querySelector('.video-container')) {
+                const videoContainer = document.createElement('div');
+                videoContainer.className = 'video-container';
+                targetEl.insertBefore(videoContainer, targetEl.firstChild);
+                targetEl.classList.add('has-video');
+            }
+        }
+
+        // Mark as file path
+        knownFilePaths.add(path);
+
+        // Notify components of the conversion (treat as new path node)
+        window.notifyComponents(targetEl, status || 'fresh', true);
+
+        return targetEl;
+    }
+
+    window.convertNodeToTarget = function(path) {
+        const nodeEl = nodeRegistry.get(path);
+        if (!nodeEl) return null;
+
+        // Already a target
+        if (nodeEl.dataset.isTarget === 'true') return nodeEl;
+
+        // Remove path-specific attributes/classes
+        delete nodeEl.dataset.mimeType;
+        delete nodeEl.dataset.status;
+        delete nodeEl.dataset.content;
+        nodeEl.classList.remove('path', 'has-image', 'has-video');
+        nodeEl.classList.add('target');
+
+        // Add target attribute
+        nodeEl.dataset.isTarget = 'true';
+
+        // Remove metadata container
+        const metadata = nodeEl.querySelector(':scope > .metadata');
+        if (metadata) metadata.remove();
+
+        // Remove media containers
+        const imageContainer = nodeEl.querySelector('.image-container');
+        if (imageContainer) {
+            if (window.unregisterImageContainer) {
+                window.unregisterImageContainer(path, imageContainer);
+            }
+            imageContainer.remove();
+        }
+        const videoContainer = nodeEl.querySelector('.video-container');
+        if (videoContainer) {
+            if (window.unregisterVideoContainer) {
+                window.unregisterVideoContainer(path, videoContainer);
+            }
+            videoContainer.remove();
+        }
+
+        // Unmark as file path
+        knownFilePaths.delete(path);
+
+        // Notify components
+        window.notifyComponents(nodeEl, 'target', false);
+
+        return nodeEl;
+    };
+
     function createMetadataContainer(mimeType, status, content) {
         const container = document.createElement('div');
         container.className = 'metadata';
@@ -293,6 +438,12 @@
         if (!nodeEl) return false;
 
         const { status, mimeType, content, ...rest } = metadata;
+
+        // If updating with path data but node is a target, convert it
+        if (nodeEl.dataset.isTarget === 'true' && (mimeType || status)) {
+            convertTargetToPath(path, nodeEl, { mimeType, status, content });
+            return true;
+        }
 
         // Update data attributes
         if (mimeType !== undefined) nodeEl.dataset.mimeType = mimeType;
@@ -368,10 +519,17 @@
     //
 
     window.removeNode = function(path, options = {}) {
-        const { animate = true } = options;
+        const { animate = true, convertToTarget = false } = options;
 
         const nodeEl = nodeRegistry.get(path);
         if (!nodeEl) return Promise.resolve(false);
+
+        // If we should convert to target instead of removing
+        if (convertToTarget) {
+            knownFilePaths.delete(path);
+            window.convertNodeToTarget(path);
+            return Promise.resolve(true);
+        }
 
         return new Promise((resolve) => {
             // Notify components of deletion
@@ -404,6 +562,7 @@
         const parent = nodeEl.parentElement;
         nodeEl.remove();
         nodeRegistry.delete(path);
+        knownFilePaths.delete(path);
 
         // Clean up empty containers
         cleanupEmptyContainers(parent);
@@ -418,7 +577,9 @@
                     const grandParent = parentNode.parentElement;
                     // Also remove from registry if it's there
                     const parentPath = parentNode.dataset.path;
-                    if (parentPath) nodeRegistry.delete(parentPath);
+                    if (parentPath) {
+                        nodeRegistry.delete(parentPath);
+                    }
                     parentNode.remove();
                     container = grandParent;
                 } else {
