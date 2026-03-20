@@ -97,12 +97,7 @@ function findOrCreateIntermediateNode(container, name, fullPath, order, isVarSco
         return existing;
     }
 
-    // Check by label in container (for nodes not in registry)
-    for (const child of container.querySelectorAll(':scope > .tree-node')) {
-        const label = child.querySelector(':scope > .tree-header > .tree-label');
-        if (label?.textContent === name) return child;
-    }
-
+    // Node doesn't exist in registry, create it
     const div = window.createIntermediateNode(fullPath, {
         order: order,
         parent: container,
@@ -118,6 +113,16 @@ function findOrCreateIntermediateNode(container, name, fullPath, order, isVarSco
 }
 
 function insertPathNode(path, metadata) {
+    // Skip if node already exists
+    if (window.hasNode(path)) {
+        window.updateNode(path, {
+            status: metadata.status,
+            mimeType: metadata['mime-type'],
+            content: metadata.content,
+        });
+        return;
+    }
+
     const parts = path.split('/');
     let currentContainer = rootContainer;
     const orderIndex = getPathOrderIndex(path);
@@ -151,6 +156,11 @@ function insertPathNode(path, metadata) {
 }
 
 function insertTargetNode(concretePath, targetPattern) {
+    // Skip if node already exists
+    if (window.hasNode(concretePath)) {
+        return;
+    }
+
     const parts = concretePath.split('/');
     const targetParts = targetPattern.split('/');
     let currentContainer = rootContainer;
@@ -233,8 +243,10 @@ function hideTargetNode(path) {
 function handlePathEvent(path, metadata) {
     // Queue metadata but don't process events until initial tree is built
     if (!isInitialized) {
-        knownPaths.add(path);
-        pathMetadata[path] = metadata;
+        if (metadata.status !== 'deleted') {
+            knownPaths.add(path);
+            pathMetadata[path] = metadata;
+        }
         return;
     }
 
@@ -292,6 +304,11 @@ function createVariableScopeForm(container, targetPattern) {
         childContainer = document.createElement('div');
         childContainer.className = 'tree-children';
         container.appendChild(childContainer);
+    }
+
+    // Check if form already exists
+    if (childContainer.querySelector('.variable-scope-form')) {
+        return;
     }
 
     const formDiv = document.createElement('div');
@@ -425,14 +442,17 @@ function buildInitialTree() {
         }
     }
 
-    // Insert all known paths
-    for (const path of knownPaths) {
+    // Insert all known paths (iterate over a copy since we're not modifying)
+    const pathsToInsert = Array.from(knownPaths);
+    for (const path of pathsToInsert) {
         const metadata = pathMetadata[path];
-        insertPathNode(path, metadata);
+        if (metadata) {
+            insertPathNode(path, metadata);
 
-        const matchingTarget = findMatchingTarget(path);
-        if (matchingTarget && extractVariables(matchingTarget).length > 0) {
-            showSiblingTargets(path, matchingTarget);
+            const matchingTarget = findMatchingTarget(path);
+            if (matchingTarget && extractVariables(matchingTarget).length > 0) {
+                showSiblingTargets(path, matchingTarget);
+            }
         }
     }
 
