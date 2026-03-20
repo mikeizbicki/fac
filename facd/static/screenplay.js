@@ -1,38 +1,30 @@
 // screenplay.js
 //
-// This component provides custom rendering for screenplay projects.
-// It transforms the display of 'shooting-script.xml' into a paper-like
-// view with shots rendered as Fountain-formatted text, and sticky notes
-// attached to the right margin showing related targets for each shot.
+// This component provides a custom tab view for screenplay projects.
+// It renders 'shooting-script.xml' as a paper-like view with shots
+// formatted as Fountain text, and sticky notes showing related targets.
+//
+// This is a standalone tab component that:
+// 1. Registers a "Screenplay" tab in the main pane
+// 2. Connects to /monitor_files SSE to get shooting-script.xml content
+// 3. Parses the XML to extract <shot> elements
+// 4. Renders each shot as Fountain HTML on a "paper" background
+// 5. Creates sticky notes with shot metadata and related targets
+// 6. Uses standard node/component system for overlays and build menus
 //
 // Dependencies:
 // - fountain.min.js must be loaded before this script
-// - images.js and videos.js must be loaded before this script for media APIs
-// - build.js must be loaded after this script for build menus
-//
-// The component:
-// 1. Detects nodes with path 'shooting-script.xml'
-// 2. Parses the XML to extract <shot> elements
-// 3. Renders each shot as Fountain HTML on a "paper" background
-// 4. Creates sticky notes with shot metadata and related targets
-// 5. Uses the standard node/component system for overlays and build menus
-// 6. Supports inline editing of shot text with double-click
-// 7. Provides hover menu for edit, delete, add above/below operations
-// 8. Provides merge button between shots to combine adjacent shots
+// - images.js and videos.js must be loaded for media APIs
+// - build.js must be loaded for build menus
+// - overlay.js must be loaded for status overlays
 
 (function() {
-    // Track screenplay nodes
-    const screenplayNodes = new Map();
-    // Map from target path to its DOM element
-    const targetElements = new Map();
-    // Cache for target content/metadata
-    const targetCache = new Map();
-    // Track paths we've created to avoid re-notifying on our own updates
-    const ownedPaths = new Set();
-    // Store current shots data for reconstruction
+    // Container for the screenplay tab
+    let container = null;
+    // Store current shots data for editing operations
     let currentShots = [];
-    // Store the screenplay node element
-    let screenplayNodeEl = null;
+    // Map from target path to its DOM element for status updates
+    const targetElements = new Map();
 
     // Target patterns for each shot
     const SHOT_TARGETS = {
@@ -162,7 +154,6 @@
 
         textarea.focus();
 
-        // Handle escape key
         textarea.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 e.preventDefault();
@@ -181,7 +172,6 @@
         const shot = currentShots[shotIndex];
         if (!shot) return;
 
-        // Update the shot data
         const updatedShots = currentShots.map((s, i) => {
             if (i === shotIndex) {
                 return { ...s, text: newText };
@@ -189,12 +179,10 @@
             return s;
         });
 
-        // Show loading state
         contentDiv.innerHTML = '<div class="status-spinner"></div>';
 
         saveScreenplay(updatedShots, 'edit shot_id=' + shot.shotId)
             .then(() => {
-                // Success - SSE will trigger re-render
                 shotDiv.classList.remove('editing');
                 contentDiv.classList.remove('editing');
             })
@@ -211,7 +199,6 @@
 
         if (!confirm('Are you sure you want to delete shot "' + shot.shotId + '"?')) return;
 
-        // Find shots that reference this one and update them
         const deletedRefShot = shot.referenceShot;
         const updatedShots = currentShots
             .filter((s, i) => i !== shotIndex)
@@ -234,20 +221,15 @@
         const secondShot = currentShots[secondIndex];
         if (!firstShot || !secondShot) return;
 
-        // Merge text: concatenate with newline
         const mergedText = firstShot.text + '\n' + secondShot.text;
 
-        // Build updated shots array
         const updatedShots = [];
         for (let i = 0; i < currentShots.length; i++) {
             if (i === firstIndex) {
-                // Use first shot with merged text, keep original reference_shot
                 updatedShots.push({ ...firstShot, text: mergedText });
             } else if (i === secondIndex) {
-                // Skip second shot (it's being merged)
                 continue;
             } else {
-                // Update any shots that referenced the second shot
                 const s = currentShots[i];
                 if (s.referenceShot === secondShot.shotId) {
                     updatedShots.push({ ...s, referenceShot: firstShot.shotId });
@@ -271,7 +253,6 @@
         const existingIds = new Set(currentShots.map(s => s.shotId));
         const newShotId = generateNewShotId(shot.shotId, 'above', existingIds);
 
-        // Create temporary shot for editing
         const newShot = {
             shotId: newShotId,
             referenceShot: shot.referenceShot,
@@ -279,13 +260,10 @@
             isNew: true
         };
 
-        // Insert temporary shot and update original's reference
         const tempShots = [...currentShots];
         tempShots.splice(shotIndex, 0, newShot);
-        // Update original shot's reference to point to new shot
         tempShots[shotIndex + 1] = { ...tempShots[shotIndex + 1], referenceShot: newShotId };
 
-        // Render with new shot in edit mode
         renderShotsWithNewShot(tempShots, shotIndex, newShotId);
     }
 
@@ -296,7 +274,6 @@
         const existingIds = new Set(currentShots.map(s => s.shotId));
         const newShotId = generateNewShotId(shot.shotId, 'below', existingIds);
 
-        // Create temporary shot for editing
         const newShot = {
             shotId: newShotId,
             referenceShot: shot.shotId,
@@ -304,34 +281,29 @@
             isNew: true
         };
 
-        // Insert temporary shot after current
         const tempShots = [...currentShots];
         tempShots.splice(shotIndex + 1, 0, newShot);
 
-        // Update any shots that referenced the original to reference the new shot
         for (let i = 0; i < tempShots.length; i++) {
             if (i !== shotIndex + 1 && tempShots[i].referenceShot === shot.shotId) {
                 tempShots[i] = { ...tempShots[i], referenceShot: newShotId };
             }
         }
 
-        // Render with new shot in edit mode
         renderShotsWithNewShot(tempShots, shotIndex + 1, newShotId);
     }
 
     function renderShotsWithNewShot(tempShots, newShotIndex, newShotId) {
-        const container = screenplayNodeEl.querySelector('.screenplay-container');
-        if (!container) return;
+        const paperContainer = container.querySelector('.screenplay-paper');
+        if (!paperContainer) return;
 
-        // Clear and re-render
         clearTargetRegistrations();
-        container.innerHTML = '';
+        paperContainer.innerHTML = '';
 
         tempShots.forEach((shot, index) => {
             const shotEl = createShotElement(shot, index, tempShots);
-            container.appendChild(shotEl);
+            paperContainer.appendChild(shotEl);
 
-            // If this is the new shot, start editing immediately
             if (index === newShotIndex && shot.isNew) {
                 shotEl.classList.add('new-shot');
                 startEditingNewShot(shotEl, tempShots, newShotIndex, newShotId);
@@ -358,8 +330,7 @@
         cancelBtn.textContent = 'Cancel';
         cancelBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            // Re-render without the new shot
-            transformToScreenplay(screenplayNodeEl);
+            renderScreenplay();
         });
 
         const submitBtn = document.createElement('button');
@@ -379,17 +350,15 @@
 
         textarea.focus();
 
-        // Handle escape key
         textarea.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 e.preventDefault();
-                transformToScreenplay(screenplayNodeEl);
+                renderScreenplay();
             }
         });
     }
 
     function submitNewShot(tempShots, newShotIndex, newShotId, text) {
-        // Update the text and remove isNew flag
         const finalShots = tempShots.map((s, i) => {
             if (i === newShotIndex) {
                 const { isNew, ...rest } = s;
@@ -402,7 +371,7 @@
             .catch(error => {
                 console.error('Error adding shot:', error);
                 alert('Failed to add shot: ' + error.message);
-                transformToScreenplay(screenplayNodeEl);
+                renderScreenplay();
             });
     }
 
@@ -410,7 +379,6 @@
         const menu = document.createElement('div');
         menu.className = 'shot-hover-menu';
 
-        // Edit button
         const editBtn = document.createElement('button');
         editBtn.innerHTML = '✏️';
         editBtn.title = 'Edit shot';
@@ -421,7 +389,6 @@
         });
         menu.appendChild(editBtn);
 
-        // Add above button
         const addAboveBtn = document.createElement('button');
         addAboveBtn.innerHTML = '➕⬆️';
         addAboveBtn.title = 'Add shot above';
@@ -431,7 +398,6 @@
         });
         menu.appendChild(addAboveBtn);
 
-        // Add below button
         const addBelowBtn = document.createElement('button');
         addBelowBtn.innerHTML = '➕⬇️';
         addBelowBtn.title = 'Add shot below';
@@ -441,7 +407,6 @@
         });
         menu.appendChild(addBelowBtn);
 
-        // Delete button
         const deleteBtn = document.createElement('button');
         deleteBtn.innerHTML = '🗑️';
         deleteBtn.title = 'Delete shot';
@@ -474,11 +439,9 @@
         const metaGrid = document.createElement('div');
         metaGrid.className = 'sticky-meta-grid';
 
-        // Static metadata rows
         metaGrid.appendChild(createMetaRow('SHOT_ID', shot.shotId));
         metaGrid.appendChild(createMetaRow('REFERENCE_SHOT', shot.referenceShot || '—'));
 
-        // Target rows - these are tree nodes that get component callbacks
         const shotTypePath = getTargetPath('shot_type', shot.shotId);
         metaGrid.appendChild(createTargetRow('shot_type', shotTypePath));
 
@@ -487,7 +450,6 @@
 
         sticky.appendChild(metaGrid);
 
-        // Media section
         const mediaSection = document.createElement('div');
         mediaSection.className = 'sticky-media-section';
 
@@ -519,10 +481,11 @@
     }
 
     function createTargetRow(label, targetPath) {
+        // Create a standard tree-node that other components can hook into
         const row = document.createElement('div');
         row.className = 'sticky-meta-row sticky-target-row tree-node path leaf';
         row.dataset.path = targetPath;
-        // Do not set data-is-target here - these are path nodes that may or may not exist yet
+        row.dataset.isTarget = 'true';
 
         const labelSpan = document.createElement('span');
         labelSpan.className = 'sticky-meta-label';
@@ -535,36 +498,22 @@
         row.appendChild(valueSpan);
 
         targetElements.set(targetPath, row);
-        ownedPaths.add(targetPath);
 
-        // Apply cached data if available
-        const cached = targetCache.get(targetPath);
-        if (cached) {
-            if (cached.content) valueSpan.textContent = cached.content.trim() || '—';
-            row.dataset.status = cached.status;
-            // If we have cached data with a real status, this is a path not a target
-            if (cached.status && cached.status !== 'unknown') {
-                delete row.dataset.isTarget;
-            }
-        } else {
-            // No cached data means this is a target (file doesn't exist yet)
-            row.dataset.isTarget = 'true';
-        }
-
-        // Notify components (deferred to ensure all are registered)
+        // Notify components that this node exists
         setTimeout(() => {
-            window.notifyComponents(row, row.dataset.status || 'unknown', true);
+            window.notifyComponents(row, 'unknown', true);
         }, 0);
 
         return row;
     }
 
     function createMediaNode(targetPath, filename, mimeType) {
-        const container = document.createElement('div');
-        container.className = 'sticky-media-container tree-node path leaf expanded';
-        container.dataset.path = targetPath;
-        container.dataset.mimeType = mimeType;
-        // Start as a target (file may not exist); will be updated when we get status
+        // Create a standard tree-node for media that components can hook into
+        const nodeEl = document.createElement('div');
+        nodeEl.className = 'sticky-media-container tree-node path leaf expanded';
+        nodeEl.dataset.path = targetPath;
+        nodeEl.dataset.mimeType = mimeType;
+        nodeEl.dataset.isTarget = 'true';
 
         const header = document.createElement('div');
         header.className = 'tree-header';
@@ -579,52 +528,48 @@
         label.textContent = filename;
         header.appendChild(label);
 
-        container.appendChild(header);
+        nodeEl.appendChild(header);
 
-        // Media wrapper - matches standard image/video container pattern
+        // Create container for media - images.js/videos.js will populate this
         const isImage = mimeType.startsWith('image/');
         const mediaWrapper = document.createElement('div');
         mediaWrapper.className = isImage ? 'image-container' : 'video-container';
-        container.appendChild(mediaWrapper);
+        nodeEl.appendChild(mediaWrapper);
 
         if (isImage) {
-            container.classList.add('has-image');
-            // Register with global image system
-            window.registerImageContainer(targetPath, mediaWrapper, 'leaf-image');
+            nodeEl.classList.add('has-image');
+            if (window.registerImageContainer) {
+                window.registerImageContainer(targetPath, mediaWrapper, 'leaf-image');
+            }
         } else {
-            container.classList.add('has-video');
-            // Register with global video system
-            window.registerVideoContainer(targetPath, mediaWrapper, 'leaf-video');
+            nodeEl.classList.add('has-video');
+            if (window.registerVideoContainer) {
+                window.registerVideoContainer(targetPath, mediaWrapper, 'leaf-video');
+            }
         }
 
-        targetElements.set(targetPath, container);
-        ownedPaths.add(targetPath);
+        targetElements.set(targetPath, nodeEl);
 
-        // Load media if cached and available
-        const cached = targetCache.get(targetPath);
-        if (cached && (cached.status === 'fresh' || cached.status === 'stale')) {
-            container.dataset.status = cached.status;
-            // File exists, so this is a path not a target
-            delete container.dataset.isTarget;
-            loadMedia(targetPath, isImage);
-        } else {
-            // No data or unknown status - treat as target
-            container.dataset.isTarget = 'true';
-        }
-
+        // Notify components that this node exists
         setTimeout(() => {
-            window.notifyComponents(container, container.dataset.status || 'unknown', true);
+            window.notifyComponents(nodeEl, 'unknown', true);
         }, 0);
 
-        return container;
+        return nodeEl;
     }
 
-    function loadMedia(path, isImage) {
-        if (isImage) {
-            window.fetchImage(path, false).catch(() => {});
-        } else {
-            window.fetchVideo(path, false).catch(() => {});
+    function clearTargetRegistrations() {
+        for (const [path, el] of targetElements) {
+            const imgContainer = el.querySelector('.image-container');
+            const vidContainer = el.querySelector('.video-container');
+            if (imgContainer && window.unregisterImageContainer) {
+                window.unregisterImageContainer(path, imgContainer);
+            }
+            if (vidContainer && window.unregisterVideoContainer) {
+                window.unregisterVideoContainer(path, vidContainer);
+            }
         }
+        targetElements.clear();
     }
 
     function createShotElement(shot, index, shotsArray) {
@@ -633,14 +578,12 @@
         shotDiv.dataset.shotId = shot.shotId;
         shotDiv.dataset.shotIndex = index;
 
-        // Add hover menu
         shotDiv.appendChild(createHoverMenu(index));
 
         const content = document.createElement('div');
         content.className = 'screenplay-shot-content';
         content.innerHTML = renderFountain(shot.text);
 
-        // Double-click to edit
         content.addEventListener('dblclick', (e) => {
             e.stopPropagation();
             startEditingShot(shotDiv, index);
@@ -648,18 +591,15 @@
 
         shotDiv.appendChild(content);
 
-        // Only add sticky note for non-new shots
         if (!shot.isNew) {
             shotDiv.appendChild(createStickyNote(shot));
         } else {
-            // Placeholder sticky for new shots
             const placeholder = document.createElement('div');
             placeholder.className = 'screenplay-sticky-note';
             placeholder.innerHTML = '<em>New shot</em>';
             shotDiv.appendChild(placeholder);
         }
 
-        // Add merge button if not the last shot
         if (index < shotsArray.length - 1 && !shot.isNew) {
             shotDiv.appendChild(createMergeButton(index));
         }
@@ -667,167 +607,127 @@
         return shotDiv;
     }
 
-    function clearTargetRegistrations() {
-        const oldData = screenplayNodes.get('shooting-script.xml');
-        if (oldData) {
-            for (const p of oldData.shotPaths) {
-                const el = targetElements.get(p);
-                if (el) {
-                    const imgContainer = el.querySelector('.image-container');
-                    const vidContainer = el.querySelector('.video-container');
-                    if (imgContainer) window.unregisterImageContainer(p, imgContainer);
-                    if (vidContainer) window.unregisterVideoContainer(p, vidContainer);
-                }
-                targetElements.delete(p);
-                ownedPaths.delete(p);
-            }
-        }
-    }
+    function renderScreenplay() {
+        if (!container) return;
 
-    function transformToScreenplay(nodeEl) {
-        const path = nodeEl.dataset.path;
-        if (path !== 'shooting-script.xml') return;
-
-        screenplayNodeEl = nodeEl;
-        nodeEl.classList.add('screenplay-node', 'expanded');
-
-        const content = nodeEl.dataset.content;
-        if (!content) return;
-
-        const shots = parseScreenplayXml(content);
-        if (shots.length === 0) return;
-
-        // Store current shots for editing operations
-        currentShots = shots;
-
-        let container = nodeEl.querySelector('.screenplay-container');
-        if (!container) {
-            container = document.createElement('div');
-            container.className = 'screenplay-container';
-            const header = nodeEl.querySelector('.tree-header');
-            if (header) header.after(container);
-            else nodeEl.appendChild(container);
+        let paperContainer = container.querySelector('.screenplay-paper');
+        if (!paperContainer) {
+            paperContainer = document.createElement('div');
+            paperContainer.className = 'screenplay-paper';
+            container.appendChild(paperContainer);
         }
 
-        // Clear old registrations
         clearTargetRegistrations();
+        paperContainer.innerHTML = '';
 
-        container.innerHTML = '';
-        const shotPaths = [];
+        if (currentShots.length === 0) {
+            paperContainer.innerHTML = '<div class="screenplay-empty">No screenplay loaded. Waiting for shooting-script.xml...</div>';
+            return;
+        }
 
-        shots.forEach((shot, index) => {
-            container.appendChild(createShotElement(shot, index, shots));
-            Object.keys(SHOT_TARGETS).forEach(key => {
-                shotPaths.push(getTargetPath(key, shot.shotId));
-            });
+        currentShots.forEach((shot, index) => {
+            paperContainer.appendChild(createShotElement(shot, index, currentShots));
         });
-
-        screenplayNodes.set(path, { nodeEl, shotPaths });
-
-        const metadata = nodeEl.querySelector(':scope > .metadata');
-        if (metadata) metadata.style.display = 'none';
     }
 
-    function updateTargetElement(path, content, status, mimeType) {
-        const element = targetElements.get(path);
-        if (!element) return;
+    function handleScreenplayUpdate(content) {
+        if (!content) {
+            currentShots = [];
+        } else {
+            currentShots = parseScreenplayXml(content);
+        }
+        renderScreenplay();
+    }
 
-        element.dataset.status = status;
+    function handleTargetUpdate(path, metadata, status) {
+        const el = targetElements.get(path);
+        if (!el) return;
 
-        // Determine if this is a target (doesn't exist) or a path (exists)
-        // Files with status fresh/stale/building/queued exist or are being built
+        // Update status
+        el.dataset.status = status;
+
+        // Determine if this is a target or existing path
         const isExistingPath = status === 'fresh' || status === 'stale';
         if (isExistingPath) {
-            // This is an existing path, not a target
-            delete element.dataset.isTarget;
+            delete el.dataset.isTarget;
         } else if (status === 'deleted' || status === 'unknown') {
-            // File doesn't exist, treat as target
-            element.dataset.isTarget = 'true';
-        }
-        // For building/queued, keep current state
-
-        // Update text value display
-        const valueSpan = element.querySelector('.sticky-target-value');
-        if (valueSpan && content) {
-            valueSpan.textContent = content.trim() || '—';
+            el.dataset.isTarget = 'true';
         }
 
-        // Handle media updates - use global fetch functions which handle container refresh
-        const isImage = element.dataset.mimeType?.startsWith('image/');
-        const isVideo = element.dataset.mimeType?.startsWith('video/');
-        
+        // Update text value display for text targets
+        const valueSpan = el.querySelector('.sticky-target-value');
+        if (valueSpan && metadata.content) {
+            valueSpan.textContent = metadata.content.trim() || '—';
+        }
+
+        // Update content data attribute
+        if (metadata.content !== undefined) {
+            el.dataset.content = metadata.content;
+        }
+
+        // Handle media loading via global APIs
+        const isImage = el.dataset.mimeType?.startsWith('image/');
+        const isVideo = el.dataset.mimeType?.startsWith('video/');
+
         if (status === 'fresh') {
-            // Force refresh media
-            if (isImage) {
+            if (isImage && window.fetchImage) {
                 window.fetchImage(path, true).catch(() => {});
-            } else if (isVideo) {
+            } else if (isVideo && window.fetchVideo) {
                 window.fetchVideo(path, true).catch(() => {});
             }
         } else if (status === 'deleted') {
-            // Clear media from containers
-            if (isImage) {
+            if (isImage && window.clearImageFromContainers) {
                 window.clearImageFromContainers(path);
-            } else if (isVideo) {
+            } else if (isVideo && window.clearVideoFromContainers) {
                 window.clearVideoFromContainers(path);
             }
         } else if (isExistingPath) {
-            // Load media if not already loaded
-            if (isImage) {
+            if (isImage && window.fetchImage) {
                 window.fetchImage(path, false).catch(() => {});
-            } else if (isVideo) {
+            } else if (isVideo && window.fetchVideo) {
                 window.fetchVideo(path, false).catch(() => {});
             }
         }
 
         // Notify other components (overlay, build) about status change
-        // but don't trigger ourselves again
-        window.notifyComponents(element, status, false);
+        window.notifyComponents(el, status, false);
     }
 
     function isScreenplayTargetPath(path) {
         const match = path.match(/^shots\/([^/]+)\//);
         if (!match) return false;
         const shotId = match[1];
-        return Object.values(SHOT_TARGETS).some(pattern => 
+        return Object.values(SHOT_TARGETS).some(pattern =>
             path === pattern.replace('$SHOT_ID', shotId)
         );
     }
 
-    // Register component callback
-    window.registerComponent(function(nodeEl, status, isNew) {
-        const path = nodeEl.dataset.path;
-        if (!path) return;
+    function init(tabContainer) {
+        container = document.createElement('div');
+        container.className = 'screenplay-container';
+        tabContainer.appendChild(container);
 
-        // Handle shooting-script.xml
-        if (path === 'shooting-script.xml') {
-            if (isNew) transformToScreenplay(nodeEl);
-            else if (status === 'fresh') transformToScreenplay(nodeEl);
-            return;
-        }
+        // Register SSE handler for file updates
+        window.registerPathHandler(function(path, metadata, isNew) {
+            if (path === 'shooting-script.xml') {
+                handleScreenplayUpdate(metadata.content);
+                return;
+            }
 
-        // Skip if this is one of our own nodes - we handle them via SSE
-        if (ownedPaths.has(path)) return;
-
-        // Handle screenplay target paths from the main tree
-        if (isScreenplayTargetPath(path)) {
-            targetCache.set(path, {
-                content: nodeEl.dataset.content || '',
-                status: status,
-                mimeType: nodeEl.dataset.mimeType || ''
-            });
-            updateTargetElement(path, nodeEl.dataset.content || '', status, nodeEl.dataset.mimeType || '');
-        }
-    });
-
-    // Register SSE handler for screenplay targets
-    window.registerPathHandler(function(path, metadata, isNew) {
-        if (!isScreenplayTargetPath(path)) return;
-
-        targetCache.set(path, {
-            content: metadata.content || '',
-            status: metadata.status,
-            mimeType: metadata['mime-type'] || ''
+            if (isScreenplayTargetPath(path)) {
+                handleTargetUpdate(path, metadata, metadata.status);
+            }
         });
-        updateTargetElement(path, metadata.content || '', metadata.status, metadata['mime-type'] || '');
+
+        // Initial render with empty state
+        renderScreenplay();
+    }
+
+    // Register as a tab
+    window.registerTab({
+        id: 'screenplay',
+        label: 'Screenplay',
+        pane: 'main',
+        render: init
     });
 })();
