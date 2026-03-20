@@ -142,11 +142,13 @@ class BuildState(Routable):
         asyncio.set_event_loop(self.loop)
 
         # the states
-        self.contexts_unresolved = set()
-        self.contexts_buildable = PrioritySet(priority_func=lambda x: x.build_priority())
-        self.contexts_waiting = set()
-        self.contexts_built = set()
-        self.contexts_notbuilt = set()
+        self.contexts = {
+            'unresolved': set(),
+            'buildable': set(),
+            'waiting': set(),
+            'built': set(),
+            'notbuilt': set(),
+        }
 
         # store the full dependency graph of BuildContext instances
         # keys: a BuildContext
@@ -209,13 +211,8 @@ class BuildState(Routable):
             assert job not in self.jobs['succeeded']
 
         # every context/path is in a job
-        for state in [
-                self.contexts_unresolved,
-                set(self.contexts_buildable.to_list_nopriority()),
-                self.contexts_waiting,
-                self.contexts_built,
-                ]:
-            for context in state:
+        for state_name in ['unresolved', 'buildable', 'waiting', 'built']:
+            for context in self.contexts[state_name]:
                 assert context in self.context_to_job
                 assert context in self.context_to_job[context].contexts
 
@@ -264,22 +261,16 @@ class BuildState(Routable):
 
     def _finalize_jobs(self):
         self.assert_invariants_jobs()
-        states = [
-                self.contexts_unresolved,
-                set(self.contexts_buildable.to_list_nopriority()),
-                self.contexts_waiting,
-                ]
         jobs_running = self.jobs['running']
         self.jobs['running'] = set()
         for job in jobs_running:
             done = True
             for context in job.contexts:
-                #for state in states:
-                if context in self.contexts_unresolved:
+                if context in self.contexts['unresolved']:
                     done = False
-                if context in self.contexts_buildable.to_list_nopriority():
+                if context in self.contexts['buildable']:
                     done = False
-                if context in self.contexts_waiting and context.mode != 'dryrun':
+                if context in self.contexts['waiting'] and context.mode != 'dryrun':
                     done = False
             if done:
                 logger.info(f'finalizing job {job.job_id}')
@@ -295,25 +286,16 @@ class BuildState(Routable):
 
     def assert_invariants(self):
         # no context can be in more than one state
-        states = [
-                self.contexts_unresolved,
-                set(self.contexts_buildable.to_list_nopriority()),
-                self.contexts_waiting,
-                self.contexts_built,
-                ]
-        for i, state in enumerate(states):
-            # this mildly fancy code maintains the O(1) lookup performance for sets
-            # this fanciness is needed for the assert checks to run in reasonable time
-            # more naive solutions are quadratic,
-            # but this solutions is linear runtime
-            states_minus_i = set().union(*(s for j, s in enumerate(states) if j != i))
-            for context in state:
-                assert context not in states_minus_i
+        for state1 in self.contexts.keys():
+            for state2 in self.contexts.keys():
+                if state1 != state2:
+                    for context in self.contexts[state1]:
+                        assert context not in self.contexts[state2], f'state1={state1}, state2={state2}, context={context}'
 
         # every built_path has a corresponding context (and vice versa)
         # FIXME:
         # removed for testing; add back in
-        #context_paths = set([context.path for context in self.contexts_built])
+        #context_paths = set([context.path for context in self.contexts['built']])
         #assert context_paths == set(self.file_manager.get_fresh_paths())
 
     ########################################
@@ -330,37 +312,38 @@ class BuildState(Routable):
         if show_len:
             f = len
         return {
-            'contexts_unresolved': f(self.contexts_unresolved),
-            'contexts_buildable': f(self.contexts_buildable.to_list()),
-            'contexts_waiting': f(self.contexts_waiting),
-            'contexts_built': f(self.contexts_built),
-            'contexts_notbuilt': f(self.contexts_notbuilt),
+            'contexts_unresolved': f(self.contexts['unresolved']),
+            'contexts_buildable': f(self.contexts['buildable']),
+            'contexts_waiting': f(self.contexts['waiting']),
+            'contexts_built': f(self.contexts['built']),
+            'contexts_notbuilt': f(self.contexts['notbuilt']),
             }
 
     def debug_short(self, submessage=False):
         logger.debug({'BuildState': {
-            'len(self.contexts_unresolved)': len(self.contexts_unresolved),
-            'len(self.contexts_buildable)': len(self.contexts_buildable.to_list()),
-            'len(self.contexts_waiting)': len(self.contexts_waiting),
-            'len(self.contexts_built)': len(self.contexts_built),
+            'len(self.contexts[unresolved])': len(self.contexts['unresolved']),
+            'len(self.contexts[buildable])': len(self.contexts['buildable']),
+            'len(self.contexts[waiting])': len(self.contexts['waiting']),
+            'len(self.contexts[built])': len(self.contexts['built']),
             }}, submessage=submessage)
 
     def _state_as_dict(self, longform=True):
+            #logger.info(f'hash: {hash(context)}', submessage=True)
         '''
         Convert the internal state into dictionary suitable for yaml conversion.
         Return a deepcopy so that the returned value does not get modified as future processing happens.
         '''
         if longform:
             yaml_dict = {
-                'buildable(long)': [context.to_dict() for priority, context in self.contexts_buildable.to_list()],
-                'waiting(long)': [context.to_dict() for context in self.contexts_waiting],
-                'unresolved(long)': [context.to_dict() for  context in self.contexts_unresolved],
+                'buildable(long)': [context.to_dict() for context in self.contexts['buildable']],
+                'waiting(long)': [context.to_dict() for context in self.contexts['waiting']],
+                'unresolved(long)': [context.to_dict() for  context in self.contexts['unresolved']],
                 }
         else:
             yaml_dict = {
-                'buildable': sorted([context.denormalized_target() for priority, context in self.contexts_buildable.to_list()]),
-                'waiting': sorted([context.denormalized_target() for context in self.contexts_waiting]),
-                'unresolved': sorted([context.denormalized_target() for  context in self.contexts_unresolved]),
+                'buildable': sorted([context.denormalized_target() for context in self.contexts['buildable']]),
+                'waiting': sorted([context.denormalized_target() for context in self.contexts['waiting']]),
+                'unresolved': sorted([context.denormalized_target() for  context in self.contexts['unresolved']]),
                 }
         return copy.deepcopy(yaml_dict)
 
@@ -423,13 +406,13 @@ class BuildState(Routable):
         NOTE:
         We do not implmement __hash__ because this object is mutable and not hashable.
         '''
-        states = [
-            self.contexts_built,
-            self.contexts_buildable,
-            self.contexts_waiting,
-            self.contexts_unresolved,
-            ]
-        return hash(freeze(states))
+        state_sets = [
+            self.contexts['built'],
+            self.contexts['buildable'],
+            self.contexts['waiting'],
+            self.contexts['unresolved'],
+        ]
+        return hash(freeze(state_sets))
 
     ########################################
     # build files
@@ -465,37 +448,37 @@ class BuildState(Routable):
             # repeating the same cycle of states forever;
             # in theory, this should not be needed,
             # and it is a sanity debug check to ensure our state transitions work correctly
-            states = set()
-            #self.debug_print(f'iter={len(states)}')
+            state_hashes = set()
+            #self.debug_print(f'iter={len(state_hashes)}')
             while not self.is_done():
                 state0 = self._state_as_dict()
 
                 # perform all state transitions
                 self.process_all_dependencies()
-                #state0 = self.debug_statediff(state0, f'iter={len(states)} -- deps')
-                #self.debug_print(f'iter={len(states)} -- deps')
+                #state0 = self.debug_statediff(state0, f'iter={len(state_hashes)} -- deps')
+                #self.debug_print(f'iter={len(state_hashes)} -- deps')
                 self.assert_invariants()
                 self.debug_short()
                 self.process_all_buildable()
-                #state0 = self.debug_statediff(state0, f'iter={len(states)} -- build')
-                #self.debug_print(f'iter={len(states)} -- build')
+                #state0 = self.debug_statediff(state0, f'iter={len(state_hashes)} -- build')
+                #self.debug_print(f'iter={len(state_hashes)} -- build')
                 self.assert_invariants()
                 self.process_all_variable()
-                #state0 = self.debug_statediff(state0, f'iter={len(states)} -- vars')
-                #self.debug_print(f'iter={len(states)} -- vars')
+                #state0 = self.debug_statediff(state0, f'iter={len(state_hashes)} -- vars')
+                #self.debug_print(f'iter={len(state_hashes)} -- vars')
                 self.assert_invariants()
-                #self.debug_print(f'iter={len(states) + 1}')
+                #self.debug_print(f'iter={len(state_hashes) + 1}')
 
                 self._finalize_jobs()
 
                 # sanity infinite loop check
-                state = self._state_hash()
-                if state in states:
+                state_hash = self._state_hash()
+                if state_hash in state_hashes:
                     all_dryrun = True
                     for context in itertools.chain(
-                            self.contexts_buildable.to_list_nopriority(),
-                            self.contexts_waiting,
-                            self.contexts_unresolved,
+                            self.contexts['buildable'],
+                            self.contexts['waiting'],
+                            self.contexts['unresolved'],
                             ):
                         if context.mode != 'dryrun':
                             all_dryrun = False
@@ -506,14 +489,14 @@ class BuildState(Routable):
                         #logger.warning('evaluated as far as dryrun will allow')
                         #logger.warning(self.get_states(show_len=True), submessage=True)
                     break
-                states.add(state)
+                state_hashes.add(state_hash)
             self._finalize_jobs()
 
     def is_done(self):
         return not any([
-            len(self.contexts_unresolved) > 0,
-            len(self.contexts_buildable) > 0,
-            len(self.contexts_waiting) > 0,
+            len(self.contexts['unresolved']) > 0,
+            len(self.contexts['buildable']) > 0,
+            len(self.contexts['waiting']) > 0,
             ])
 
     ########################################
@@ -635,7 +618,7 @@ class BuildState(Routable):
                   NOTE:
                   Set to True only when the context has been "temporarily removed" from a state for processing.
         '''
-        def maybe_add(queue):
+        def maybe_add(state_name):
             # helper function that tracks which contexts have been added;
             # because contexts are immutable:
             # if the same context has been added to the same state,
@@ -650,17 +633,10 @@ class BuildState(Routable):
             # we require that variable evaluation be idempotent and side-effect-free
             if not hasattr(self, '_contexts_history'):
                 self._contexts_history = set()
-            if not force_add and (queue, context) in self._contexts_history:
+            if not force_add and (state_name, context) in self._contexts_history:
                 return
-            self._contexts_history.add((queue, context))
-            if queue == 'waiting':
-                self.contexts_waiting.add(context)
-            elif queue == 'buildable':
-                self.contexts_buildable.add(context)
-            elif queue == 'unresolved':
-                self.contexts_unresolved.add(context)
-            else:
-                assert False
+            self._contexts_history.add((state_name, context))
+            self.contexts[state_name].add(context)
 
         if context != required_for:
             self.required_for[context].append(required_for)
@@ -680,7 +656,7 @@ class BuildState(Routable):
 
             # if we've already built the context,
             # do not add it anywhere
-            if context in self.contexts_built:
+            if context in self.contexts['built']:
                 return
 
             # if we haven't built the context,
@@ -701,8 +677,8 @@ class BuildState(Routable):
     def process_all_waiting(self):
         logger.debug(f'process_all_waiting()')
         self.debug_short(submessage=True)
-        waiting0 = self.contexts_waiting
-        self.contexts_waiting = set()
+        waiting0 = self.contexts['waiting']
+        self.contexts['waiting'] = set()
         for context in waiting0:
             self.process_waiting(context, waiting0)
         self.debug_short(submessage=True)
@@ -737,9 +713,9 @@ class BuildState(Routable):
                     # and check if there are any non-built matches
                     all_targets_built = True
                     for loop_context in itertools.chain(
-                            self.contexts_unresolved,
-                            self.contexts_buildable.to_list_nopriority(),
-                            self.contexts_waiting,
+                            self.contexts['unresolved'],
+                            self.contexts['buildable'],
+                            self.contexts['waiting'],
                             waiting0,
                             ):
                         if denormalized_target == loop_context.normalized_target and loop_context != context:
@@ -748,7 +724,7 @@ class BuildState(Routable):
                         dependencies_building1.append(dep)
                     else:
                         dep_targets = freeze([dep['target'] for dep in context.config['dependencies']])
-                        for loop_context in self.contexts_built:
+                        for loop_context in self.contexts['built']:
                             dep1 = dict(copy.deepcopy(dep))
                             dep1['target'] = loop_context.path
                             matches = match_pattern_starstar(dep_targets, dep1['target'])
@@ -756,7 +732,7 @@ class BuildState(Routable):
                                 # FIXME:
                                 # the if statement is needed for when fac builds more than one target at a time
                                 # (either through demon mode or multiple cmd line args)
-                                # in that case, contexts_built will contain paths that do not necessarily correspond to the current context,
+                                # in that case, states['built'] will contain paths that do not necessarily correspond to the current context,
                                 # and the if statement ensures that only those paths for this context will be added;
                                 # the problem (and thing to fix) is that the match_pattern_starstar function is slow
                                 # and should not be in an inner loop
@@ -806,12 +782,9 @@ class BuildState(Routable):
         '''
         status, do_build = context.get_status()
         logger.info(f'{status} {context.path}')
-        #required_for = self.trace_required_for(context)
-        #logger.info({'required_for': flatten_singletons(required_for)}, submessage=True)
         if context.normalized_target not in self.targets_dict:
             logger.warning(f'target {context.normalized_target} not in self.target_dicts, cannot build', submessage=True)
         else:
-            #logger.info(f'hash: {hash(context)}', submessage=True)
             if do_build:
 
                 # sort portions of context for better logger output
@@ -824,69 +797,42 @@ class BuildState(Routable):
                 await context.build()
 
         if os.path.exists(context.path):
-            self.contexts_built.add(context)
+            self.contexts['built'].add(context)
             self.file_manager.register_context(context, status='fresh')
         else:
             # this should only happen on a dry-run
-            self.contexts_notbuilt.add(context)
+            self.contexts['notbuilt'].add(context)
             self.file_manager.register_context(context, status='does-not-exist')
 
         for postreq in context.config.get('postreqs', []):
             self.add_target(postreq)
 
-    def process_all_buildable(self, max_workers=20, threaded_build=False):
+    def process_all_buildable(self, max_workers=1, parallel_build=True):
         logger.debug(f'process_all_buildable()')
         self.assert_invariants()
         self.process_all_waiting()
         self.assert_invariants()
 
         # NOTE:
-        # we have a threaded and non-threaded implementation of this function;
+        # we have a parallel and non-parallel implementation of this function;
         # both versions should do the exact same thing;
-        # the non-threaded version is simpler (and so easier to understand),
+        # the non-parallel version is simpler (and so easier to understand),
         # and also cannot have race conditions;
-        # it is generally slower because it cannot process builds in parallel,
-        # but is useful for debugging to ensure that the threaded version is correct
-        if not threaded_build:
-            while len(self.contexts_buildable) > 0:
-                context = self.contexts_buildable.pop()
-                self.loop.run_until_complete(self._maybe_build_context(context))
-                self.assert_invariants()
-                self.process_all_waiting()
-                self.assert_invariants()
+        # it is generally slower,
+        # but is useful for debugging to ensure that the parallel version is correct
+        if not parallel_build:
+            while len(self.contexts['buildable']) > 0:
+                buildable0 = self.contexts['buildable']
+                self.contexts['buildable'] = set()
+                for context in buildable0:
+                    self.loop.run_until_complete(self._maybe_build_context(context))
+                    self.assert_invariants()
+                    self.process_all_waiting()
+                    self.assert_invariants()
 
         else:
-            '''
-            from concurrent.futures import ThreadPoolExecutor, as_completed
-
-            # run all build tasks in parallel
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = []
-                while len(self.contexts_buildable) > 0:
-                    context = self.contexts_buildable.pop()
-                    future = executor.submit(asyncio.run, self._maybe_build_context(context))
-                    futures.append(future)
-                executor.shutdown()
-
-            # once all threads have terminated, we raise any exceptions;
-            # if multiple threads raise exceptions, we should see them all;
-            # we allow all threads to finish running and only display errors
-            # after non-erroring threads terminate
-            # (API calls typically bill at the start of the call,
-            # and so this ensures that we do not "waste" the money from an API call
-            # by needlessly discarding the results)
-            exceptions = []
-            for future in futures:
-                try:
-                    future.result()
-                except Exception as e:
-                    exceptions.append(e)
-            if exceptions:
-                raise ExceptionGroup("Exceptions in build threads", exceptions)
-            '''
             # FIXME:
-            # the code above doesn't work correctly;
-            # the code below is a bit more idiomatic,
+            # the code below doesn't seem to work correctly;
             # but still might have bugs;
             # there's still a lot more work to do to make the async code "nice"
             sem = asyncio.Semaphore(max_workers)
@@ -894,9 +840,10 @@ class BuildState(Routable):
                 async with sem:
                     return await self._maybe_build_context(context)
             async def run_all():
-                tasks = [limited(ctx) for ctx in self.contexts_buildable.to_list_nopriority()]
+                tasks = [limited(ctx) for ctx in self.contexts['buildable']]
                 await asyncio.gather(*tasks)
             self.loop.run_until_complete(run_all())
+            self.contexts['buildable'] = set()
 
             # assert all invariants hold
             self.assert_invariants()
@@ -904,8 +851,8 @@ class BuildState(Routable):
             self.assert_invariants()
 
     def process_all_dependencies(self):
-        contexts = self.contexts_unresolved
-        self.contexts_unresolved = set()
+        contexts = self.contexts['unresolved']
+        self.contexts['unresolved'] = set()
         logger.debug(f'process_all_dependencies()')
         with logger.make_subtree():
           for context in contexts:
@@ -1011,17 +958,17 @@ class BuildState(Routable):
 
     def process_all_variable(self):
 
-        contexts = self.contexts_unresolved
-        self.contexts_unresolved = set()
+        contexts = self.contexts['unresolved']
+        self.contexts['unresolved'] = set()
         for context in contexts:
             # do not process contexts that still require dependencies to be built
             if len(context.dependencies_building) > 0:
-                self.contexts_unresolved.add(context)
+                self.contexts['unresolved'].add(context)
                 continue
 
             # do not process contexts that do not need more variables built
             if len(context.variables_unresolved) == 0:
-                self.contexts_unresolved.add(context)
+                self.contexts['unresolved'].add(context)
                 continue
 
             # do not process if dependencies not yet built
@@ -1175,4 +1122,3 @@ class VariableEvaluationError(FACError):
             f"result.stderr={result.stderr}",
             ]
         super().__init__('\n'.join(errorstrs))
-
