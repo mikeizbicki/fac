@@ -1,15 +1,15 @@
 // screenplay.js
 //
 // This component provides a custom tab view for screenplay projects.
-// It renders 'shooting-script.xml' as a paper-like view with shots
+// It renders 'shooting-script.xml' as a paper-like view with beats
 // formatted as Fountain text, and sticky notes showing related targets.
 //
 // This is a standalone tab component that:
 // 1. Registers a "Screenplay" tab in the main pane
 // 2. Connects to /monitor_files SSE to get shooting-script.xml content
-// 3. Parses the XML to extract <shot> elements
-// 4. Renders each shot as Fountain HTML on a "paper" background
-// 5. Creates sticky notes with shot metadata and related targets
+// 3. Parses the XML to extract <beat> elements
+// 4. Renders each beat as Fountain HTML on a "paper" background
+// 5. Creates sticky notes with beat metadata and related targets
 // 6. Uses the nodes.js API for target nodes, getting overlays and build menus for free
 //
 // The nodes.js API handles the path/target duality automatically - when we
@@ -26,41 +26,41 @@
 (function() {
     // Container for the screenplay tab
     let container = null;
-    // Store current shots data for editing operations
-    let currentShots = [];
+    // Store current beats data for editing operations
+    let currentBeats = [];
     // Track paths we've registered for this view
     let registeredPaths = new Set();
 
-    // Target patterns for each shot
-    const SHOT_TARGETS = {
-        shot_type: 'shots/$SHOT_ID/shot_type',
-        length_seconds: 'shots/$SHOT_ID/length_seconds',
-        startframe: 'shots/$SHOT_ID/shot_type=standard/startframe.png',
-        video: 'shots/$SHOT_ID/shot_type=standard/raw.mp4'
+    // Target patterns for each beat
+    const BEAT_TARGETS = {
+        beat_type: 'beats/$BEAT_ID/beat_type',
+        length_seconds: 'beats/$BEAT_ID/length_seconds',
+        startframe: 'beats/$BEAT_ID/beat_type=standard/startframe.png',
+        video: 'beats/$BEAT_ID/beat_type=standard/raw.mp4'
     };
 
-    function getTargetPath(key, shotId) {
-        return SHOT_TARGETS[key].replace('$SHOT_ID', shotId);
+    function getTargetPath(key, beat_id) {
+        return BEAT_TARGETS[key].replace('$BEAT_ID', beat_id);
     }
 
     function parseScreenplayXml(xmlContent) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(xmlContent, 'text/xml');
-        const shots = [];
-        doc.querySelectorAll('shot').forEach(el => {
-            const shotId = el.getAttribute('shot_id');
-            const referenceShot = el.getAttribute('reference_shot') || '';
+        const beats = [];
+        doc.querySelectorAll('beat').forEach(el => {
+            const beat_id = el.getAttribute('beat_id');
+            const continues_from_beat_id = el.getAttribute('continues_from_beat_id') || '';
             const text = el.textContent || '';
-            if (shotId) shots.push({ shotId, referenceShot, text });
+            if (beat_id) beats.push({ beat_id, continues_from_beat_id, text });
         });
-        return shots;
+        return beats;
     }
 
-    function reconstructXml(shots) {
+    function reconstructXml(beats) {
         let xml = '<shooting-script>\n';
-        shots.forEach(shot => {
-            const refAttr = shot.referenceShot ? ` reference_shot="${escapeXmlAttr(shot.referenceShot)}"` : '';
-            xml += `  <shot shot_id="${escapeXmlAttr(shot.shotId)}"${refAttr}>${escapeXmlText(shot.text)}</shot>\n`;
+        beats.forEach(beat => {
+            const refAttr = beat.continues_from_beat_id ? ` continues_from_beat_id="${escapeXmlAttr(beat.continues_from_beat_id)}"` : '';
+            xml += `<beat beat_id="${escapeXmlAttr(beat.beat_id)}"${refAttr}>${escapeXmlText(beat.text)}</beat>\n`;
         });
         xml += '</shooting-script>\n';
         return xml;
@@ -92,19 +92,19 @@
         return fountain.parse(text).html.script || '';
     }
 
-    function generateNewShotId(baseShotId, direction, existingIds) {
+    function generateNewBeatId(baseBeatId, direction, existingIds) {
         const suffix = direction === 'above' ? '-' : '+';
         let counter = 1;
-        let newId = baseShotId + suffix + counter;
+        let newId = baseBeatId + suffix + counter;
         while (existingIds.has(newId)) {
             counter++;
-            newId = baseShotId + suffix + counter;
+            newId = baseBeatId + suffix + counter;
         }
         return newId;
     }
 
-    function saveScreenplay(shots, message) {
-        const xmlContent = reconstructXml(shots);
+    function saveScreenplay(beats, message) {
+        const xmlContent = reconstructXml(beats);
         return fetch('/edit_file/' + encodeURIComponent('shooting-script.xml'), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -116,38 +116,38 @@
         });
     }
 
-    function startEditingShot(shotDiv, shotIndex) {
-        const contentDiv = shotDiv.querySelector('.screenplay-shot-content');
+    function startEditingBeat(beatDiv, beatIndex) {
+        const contentDiv = beatDiv.querySelector('.screenplay-beat-content');
         if (!contentDiv || contentDiv.classList.contains('editing')) return;
 
-        const shot = currentShots[shotIndex];
-        if (!shot) return;
+        const beat = currentBeats[beatIndex];
+        if (!beat) return;
 
-        shotDiv.classList.add('editing');
+        beatDiv.classList.add('editing');
         contentDiv.classList.add('editing');
         const originalHtml = contentDiv.innerHTML;
 
         const textarea = document.createElement('textarea');
-        textarea.className = 'shot-edit-textarea';
-        textarea.value = shot.text;
+        textarea.className = 'beat-edit-textarea';
+        textarea.value = beat.text;
 
         const actions = document.createElement('div');
-        actions.className = 'shot-edit-actions';
+        actions.className = 'beat-edit-actions';
 
         const cancelBtn = document.createElement('button');
-        cancelBtn.className = 'shot-edit-cancel';
+        cancelBtn.className = 'beat-edit-cancel';
         cancelBtn.textContent = 'Cancel';
         cancelBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            cancelEditing(shotDiv, contentDiv, originalHtml);
+            cancelEditing(beatDiv, contentDiv, originalHtml);
         });
 
         const submitBtn = document.createElement('button');
-        submitBtn.className = 'shot-edit-submit';
+        submitBtn.className = 'beat-edit-submit';
         submitBtn.textContent = 'Submit';
         submitBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            submitShotEdit(shotDiv, contentDiv, shotIndex, textarea.value, originalHtml);
+            submitBeatEdit(beatDiv, contentDiv, beatIndex, textarea.value, originalHtml);
         });
 
         actions.appendChild(cancelBtn);
@@ -162,23 +162,23 @@
         textarea.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 e.preventDefault();
-                cancelEditing(shotDiv, contentDiv, originalHtml);
+                cancelEditing(beatDiv, contentDiv, originalHtml);
             }
         });
     }
 
-    function cancelEditing(shotDiv, contentDiv, originalHtml) {
-        shotDiv.classList.remove('editing');
+    function cancelEditing(beatDiv, contentDiv, originalHtml) {
+        beatDiv.classList.remove('editing');
         contentDiv.classList.remove('editing');
         contentDiv.innerHTML = originalHtml;
     }
 
-    function submitShotEdit(shotDiv, contentDiv, shotIndex, newText, originalHtml) {
-        const shot = currentShots[shotIndex];
-        if (!shot) return;
+    function submitBeatEdit(beatDiv, contentDiv, beatIndex, newText, originalHtml) {
+        const beat = currentBeats[beatIndex];
+        if (!beat) return;
 
-        const updatedShots = currentShots.map((s, i) => {
-            if (i === shotIndex) {
+        const updatedBeats = currentBeats.map((s, i) => {
+            if (i === beatIndex) {
                 return { ...s, text: newText };
             }
             return s;
@@ -186,152 +186,152 @@
 
         contentDiv.innerHTML = '<div class="status-spinner"></div>';
 
-        saveScreenplay(updatedShots, 'edit shot_id=' + shot.shotId)
+        saveScreenplay(updatedBeats, 'edit beat_id=' + beat.beat_id)
             .then(() => {
-                shotDiv.classList.remove('editing');
+                beatDiv.classList.remove('editing');
                 contentDiv.classList.remove('editing');
             })
             .catch(error => {
-                console.error('Error saving shot edit:', error);
+                console.error('Error saving beat edit:', error);
                 alert('Failed to save: ' + error.message);
-                cancelEditing(shotDiv, contentDiv, originalHtml);
+                cancelEditing(beatDiv, contentDiv, originalHtml);
             });
     }
 
-    function deleteShot(shotIndex) {
-        const shot = currentShots[shotIndex];
-        if (!shot) return;
+    function deleteBeat(beatIndex) {
+        const beat = currentBeats[beatIndex];
+        if (!beat) return;
 
-        if (!confirm('Are you sure you want to delete shot "' + shot.shotId + '"?')) return;
+        if (!confirm('Are you sure you want to delete beat "' + beat.beat_id + '"?')) return;
 
-        const deletedRefShot = shot.referenceShot;
-        const updatedShots = currentShots
-            .filter((s, i) => i !== shotIndex)
+        const deletedRefBeat = beat.continues_from_beat_id;
+        const updatedBeats = currentBeats
+            .filter((s, i) => i !== beatIndex)
             .map(s => {
-                if (s.referenceShot === shot.shotId) {
-                    return { ...s, referenceShot: deletedRefShot };
+                if (s.continues_from_beat_id === beat.beat_id) {
+                    return { ...s, continues_from_beat_id: deletedRefBeat };
                 }
                 return s;
             });
 
-        saveScreenplay(updatedShots, 'deleted shot_id=' + shot.shotId)
+        saveScreenplay(updatedBeats, 'deleted beat_id=' + beat.beat_id)
             .catch(error => {
-                console.error('Error deleting shot:', error);
+                console.error('Error deleting beat:', error);
                 alert('Failed to delete: ' + error.message);
             });
     }
 
-    function mergeShots(firstIndex, secondIndex) {
-        const firstShot = currentShots[firstIndex];
-        const secondShot = currentShots[secondIndex];
-        if (!firstShot || !secondShot) return;
+    function mergeBeats(firstIndex, secondIndex) {
+        const firstBeat = currentBeats[firstIndex];
+        const secondBeat = currentBeats[secondIndex];
+        if (!firstBeat || !secondBeat) return;
 
-        const mergedText = firstShot.text + '\n' + secondShot.text;
+        const mergedText = firstBeat.text + '\n' + secondBeat.text;
 
-        const updatedShots = [];
-        for (let i = 0; i < currentShots.length; i++) {
+        const updatedBeats = [];
+        for (let i = 0; i < currentBeats.length; i++) {
             if (i === firstIndex) {
-                updatedShots.push({ ...firstShot, text: mergedText });
+                updatedBeats.push({ ...firstBeat, text: mergedText });
             } else if (i === secondIndex) {
                 continue;
             } else {
-                const s = currentShots[i];
-                if (s.referenceShot === secondShot.shotId) {
-                    updatedShots.push({ ...s, referenceShot: firstShot.shotId });
+                const s = currentBeats[i];
+                if (s.continues_from_beat_id === secondBeat.beat_id) {
+                    updatedBeats.push({ ...s, continues_from_beat_id: firstBeat.beat_id });
                 } else {
-                    updatedShots.push(s);
+                    updatedBeats.push(s);
                 }
             }
         }
 
-        saveScreenplay(updatedShots, 'merged shot_id=' + secondShot.shotId + ' into shot_id=' + firstShot.shotId)
+        saveScreenplay(updatedBeats, 'merged beat_id=' + secondBeat.beat_id + ' into beat_id=' + firstBeat.beat_id)
             .catch(error => {
-                console.error('Error merging shots:', error);
+                console.error('Error merging beats:', error);
                 alert('Failed to merge: ' + error.message);
             });
     }
 
-    function addShotAbove(shotIndex) {
-        const shot = currentShots[shotIndex];
-        if (!shot) return;
+    function addBeatAbove(beatIndex) {
+        const beat = currentBeats[beatIndex];
+        if (!beat) return;
 
-        const existingIds = new Set(currentShots.map(s => s.shotId));
-        const newShotId = generateNewShotId(shot.shotId, 'above', existingIds);
+        const existingIds = new Set(currentBeats.map(s => s.beat_id));
+        const newBeatId = generateNewBeatId(beat.beat_id, 'above', existingIds);
 
-        const newShot = {
-            shotId: newShotId,
-            referenceShot: shot.referenceShot,
+        const newBeat = {
+            beat_id: newBeatId,
+            continues_from_beat_id: beat.continues_from_beat_id,
             text: '',
             isNew: true
         };
 
-        const tempShots = [...currentShots];
-        tempShots.splice(shotIndex, 0, newShot);
-        tempShots[shotIndex + 1] = { ...tempShots[shotIndex + 1], referenceShot: newShotId };
+        const tempBeats = [...currentBeats];
+        tempBeats.splice(beatIndex, 0, newBeat);
+        tempBeats[beatIndex + 1] = { ...tempBeats[beatIndex + 1], continues_from_beat_id: newBeatId };
 
-        renderShotsWithNewShot(tempShots, shotIndex, newShotId);
+        renderBeatsWithNewBeat(tempBeats, beatIndex, newBeatId);
     }
 
-    function addShotBelow(shotIndex) {
-        const shot = currentShots[shotIndex];
-        if (!shot) return;
+    function addBeatBelow(beatIndex) {
+        const beat = currentBeats[beatIndex];
+        if (!beat) return;
 
-        const existingIds = new Set(currentShots.map(s => s.shotId));
-        const newShotId = generateNewShotId(shot.shotId, 'below', existingIds);
+        const existingIds = new Set(currentBeats.map(s => s.beat_id));
+        const newBeatId = generateNewBeatId(beat.beat_id, 'below', existingIds);
 
-        const newShot = {
-            shotId: newShotId,
-            referenceShot: shot.shotId,
+        const newBeat = {
+            beat_id: newBeatId,
+            continues_from_beat_id: beat.beat_id,
             text: '',
             isNew: true
         };
 
-        const tempShots = [...currentShots];
-        tempShots.splice(shotIndex + 1, 0, newShot);
+        const tempBeats = [...currentBeats];
+        tempBeats.splice(beatIndex + 1, 0, newBeat);
 
-        for (let i = 0; i < tempShots.length; i++) {
-            if (i !== shotIndex + 1 && tempShots[i].referenceShot === shot.shotId) {
-                tempShots[i] = { ...tempShots[i], referenceShot: newShotId };
+        for (let i = 0; i < tempBeats.length; i++) {
+            if (i !== beatIndex + 1 && tempBeats[i].continues_from_beat_id === beat.beat_id) {
+                tempBeats[i] = { ...tempBeats[i], continues_from_beat_id: newBeatId };
             }
         }
 
-        renderShotsWithNewShot(tempShots, shotIndex + 1, newShotId);
+        renderBeatsWithNewBeat(tempBeats, beatIndex + 1, newBeatId);
     }
 
-    function renderShotsWithNewShot(tempShots, newShotIndex, newShotId) {
+    function renderBeatsWithNewBeat(tempBeats, newBeatIndex, newBeatId) {
         const paperContainer = container.querySelector('.screenplay-paper');
         if (!paperContainer) return;
 
         clearRegisteredPaths();
         paperContainer.innerHTML = '';
 
-        tempShots.forEach((shot, index) => {
-            const shotEl = createShotElement(shot, index, tempShots);
-            paperContainer.appendChild(shotEl);
+        tempBeats.forEach((beat, index) => {
+            const beatEl = createBeatElement(beat, index, tempBeats);
+            paperContainer.appendChild(beatEl);
 
-            if (index === newShotIndex && shot.isNew) {
-                shotEl.classList.add('new-shot');
-                startEditingNewShot(shotEl, tempShots, newShotIndex, newShotId);
+            if (index === newBeatIndex && beat.isNew) {
+                beatEl.classList.add('new-beat');
+                startEditingNewBeat(beatEl, tempBeats, newBeatIndex, newBeatId);
             }
         });
     }
 
-    function startEditingNewShot(shotDiv, tempShots, newShotIndex, newShotId) {
-        const contentDiv = shotDiv.querySelector('.screenplay-shot-content');
+    function startEditingNewBeat(beatDiv, tempBeats, newBeatIndex, newBeatId) {
+        const contentDiv = beatDiv.querySelector('.screenplay-beat-content');
         if (!contentDiv) return;
 
-        shotDiv.classList.add('editing');
+        beatDiv.classList.add('editing');
         contentDiv.classList.add('editing');
 
         const textarea = document.createElement('textarea');
-        textarea.className = 'shot-edit-textarea';
-        textarea.placeholder = 'Enter shot text...';
+        textarea.className = 'beat-edit-textarea';
+        textarea.placeholder = 'Enter beat text...';
 
         const actions = document.createElement('div');
-        actions.className = 'shot-edit-actions';
+        actions.className = 'beat-edit-actions';
 
         const cancelBtn = document.createElement('button');
-        cancelBtn.className = 'shot-edit-cancel';
+        cancelBtn.className = 'beat-edit-cancel';
         cancelBtn.textContent = 'Cancel';
         cancelBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -339,11 +339,11 @@
         });
 
         const submitBtn = document.createElement('button');
-        submitBtn.className = 'shot-edit-submit';
+        submitBtn.className = 'beat-edit-submit';
         submitBtn.textContent = 'Submit';
         submitBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            submitNewShot(tempShots, newShotIndex, newShotId, textarea.value);
+            submitNewBeat(tempBeats, newBeatIndex, newBeatId, textarea.value);
         });
 
         actions.appendChild(cancelBtn);
@@ -363,95 +363,95 @@
         });
     }
 
-    function submitNewShot(tempShots, newShotIndex, newShotId, text) {
-        const finalShots = tempShots.map((s, i) => {
-            if (i === newShotIndex) {
+    function submitNewBeat(tempBeats, newBeatIndex, newBeatId, text) {
+        const finalBeats = tempBeats.map((s, i) => {
+            if (i === newBeatIndex) {
                 const { isNew, ...rest } = s;
                 return { ...rest, text: text };
             }
             return s;
         });
 
-        saveScreenplay(finalShots, 'added shot_id=' + newShotId)
+        saveScreenplay(finalBeats, 'added beat_id=' + newBeatId)
             .catch(error => {
-                console.error('Error adding shot:', error);
-                alert('Failed to add shot: ' + error.message);
+                console.error('Error adding beat:', error);
+                alert('Failed to add beat: ' + error.message);
                 renderScreenplay();
             });
     }
 
-    function createHoverMenu(shotIndex) {
+    function createHoverMenu(beatIndex) {
         const menu = document.createElement('div');
-        menu.className = 'shot-hover-menu';
+        menu.className = 'beat-hover-menu';
 
         const editBtn = document.createElement('button');
         editBtn.innerHTML = '✏️';
-        editBtn.title = 'Edit shot';
+        editBtn.title = 'Edit beat';
         editBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            const shotDiv = menu.closest('.screenplay-shot');
-            if (shotDiv) startEditingShot(shotDiv, shotIndex);
+            const beatDiv = menu.closest('.screenplay-beat');
+            if (beatDiv) startEditingBeat(beatDiv, beatIndex);
         });
         menu.appendChild(editBtn);
 
         const addAboveBtn = document.createElement('button');
         addAboveBtn.innerHTML = '➕⬆️';
-        addAboveBtn.title = 'Add shot above';
+        addAboveBtn.title = 'Add beat above';
         addAboveBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            addShotAbove(shotIndex);
+            addBeatAbove(beatIndex);
         });
         menu.appendChild(addAboveBtn);
 
         const addBelowBtn = document.createElement('button');
         addBelowBtn.innerHTML = '➕⬇️';
-        addBelowBtn.title = 'Add shot below';
+        addBelowBtn.title = 'Add beat below';
         addBelowBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            addShotBelow(shotIndex);
+            addBeatBelow(beatIndex);
         });
         menu.appendChild(addBelowBtn);
 
         const deleteBtn = document.createElement('button');
         deleteBtn.innerHTML = '🗑️';
-        deleteBtn.title = 'Delete shot';
+        deleteBtn.title = 'Delete beat';
         deleteBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            deleteShot(shotIndex);
+            deleteBeat(beatIndex);
         });
         menu.appendChild(deleteBtn);
 
         return menu;
     }
 
-    function createMergeButton(shotIndex) {
+    function createMergeButton(beatIndex) {
         const btn = document.createElement('button');
-        btn.className = 'shot-merge-button';
+        btn.className = 'beat-merge-button';
         btn.innerHTML = '📄📄 → 📄';
-        btn.title = 'Merge with next shot';
+        btn.title = 'Merge with next beat';
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            mergeShots(shotIndex, shotIndex + 1);
+            mergeBeats(beatIndex, beatIndex + 1);
         });
         return btn;
     }
 
-    function createStickyNote(shot) {
+    function createStickyNote(beat) {
         const sticky = document.createElement('div');
         sticky.className = 'screenplay-sticky-note';
-        sticky.dataset.shotId = shot.shotId;
+        sticky.dataset.beat_id = beat.beat_id;
 
         const metaGrid = document.createElement('div');
         metaGrid.className = 'sticky-meta-grid';
 
-        metaGrid.appendChild(createMetaRow('SHOT_ID', shot.shotId));
-        metaGrid.appendChild(createMetaRow('REFERENCE_SHOT', shot.referenceShot || '—'));
+        metaGrid.appendChild(createMetaRow('BEAT_ID', beat.beat_id));
+        metaGrid.appendChild(createMetaRow('CONTINUES_FROM_BEAT_ID', beat.continues_from_beat_id || '—'));
 
         // Create target rows using the node API
-        const shotTypePath = getTargetPath('shot_type', shot.shotId);
-        metaGrid.appendChild(createTargetRow('shot_type', shotTypePath));
+        const beatTypePath = getTargetPath('beat_type', beat.beat_id);
+        metaGrid.appendChild(createTargetRow('beat_type', beatTypePath));
 
-        const lengthPath = getTargetPath('length_seconds', shot.shotId);
+        const lengthPath = getTargetPath('length_seconds', beat.beat_id);
         metaGrid.appendChild(createTargetRow('length_seconds', lengthPath));
 
         sticky.appendChild(metaGrid);
@@ -459,10 +459,10 @@
         const mediaSection = document.createElement('div');
         mediaSection.className = 'sticky-media-section';
 
-        const startframePath = getTargetPath('startframe', shot.shotId);
+        const startframePath = getTargetPath('startframe', beat.beat_id);
         mediaSection.appendChild(createMediaNode(startframePath, 'startframe.png', 'image/png'));
 
-        const videoPath = getTargetPath('video', shot.shotId);
+        const videoPath = getTargetPath('video', beat.beat_id);
         mediaSection.appendChild(createMediaNode(videoPath, 'raw.mp4', 'video/mp4'));
 
         sticky.appendChild(mediaSection);
@@ -632,39 +632,39 @@
         registeredPaths.clear();
     }
 
-    function createShotElement(shot, index, shotsArray) {
-        const shotDiv = document.createElement('div');
-        shotDiv.className = 'screenplay-shot';
-        shotDiv.dataset.shotId = shot.shotId;
-        shotDiv.dataset.shotIndex = index;
+    function createBeatElement(beat, index, beatsArray) {
+        const beatDiv = document.createElement('div');
+        beatDiv.className = 'screenplay-beat';
+        beatDiv.dataset.beat_id = beat.beat_id;
+        beatDiv.dataset.beatIndex = index;
 
-        shotDiv.appendChild(createHoverMenu(index));
+        beatDiv.appendChild(createHoverMenu(index));
 
         const content = document.createElement('div');
-        content.className = 'screenplay-shot-content';
-        content.innerHTML = renderFountain(shot.text);
+        content.className = 'screenplay-beat-content';
+        content.innerHTML = renderFountain(beat.text);
 
         content.addEventListener('dblclick', (e) => {
             e.stopPropagation();
-            startEditingShot(shotDiv, index);
+            startEditingBeat(beatDiv, index);
         });
 
-        shotDiv.appendChild(content);
+        beatDiv.appendChild(content);
 
-        if (!shot.isNew) {
-            shotDiv.appendChild(createStickyNote(shot));
+        if (!beat.isNew) {
+            beatDiv.appendChild(createStickyNote(beat));
         } else {
             const placeholder = document.createElement('div');
             placeholder.className = 'screenplay-sticky-note';
-            placeholder.innerHTML = '<em>New shot</em>';
-            shotDiv.appendChild(placeholder);
+            placeholder.innerHTML = '<em>New beat</em>';
+            beatDiv.appendChild(placeholder);
         }
 
-        if (index < shotsArray.length - 1 && !shot.isNew) {
-            shotDiv.appendChild(createMergeButton(index));
+        if (index < beatsArray.length - 1 && !beat.isNew) {
+            beatDiv.appendChild(createMergeButton(index));
         }
 
-        return shotDiv;
+        return beatDiv;
     }
 
     function renderScreenplay() {
@@ -680,21 +680,21 @@
         clearRegisteredPaths();
         paperContainer.innerHTML = '';
 
-        if (currentShots.length === 0) {
+        if (currentBeats.length === 0) {
             paperContainer.innerHTML = '<div class="screenplay-empty">No screenplay loaded. Waiting for shooting-script.xml...</div>';
             return;
         }
 
-        currentShots.forEach((shot, index) => {
-            paperContainer.appendChild(createShotElement(shot, index, currentShots));
+        currentBeats.forEach((beat, index) => {
+            paperContainer.appendChild(createBeatElement(beat, index, currentBeats));
         });
     }
 
     function handleScreenplayUpdate(content) {
         if (!content) {
-            currentShots = [];
+            currentBeats = [];
         } else {
-            currentShots = parseScreenplayXml(content);
+            currentBeats = parseScreenplayXml(content);
         }
         renderScreenplay();
     }
@@ -740,11 +740,11 @@
     }
 
     function isScreenplayTargetPath(path) {
-        const match = path.match(/^shots\/([^/]+)\//);
+        const match = path.match(/^beats\/([^/]+)\//);
         if (!match) return false;
-        const shotId = match[1];
-        return Object.values(SHOT_TARGETS).some(pattern =>
-            path === pattern.replace('$SHOT_ID', shotId)
+        const beat_id = match[1];
+        return Object.values(BEAT_TARGETS).some(pattern =>
+            path === pattern.replace('$BEAT_ID', beat_id)
         );
     }
 

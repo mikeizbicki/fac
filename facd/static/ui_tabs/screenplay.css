@@ -35,8 +35,8 @@
     line-height: 1.5;
 }
 
-/* Individual shot */
-.screenplay-shot {
+/* Individual beat */
+.screenplay-beat {
     display: flex;
     gap: 40px;
     margin-bottom: 30px;
@@ -45,49 +45,49 @@
     position: relative;
 }
 
-.screenplay-shot:last-child {
+.screenplay-beat:last-child {
     border-bottom: none;
 }
 
-/* Shot content (the actual script text) */
-.screenplay-shot-content {
+/* Beat content (the actual script text) */
+.screenplay-beat-content {
     flex: 1;
     min-width: 0;
 }
 
 /* Fountain.js rendered content styling */
-.screenplay-shot-content .scene-heading {
+.screenplay-beat-content .scene-heading {
     font-weight: bold;
     margin: 1em 0 0.5em 0;
 }
 
-.screenplay-shot-content .action {
+.screenplay-beat-content .action {
     margin: 0.5em 0;
 }
 
-.screenplay-shot-content .character {
+.screenplay-beat-content .character {
     margin-top: 1em;
     margin-left: 2in;
     text-transform: uppercase;
 }
 
-.screenplay-shot-content .dialogue {
+.screenplay-beat-content .dialogue {
     margin-left: 1in;
     margin-right: 1.5in;
 }
 
-.screenplay-shot-content .parenthetical {
+.screenplay-beat-content .parenthetical {
     margin-left: 1.5in;
     margin-right: 2in;
 }
 
-.screenplay-shot-content .transition {
+.screenplay-beat-content .transition {
     text-align: right;
     text-transform: uppercase;
     margin: 1em 0;
 }
 
-.screenplay-shot-content .centered {
+.screenplay-beat-content .centered {
     text-align: center;
 }
 
@@ -98,12 +98,12 @@
     margin: 0;
 }
 
-/* Shot editing */
-.screenplay-shot-content.editing {
+/* Beat editing */
+.screenplay-beat-content.editing {
     /* No special styling needed */
 }
 
-.shot-edit-textarea {
+.beat-edit-textarea {
     width: 100%;
     font-family: 'Courier New', Courier, monospace;
     font-size: 12pt;
@@ -117,14 +117,14 @@
     min-height: 100px;
 }
 
-.shot-edit-actions {
+.beat-edit-actions {
     display: flex;
     gap: 8px;
     margin-top: 8px;
     justify-content: flex-end;
 }
 
-.shot-edit-actions button {
+.beat-edit-actions button {
     padding: 6px 16px;
     border: none;
     border-radius: 4px;
@@ -133,26 +133,26 @@
     font-weight: bold;
 }
 
-.shot-edit-cancel {
+.beat-edit-cancel {
     background: #ccc;
     color: #333;
 }
 
-.shot-edit-cancel:hover {
+.beat-edit-cancel:hover {
     background: #bbb;
 }
 
-.shot-edit-submit {
+.beat-edit-submit {
     background: #4a90d9;
     color: white;
 }
 
-.shot-edit-submit:hover {
+.beat-edit-submit:hover {
     background: #3a7bc8;
 }
 
-/* Shot hover menu */
-.shot-hover-menu {
+/* Beat hover menu */
+.beat-hover-menu {
     position: absolute;
     right: 420px;
     top: 0;
@@ -166,15 +166,15 @@
     z-index: 10;
 }
 
-.screenplay-shot:hover > .shot-hover-menu {
+.screenplay-beat:hover > .beat-hover-menu {
     display: block;
 }
 
-.screenplay-shot.editing > .shot-hover-menu {
+.screenplay-beat.editing > .beat-hover-menu {
     display: none;
 }
 
-.shot-hover-menu button {
+.beat-hover-menu button {
     background: none;
     border: none;
     cursor: pointer;
@@ -186,13 +186,13 @@
     white-space: nowrap;
 }
 
-.shot-hover-menu button:hover {
+.beat-hover-menu button:hover {
     opacity: 1;
     background: rgba(0, 0, 0, 0.05);
 }
 
-/* Merge button on dotted line between shots */
-.shot-merge-button {
+/* Merge button on dotted line between beats */
+.beat-merge-button {
     position: absolute;
     bottom: -14px;
     left: 50%;
@@ -209,27 +209,27 @@
     white-space: nowrap;
 }
 
-.screenplay-shot:hover > .shot-merge-button,
-.shot-merge-button:hover {
+.screenplay-beat:hover > .beat-merge-button,
+.beat-merge-button:hover {
     opacity: 1;
 }
 
-.screenplay-shot:has(+ .screenplay-shot:hover) > .shot-merge-button {
+.screenplay-beat:has(+ .screenplay-beat:hover) > .beat-merge-button {
     opacity: 1;
 }
 
-.shot-merge-button:hover {
+.beat-merge-button:hover {
     background: #f0f0f0;
 }
 
-/* New shot placeholder */
-.screenplay-shot.new-shot {
+/* New beat placeholder */
+.screenplay-beat.new-beat {
     border: 2px dashed #4a90d9;
     background: rgba(74, 144, 217, 0.05);
     padding: 10px;
 }
 
-.screenplay-shot.new-shot .screenplay-sticky-note {
+.screenplay-beat.new-beat .screenplay-sticky-note {
     opacity: 0.5;
 }
 
