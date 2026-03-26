@@ -443,10 +443,7 @@ class BuildContext(BaseModel):
 
         # first we generate the instructions for the llm,
         # which will be stored in the `prompt_cmd` variable.
-        prompt_instructions = f'''<instructions>
-        Generate the file "{self.path}" based on the information below.
-        </instructions>
-        '''
+        prompt_instructions = f'<instructions>\nGenerate the file "{self.path}" based on the information below.\n</instructions>\n'
 
         if 'description' in self.config:
             try:
@@ -457,11 +454,9 @@ class BuildContext(BaseModel):
                         print_function=logger.error,
                         template_name='description',
                         )
-                prompt_description += '\n</file_description>'
+                prompt_description += '\n</file_description>\n'
             except TemplateProcessingError as e:
                 raise FACError()
-
-            prompt_description += '\n'
         else:
             prompt_description = ''
 
@@ -495,57 +490,56 @@ class BuildContext(BaseModel):
             files_prompt += '</reference_documents>\n'
 
         # mime-type based formatting instructions
-        response_format = None
         format_instructions = ''
         if major_type == 'text':
-            if minor_type == 'markdown':
-                format_instructions += 'Use markdown formatting to structure the output.'
-            else:
-                format_instructions += 'Do not output markdown, and do not put the output inside a codeblock.'
+            mime_str = '/'.join(self.mime_type)
+            format_instructions += f'Output your results in {mime_str} format.'
+            if minor_type != 'markdown':
+                format_instructions += ' Do not output markdown, and do not put the output inside a codeblock.'
 
-            if minor_type == 'html':
-                format_instructions += 'Output HTML.'
-            elif minor_type == 'json':
-                format_instructions += 'Output JSON.'
-                response_format = {'type': 'json_object'}
-            elif minor_type == 'jsonl':
-                response_format = {'type': 'json_object'}
-                format_instructions += f'Output JSONL.  Each line of the output should be a single JSON object.'
+            # create schema-based formatting instructions
+            schema_text = self.config.get('schema')
+            if self.config.get('schema_file'):
+                with open(self.config['schema_file']) as fin:
+                    schema_text = fin.read().strip()
+            if schema_text:
+                # json schemas
+                if 'json' in mime_str:
+                    # FIXME:
+                    # we also support the simplified llm schema_dsl;
+                    # the problem is that all strings are valid in this dsl,
+                    # and so how do we automatically determine which system to use?
+                    #import llm
+                    #schema = llm.schema_dsl(schema_text)
+                    try:
+                        schema = json.loads(schema_text)
+                        jsonschema.Draft7Validator.check_schema(schema)
+                    except json.decoder.JSONDecodeError as e:
+                        logger.error('schema is not valid JSON')
+                        logger.error(str(e), submessage=True)
+                    except jsonschema.exceptions.SchemaError as e:
+                        logger.error('error in schema syntax')
+                        logger.error(str(e), submessage=True)
 
-            if self.config.get('schema'):
-                schema = llm.schema_dsl(self.config.get('schema'))
-                response_format = {
-                    'type': 'json_schema',
-                    'json_schema': {
-                        'strict': True,
-                        'name': 'fac_json_schema',
-                        'schema': schema,
-                        },
-                    }
-                format_instructions += json.dumps(schema, indent=2).strip()
-            elif self.config.get('schema_file'):
-                try:
-                    schema_file = self.config['schema_file']
-                    #schema_file = substitute_variables(schema_file, self.variables_resolved)
-                    with open(schema_file) as fin:
-                        text = fin.read().strip()
-                        schema = json.loads(text)
-                except json.decoder.JSONDecodeError as e:
-                    logger.error(f"self.config['schema_file']={self.config['schema_file']}")
-                    logger.error(e)
-                    sys.exit(1)
-                jsonschema.Draft7Validator.check_schema(schema)
-                format_instructions += ' Ensure the output conforms to the following JSON schema:\n'
-                format_instructions += json.dumps(schema, indent=2).strip()
-                schema['additionalProperties'] = False
-                response_format = {
-                    'type': 'json_schema',
-                    'json_schema': {
-                        'strict': True,
-                        'name': 'fac_json_schema',
-                        'schema': schema,
-                        },
-                    }
+                # xml schemas
+                elif 'xml' in mime_str:
+                    # NOTE:
+                    # it should be straightforward to add support for more xml
+                    # validation syntaxes, but I haven't done it yet because I 
+                    # haven't needed it
+                    from lxml import etree
+                    from io import BytesIO
+                    parser = etree.XMLParser(remove_blank_text=True)
+                    try:
+                        dtd = etree.DTD(BytesIO(schema_text.encode('utf-8')))
+                    except etree.DTDParseError as e:
+                        logger.error('invalid DTD schema for xml')
+                        logger.error(str(e.error_log), submessage=True)
+
+                else:
+                    logger.warning('schema provided, but not supported; it will be included in the prompt but no validation will be performed')
+                format_instructions += f' Ensure the output conforms to the following data scheme:\n{schema_text}'
+
             format_instructions = '<formatting>\n' + format_instructions + '\n</formatting>'
 
         # FIXME:
@@ -683,18 +677,19 @@ class BuildContext(BaseModel):
                 contents_changed = hash_contents_fin != facjson.get('hash_contents')
         except FileNotFoundError as e:
             contents_changed = True
-        if 'new' not in file_status and facjson.get('hash_prompt'):
-            prompt_changed = self.prompt_hash != facjson.get('hash_prompt')
-            if prompt_changed:
-                file_status.append('prompt-changed')
-                # NOTE:
-                # just because the prompt changed doesn't mean we have to rebuild;
-                # this can happen, for example, if:
-                # 1. the user manually edited/committed a file
-                # 2. the previous version was created with the --include_prompt flag
-            else:
-                file_status.append('prompt-same')
-                do_build = False
+        if 'new' not in file_status and 'up-to-date' not in file_status:
+            if facjson.get('hash_prompt'):
+                prompt_changed = self.prompt_hash != facjson.get('hash_prompt')
+                if prompt_changed:
+                    file_status.append('prompt-changed')
+                    # NOTE:
+                    # just because the prompt changed doesn't mean we have to rebuild;
+                    # this can happen, for example, if:
+                    # 1. the user manually edited/committed a file
+                    # 2. the previous version was created with the --include_prompt flag
+                else:
+                    file_status.append('prompt-same')
+                    do_build = False
 
         # overwrite do_build based on mode
         if self.mode == 'overwrite':
@@ -761,8 +756,7 @@ class BuildContext(BaseModel):
         else:
             mode = 'wb'
             logger.info('building with LLM...', submessage=True)
-            llm = LLM()
-            await llm.generate_file(
+            await LLM().generate_file(
                 self.mime_type[0],
                 self.path,
                 self.prompt,

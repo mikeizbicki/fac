@@ -193,6 +193,8 @@ def _configdict_to_targets(config):
                 targets[target]['mime-type'] = 'text/markdown'
             elif extension == '.html':
                 targets[target]['mime-type'] = 'text/html'
+            elif extension == '.xml':
+                targets[target]['mime-type'] = 'text/xml'
             elif extension == '.json':
                 targets[target]['mime-type'] = 'text/json'
             elif extension == '.jsonl':

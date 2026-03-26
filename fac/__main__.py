@@ -118,9 +118,9 @@ def main():
     bs_args = dict(**vars(args))
     del bs_args['targets']
     del bs_args['dev']
-    build_system = BuildSystem(**bs_args)
 
     try:
+        build_system = BuildSystem(**bs_args)
         build_system.build_targets(args.targets)
     except FACError:
         pass

@@ -439,25 +439,25 @@ class BuildState(Routable):
             # in theory, this should not be needed,
             # and it is a sanity debug check to ensure our state transitions work correctly
             state_hashes = set()
-            #self.debug_print(f'iter={len(state_hashes)}')
+            self.debug_print(f'iter={len(state_hashes)}')
             while not self.is_done():
                 state0 = self._state_as_dict()
 
                 # perform all state transitions
                 self.process_all_dependencies()
-                #state0 = self.debug_statediff(state0, f'iter={len(state_hashes)} -- deps')
-                #self.debug_print(f'iter={len(state_hashes)} -- deps')
+                self.debug_print(f'iter={len(state_hashes)} -- deps')
+
                 self.assert_invariants()
                 self.debug_short()
                 self.process_all_buildable()
-                #state0 = self.debug_statediff(state0, f'iter={len(state_hashes)} -- build')
-                #self.debug_print(f'iter={len(state_hashes)} -- build')
+                self.debug_print(f'iter={len(state_hashes)} -- build')
+
                 self.assert_invariants()
                 self.process_all_variable()
-                #state0 = self.debug_statediff(state0, f'iter={len(state_hashes)} -- vars')
-                #self.debug_print(f'iter={len(state_hashes)} -- vars')
+                self.debug_print(f'iter={len(state_hashes)} -- vars')
+
                 self.assert_invariants()
-                #self.debug_print(f'iter={len(state_hashes) + 1}')
+                self.debug_print(f'iter={len(state_hashes) + 1}')
 
                 self._finalize_jobs()
 

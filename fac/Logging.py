@@ -110,10 +110,20 @@ class RecursiveLogger(logging.Logger):
                 # Truncate long lines
                 if max_line_length and len(line) > max_line_length:
                     line = line[:max_line_length] + '...'
-                # First line uses passed submessage, rest are always submessages
+                # First line uses passed submessage, rest are always submessage=True
                 self._log(level, line, args, submessage=(submessage if i == 0 else True), **kwargs)
             return
 
+        # Auto-format strings with newlines
+        if isinstance(msg, str) and '\n' in msg:
+            lines = msg.split('\n')
+            for i, line in enumerate(lines):
+                # Truncate long lines
+                if max_line_length and len(line) > max_line_length:
+                    line = line[:max_line_length] + '...'
+                # First line uses passed submessage, rest always use submessage=True
+                self._log(level, line, args, submessage=(submessage if i == 0 else True), **kwargs)
+            return
         # Truncate long string messages too
         if max_line_length and len(msg) > max_line_length:
             msg = msg[:max_line_length] + '...'
