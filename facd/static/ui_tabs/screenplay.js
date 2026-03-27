@@ -36,7 +36,7 @@
         beat_type: 'beats/$BEAT_ID/beat_type',
         length_seconds: 'beats/$BEAT_ID/length_seconds',
         startframe: 'beats/$BEAT_ID/beat_type=standard/startframe.png',
-        video: 'beats/$BEAT_ID/beat_type=standard/raw.mp4'
+        video: 'beats/$BEAT_ID/raw.mp4'
     };
 
     function getTargetPath(key, beat_id) {
