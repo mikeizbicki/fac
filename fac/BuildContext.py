@@ -663,11 +663,11 @@ class BuildContext(BaseModel):
         # if the file already exists, we must check if it is up-to-date
         # (i.e. all dependencies are older),
         else:
-            context_path_committed_date = _get_file_timestamp(self.path)
+            context_path_committed_date = get_fac_timestamp(self.path)
             updated_deps = []
             for dep in self.dependencies_built:
                 path = dep['target']
-                path_committed_date = _get_file_timestamp(path)
+                path_committed_date = get_fac_timestamp(path)
                 time_diff = context_path_committed_date - path_committed_date
                 if time_diff < 0:
                     updated_deps.append(path)
@@ -789,17 +789,67 @@ class BuildContext(BaseModel):
         validate_file(self.path, self.config.get('schema_file'))
 
 
-def _get_file_timestamp(path):
+def get_fac_timestamp(path):
     '''
-    Get the timestamp a path was last modified.
-    This timestamp will be used to determine if a rebuild is required.
+    Returns the timestamp that fac will use to determine if dependencies have
+    been updated.  If a path does not exist, the fac_timestamp is infinite.
 
     NOTE:
     Other build systems (e.g. make) use the timestamp on the file system;
-    we uses a combination of the timestamp in git and the file system.
+    we use a combination of the timestamp in git and the file system.
     This difference is due to the fact that in ordinary build systems (like make)
     the results of the build are never committed to the git repo,
     but the results of our build are always committed to the git repo.
+
+    NOTE:
+    Due to the way git tracks changes,
+    some built files may not be added to the repo if building resulted
+    in a byte-for-byte copy of the original file.
+    Therefore, we also use fac's metafiles associated with each file
+    to determine it's timestamp.
+    This feature was originally added for correctly rebuilding symlinks
+    (which don't change when the path they point to changes),
+    but the implementation is more general and works for all file types.
+    '''
+    path_timestamp = _get_lowlevel_timestamp(path)
+
+    # for every path built with fac,
+    # fac can also build and track several "meta" files;
+    # exactly which files are built and tracked can depend on many factors,
+    # and so we need generic code that works for any combination of meta files
+    dirname = os.path.dirname(path)
+    filename = os.path.basename(path)
+    possible_metapaths = [
+        f'./{dirname}/.{filename}.facjson',
+        f'./{dirname}/.{filename}.fac.log',
+        ]
+    metapaths = [path for path in possible_metapaths if os.path.exists(path)]
+
+    # if no meta files exist,
+    # then the lastbuilt timestamp is the timestamp of the path;
+    # this occurs when the file has not been previously built/tracked with fac
+    if len(metapaths) == 0:
+        return path_timestamp
+
+    # if the meta timestamps are greater than the path timestamp,
+    # then the file has been rebuilt with fac,
+    # but the contents did not change,
+    # and so git did not add the file to the commit,
+    # and it keeps its older timestamp;
+    # in this case only we must use the updated meta timestamp
+    metapaths_timestamps = [_get_lowlevel_timestamp(path) for path in metapaths]
+    max_meta_timestamp = max(metapaths_timestamps)
+    if max_meta_timestamp > path_timestamp:
+        return max_meta_timestamp
+    else:
+        return path_timestamp
+
+
+def _get_lowlevel_timestamp(path):
+    '''
+    This is a low-level helper function that retrieves the timestamp of the
+    input path without looking at fac's metafiles.
+    It should never be called directly.
     '''
     repo = git.Repo('.')
 
