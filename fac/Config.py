@@ -253,14 +253,16 @@ def _configdict_to_targets(config):
                         if val not in targets[name][field]:
                             targets[name][field][val] = c_value[field][val]
 
-                c_value.setdefault('dependencies', [])
+                c_value['dependencies'] = normalize_dependencies(
+                        c_value.get('dependencies', []),
+                        c_name,
+                        )
                 for val in c_value['dependencies']: 
-                    targets[name]['dependencies'].append({
-                        'target': val,
-                        'include': False,
-                        })
+                    if 'include' not in val:
+                        val['include'] = False
+                        val['trigger_rebuild'] = False
+                    targets[name]['dependencies'].append(val)
                     
-
     # clean the final output targets dict
     for target in targets:
         # set the mime-type
@@ -287,7 +289,6 @@ def _configdict_to_targets(config):
             else:
                 targets[target]['mime-type'] = 'text/plain'
 
-
         # remove excess whitespace from fields;
         # this is mostly useful for debugging and getting nice looking configs
         for option in targets[target]:
@@ -298,26 +299,10 @@ def _configdict_to_targets(config):
                     if type(targets[target][option][suboption]) == str:
                         targets[target][option][suboption] = targets[target][option][suboption].strip()
 
-        # the dependencies field can be specified as a string, list of strings, or list of dictionaries;
-        # we convert all forms into the list of dictionary form here
-        dependencies1 = []
-        dependencies = targets[target].get('dependencies', '')
-        if type(dependencies) is str:
-            dependencies = dependencies.split()
-        elif dependencies is None:
-            dependencies = []
-        for dep in dependencies:
-            if type(dep) == str:
-                dep = {'target': dep}
-            assert type(dep) == dict
-            dependencies1.append(dep)
-            for k in dep:
-                if k not in ['target', 'include', 'allow_create', 'is_prompt']:
-                    logger.warning(f'in target "{target}", in dependency "{dep}", unknown option "{k}"')
-        targets[target]['dependencies'] = dependencies1
 
         # ensure that all fields have reasonable default values
         targets[target].setdefault('dependencies', {})
+        targets[target]['dependencies'] = normalize_dependencies(targets[target]['dependencies'], target)
         targets[target].setdefault('variables', {})
 
     # reorder the variable definitions
@@ -325,6 +310,34 @@ def _configdict_to_targets(config):
         targets[target]['variables'] = reorder_variable_dictionary(targets[target]['variables'])
 
     return targets
+
+
+def normalize_dependencies(dependencies, target):
+    '''
+    the dependencies field can be specified as a string, list of strings, or list of dictionaries;
+    we convert all forms into the list of dictionary form here
+    '''
+    dependencies1 = []
+    if type(dependencies) is str:
+        dependencies = dependencies.split()
+    elif dependencies is None:
+        dependencies = []
+    for dep in dependencies:
+        if type(dep) == str:
+            dep = {'target': dep}
+        assert type(dep) == dict
+        dependencies1.append(dep)
+        for k in dep:
+            if k not in [
+                    'target',
+                    'include',
+                    'allow_create',
+                    'is_prompt',
+                    'trigger_rebuild',
+                    'rebuild_on_metapaths',
+                    ]:
+                logger.warning(f'in target "{target}", in dependency "{dep}", unknown option "{k}"')
+    return dependencies1
 
 
 def reorder_variable_dictionary(var_dict):

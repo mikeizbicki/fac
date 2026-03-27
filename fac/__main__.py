@@ -44,6 +44,8 @@ class BuildSystem:
     auto_commit: bool = True
 
     def __post_init__(self):
+        if self.dryrun:
+            self.auto_commit = False
         self.build_state = BuildState(
                 self.config_file,
                 allow_dirty=self.allow_dirty,

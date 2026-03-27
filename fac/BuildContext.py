@@ -666,11 +666,15 @@ class BuildContext(BaseModel):
             context_path_committed_date = get_fac_timestamp(self.path)
             updated_deps = []
             for dep in self.dependencies_built:
-                path = dep['target']
-                path_committed_date = get_fac_timestamp(path)
-                time_diff = context_path_committed_date - path_committed_date
-                if time_diff < 0:
-                    updated_deps.append(path)
+                if dep.get('trigger_rebuild', True):
+                    path = dep['target']
+                    consider_metapaths = dep.get('rebuild_on_metapaths', False)
+                    path_committed_date = get_fac_timestamp(path, consider_metapaths)
+                    time_diff = context_path_committed_date - path_committed_date
+                    if time_diff < 0:
+                        updated_deps.append(path)
+                    if 'shooting-script' in path and 'beat-details' in self.path:
+                        breakpoint()
             if updated_deps == []:
                 file_status.append('up-to-date')
                 do_build = False
@@ -778,18 +782,19 @@ class BuildContext(BaseModel):
                 )
 
         # record new hashes for future skip-tests
-        facjson = FacJSON(self.path)
-        with open(self.path, 'rb') as fin:
-            hash_contents = hashlib.sha256(fin.read()).hexdigest()
-            facjson.set('hash_contents', hash_contents)
-        facjson.set('hash_prompt', self.prompt_hash)
-        facjson.save()
+        if self.config.get('build_options', {}).get('update_meta'):
+            facjson = FacJSON(self.path)
+            with open(self.path, 'rb') as fin:
+                hash_contents = hashlib.sha256(fin.read()).hexdigest()
+                facjson.set('hash_contents', hash_contents)
+            facjson.set('hash_prompt', self.prompt_hash)
+            facjson.save()
 
         # validate the file
         validate_file(self.path, self.config.get('schema_file'))
 
 
-def get_fac_timestamp(path):
+def get_fac_timestamp(path, consider_metapaths=True):
     '''
     Returns the timestamp that fac will use to determine if dependencies have
     been updated.  If a path does not exist, the fac_timestamp is infinite.
@@ -819,11 +824,14 @@ def get_fac_timestamp(path):
     # and so we need generic code that works for any combination of meta files
     dirname = os.path.dirname(path)
     filename = os.path.basename(path)
-    possible_metapaths = [
-        f'./{dirname}/.{filename}.facjson',
-        f'./{dirname}/.{filename}.fac.log',
-        ]
-    metapaths = [path for path in possible_metapaths if os.path.exists(path)]
+    if consider_metapaths:
+        possible_metapaths = [
+            f'./{dirname}/.{filename}.facjson',
+            f'./{dirname}/.{filename}.fac.log',
+            ]
+        metapaths = [path for path in possible_metapaths if os.path.exists(path)]
+    else:
+        metapaths = []
 
     # if no meta files exist,
     # then the lastbuilt timestamp is the timestamp of the path;

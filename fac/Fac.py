@@ -86,12 +86,14 @@ class Job:
         if self.auto_commit:
             try_add('fac.yaml')
             try_add('.fac.jsonl')
-            for path in self.paths:
-                dirname = os.path.dirname(path)
-                filename = os.path.basename(path)
-                try_add(path)
-                try_add(f'./{dirname}/.{filename}.facjson')
-                try_add(f'./{dirname}/.{filename}.fac.log')
+            for context in self.contexts:
+                if context.path_safe():
+                    try_add(context.path)
+                    if context.config.get('build_options', {}).get('update_meta'):
+                        dirname = os.path.dirname(context.path)
+                        filename = os.path.basename(context.path)
+                        try_add(f'./{dirname}/.{filename}.facjson')
+                        try_add(f'./{dirname}/.{filename}.fac.log')
             commit_message=f'[bot] {self.build_cmd}'
 
             # the if condition below checks if we actually added files;
@@ -281,7 +283,23 @@ class BuildState(Routable):
     # sanity checking
     ########################################
 
+    def _tmp_dep_assert(self, dep):
+        if 'shooting-script' in dep['target']:
+            if not ( dep.get('trigger_rebuild') is not None):
+                breakpoint()
+            assert dep.get('trigger_rebuild') is not None
+
     def assert_invariants(self):
+        for key in self.contexts:
+            for context in self.contexts[key]:
+                if 'beat-details' in context.normalized_target:
+                    for dep in context.dependencies_built:
+                        self._tmp_dep_assert(dep)
+                    for dep in context.dependencies_building:
+                        self._tmp_dep_assert(dep)
+                    for dep in context.dependencies_unresolved:
+                        self._tmp_dep_assert(dep)
+
         # no context can be in more than one state
         for state1 in self.contexts.keys():
             for state2 in self.contexts.keys():
@@ -686,19 +704,23 @@ class BuildState(Routable):
         logger.debug({'context': context.to_dict()}, submessage=True)
         dependencies_built1 = list(context.dependencies_built)
         dependencies_building1 = []
-        for dep in context.dependencies_building:
-            denormalized_targets = substitute_variables(dep['target'], context.variables_resolved)
+        for dep_building in context.dependencies_building:
+            if 'beat-details' in context.normalized_target:
+                self._tmp_dep_assert(dep_building)
+            denormalized_targets = substitute_variables(dep_building['target'], context.variables_resolved)
             for denormalized_target in denormalized_targets:
                 # denormalized_target is a path whenever it does not contain '$';
                 # paths and targets must be handled differently
                 if '$' not in denormalized_target:
                     path = denormalized_target
                     if path in self.file_manager.get_fresh_paths():
-                        dep1 = dict(dep)
+                        dep1 = dict(dep_building)
                         dep1['target'] = path
+                        if 'beat-details' in context.normalized_target:
+                            self._tmp_dep_assert(dep1)
                         dependencies_built1.append(dep1)
                     else:
-                        dependencies_building1.append(dep)
+                        dependencies_building1.append(dep_building)
 
                 else:
                     # some dependencies will never resolve to files;
@@ -718,14 +740,17 @@ class BuildState(Routable):
                         if denormalized_target == loop_context.normalized_target and loop_context != context:
                             all_targets_built = False
                     if not all_targets_built:
-                        dependencies_building1.append(dep)
+                        dependencies_building1.append(dep_building)
                     else:
-                        dep_targets = freeze([dep['target'] for dep in context.config['dependencies']])
+                        dep_targets = freeze([dep_target['target'] for dep_target in context.config['dependencies']])
                         for loop_context in self.contexts['built']:
-                            dep1 = dict(copy.deepcopy(dep))
-                            dep1['target'] = loop_context.path
-                            matches = match_pattern_starstar(dep_targets, dep1['target'])
+                            matches = match_pattern_starstar(freeze([dep_building['target']]), loop_context.path)
+                            #matches = match_pattern_starstar(dep_targets, loop_context.path)
                             if len(matches) == 1:
+                                dep1 = dict(copy.deepcopy(dep_building))
+                                dep1['target'] = loop_context.path
+                                if 'beat-details' in context.normalized_target:
+                                    self._tmp_dep_assert(dep1)
                                 # FIXME:
                                 # the if statement is needed for when fac builds more than one target at a time
                                 # (either through demon mode or multiple cmd line args)
@@ -734,12 +759,13 @@ class BuildState(Routable):
                                 # the problem (and thing to fix) is that the match_pattern_starstar function is slow
                                 # and should not be in an inner loop
                                 dependencies_built1.append(freeze(dep1))
-                            assert '$' not in dep1['target']
+                                assert '$' not in dep1['target']
         context1 = context.model_copy(update={
             'dependencies_built': dependencies_built1,
             'dependencies_building': dependencies_building1,
             })
         self._add_context(context1, required_for=context, force_add=context1==context)
+        self.assert_invariants()
 
     def trace_required_for(self, context, denormalize_targets=False, collapse=True):
         ret = {}
