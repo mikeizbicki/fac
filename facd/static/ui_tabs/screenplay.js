@@ -57,12 +57,12 @@
     }
 
     function reconstructXml(beats) {
-        let xml = '<shooting-script>\n';
+        let xml = '<script>\n';
         beats.forEach(beat => {
             const refAttr = beat.continues_from_beat_id ? ` continues_from_beat_id="${escapeXmlAttr(beat.continues_from_beat_id)}"` : '';
             xml += `<beat beat_id="${escapeXmlAttr(beat.beat_id)}"${refAttr}>${escapeXmlText(beat.text)}</beat>\n`;
         });
-        xml += '</shooting-script>\n';
+        xml += '</script>\n';
         return xml;
     }
 
