@@ -32,6 +32,7 @@ class BuildSystem:
 
     # debug actions
     print_config: bool = False
+    print_prompt: bool = False
 
     # build settings
     overwrite: bool = False
@@ -47,11 +48,15 @@ class BuildSystem:
                 self.config_file,
                 allow_dirty=self.allow_dirty,
                 auto_commit=self.auto_commit,
+                print_prompt=self.print_prompt,
                 )
         if self.debug:
             logger.setLevel('DEBUG')
         if self.trace:
             logger.setLevel('TRACE')
+
+        if self.print_config:
+            pprint_targets(self.build_state.targets_dict)
 
     def build_targets(self, targets):
         # actually build the targets

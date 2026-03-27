@@ -472,10 +472,20 @@ class BuildContext(BaseModel):
         dependencies = list(self.dependencies_built)
         dependencies += [{'target': path} for path in self.include_paths or []]
         files_prompt = ''
+        is_prompt = None
         if len(dependencies) > 0:
             for dep in dependencies:
                 if dep.get('include', True):
                     all_paths.add(dep['target'])
+
+                # if the dependency has an is_prompt annotation,
+                # we will save its contents and use this as the entire prompt later
+                if dep.get('is_prompt', False):
+                    if is_prompt:
+                        logger.warning('duplicate is_prompt annotations; using only latest alphabetically')
+                    with open(dep['target']) as fin:
+                        is_prompt = fin.read().strip()
+
             files_prompt = '<reference_documents>\n'
             for path in sorted(all_paths):
                 # we always try to open the files as text;
@@ -550,6 +560,8 @@ class BuildContext(BaseModel):
 
         # construct the final prompt
         prompt = prompt_instructions + prompt_description + user_prompt + files_prompt + format_instructions
+        if is_prompt:
+            prompt = is_prompt
 
         ########################################
         # filetype specific processing
@@ -664,7 +676,7 @@ class BuildContext(BaseModel):
                 do_build = False
             else:
                 file_status.append('out-of-date')
-                file_status.extend(['dep:' + dep for dep in updated_deps])
+                file_status.extend(['changed:' + dep for dep in updated_deps])
 
         # NOTE:
         # sometimes it is not necessary to rebuild a file even if the dependencies have been updated;
@@ -678,7 +690,7 @@ class BuildContext(BaseModel):
         except FileNotFoundError as e:
             contents_changed = True
         if 'new' not in file_status and 'up-to-date' not in file_status:
-            if facjson.get('hash_prompt'):
+            if not self.config.get('cmd') and facjson.get('hash_prompt'):
                 prompt_changed = self.prompt_hash != facjson.get('hash_prompt')
                 if prompt_changed:
                     file_status.append('prompt-changed')
@@ -730,6 +742,7 @@ class BuildContext(BaseModel):
                     'FAC_DEPENDENCIES': self.FAC_DEPENDENCIES(),
                     }),
                 )
+            logger.info('building with cmd...', submessage=True)
             try:
                 first_line = True
                 while True:

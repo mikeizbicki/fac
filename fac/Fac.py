@@ -108,8 +108,15 @@ class BuildState(Routable):
     The main work of this class is done in the process_* methods,
     which process the contexts in the corresponding state.
     '''
-    def __init__(self, config_file='fac.yaml', allow_dirty=False, auto_commit=True):
+    def __init__(
+            self,
+            config_file='fac.yaml',
+            allow_dirty=False,
+            auto_commit=True,
+            print_prompt=False,
+            ):
         super().__init__()
+        self.print_prompt = print_prompt
 
         # ensure sane git environment
         self.repo = git.Repo('.')
@@ -439,25 +446,25 @@ class BuildState(Routable):
             # in theory, this should not be needed,
             # and it is a sanity debug check to ensure our state transitions work correctly
             state_hashes = set()
-            self.debug_print(f'iter={len(state_hashes)}')
+            #self.debug_print(f'iter={len(state_hashes)}')
             while not self.is_done():
                 state0 = self._state_as_dict()
 
                 # perform all state transitions
                 self.process_all_dependencies()
-                self.debug_print(f'iter={len(state_hashes)} -- deps')
+                #self.debug_print(f'iter={len(state_hashes)} -- deps')
 
                 self.assert_invariants()
                 self.debug_short()
                 self.process_all_buildable()
-                self.debug_print(f'iter={len(state_hashes)} -- build')
+                #self.debug_print(f'iter={len(state_hashes)} -- build')
 
                 self.assert_invariants()
                 self.process_all_variable()
-                self.debug_print(f'iter={len(state_hashes)} -- vars')
+                #self.debug_print(f'iter={len(state_hashes)} -- vars')
 
                 self.assert_invariants()
-                self.debug_print(f'iter={len(state_hashes) + 1}')
+                #self.debug_print(f'iter={len(state_hashes) + 1}')
 
                 self._finalize_jobs()
 
@@ -775,14 +782,18 @@ class BuildState(Routable):
         if context.normalized_target not in self.targets_dict:
             logger.warning(f'target {context.normalized_target} not in self.target_dicts, cannot build', submessage=True)
         else:
-            if do_build:
-
+            # print context info
+            if do_build or 'dryrun' in status:
                 # sort portions of context for better logger output
                 context_dict = context.to_dict()
                 context_dict.get('dependencies_built', []).sort(key=lambda x: x.get('target'))
                 logger.info({'context': context_dict}, submessage=True)
+                if self.print_prompt:
+                    logger.info('prompt: |', submessage=True)
+                    logger.info(context.prompt['prompt'], submessage=True)
 
-                # build context
+            # build context
+            if do_build:
                 self.file_manager.register_context(context, status='building')
                 await context.build()
 
@@ -935,9 +946,14 @@ class BuildState(Routable):
                             # then substitute_variables will return [];
                             # This should never happen at this point.
                             assert len(dep_paths) > 0
-                            dependencies_building1.extend([
-                                frozendict({'target': dep_path}) for dep_path in dep_paths
-                                ])
+
+                            # we need to insert copies of dep with the target modified;
+                            # these copies are important to ensure that the non-target
+                            # keys in dep are preserved (like input, or is_prompt)
+                            for dep_path in dep_paths:
+                                dep1 = dict(dep)
+                                dep1['target'] = dep_path
+                                dependencies_building1.append(freeze(dep1))
 
                 # re-add original context with modified dependencies
                 context1 = context.model_copy(update={

@@ -58,7 +58,7 @@ def pprint_targets(targets):
     '''
     A wrapper around `yaml.dump` for pretty printing a dictionary of targets.
     '''
-    print(yaml.dump(targets, default_flow_style=False).strip())
+    print(yaml.dump(thaw(targets), default_flow_style=False).strip())
 
 
 def rawyaml_to_targets(rawyaml):
@@ -137,6 +137,77 @@ def rawyaml_to_targets(rawyaml):
       variables:
         var1: echo "hola"
         var3: echo "mundo"
+
+    Variables in a scope will be applied to all targets in the scope.
+    Those variables may depend on other targets to build,
+    in which case those dependencies will also need to be added to the scope.
+    Dependencies added directly into a target default to being included in the prompt;
+    variables added in a scope, however, default to not being included in the prompt.
+
+    >>> pprint_targets(rawyaml_to_targets("""
+    ... target0:
+    ...   description: a new target added for testing scope dependencies
+    ... example/scope/:
+    ...   targets:
+    ...     target1:
+    ...       description: this is an example target within a scope
+    ...     example/target2:
+    ...       description: a different target
+    ...       variables:
+    ...         var1: echo "hello"
+    ...         var2: echo "world"
+    ...     scope1/:
+    ...       targets:
+    ...         target1:
+    ...           description: this target has the same name as a different target in a different scope, and that's okay
+    ...           options_text:
+    ...             model: opus4.5
+    ...   variables:
+    ...     var1: cat targetA
+    ...     var3: cat targetA
+    ...   dependencies:
+    ...   - target0
+    ... """))
+    example/scope/example/target2:
+      _working_directory: example/scope
+      dependencies:
+      - include: false
+        target: target0
+      description: a different target
+      mime-type: text/plain
+      variables:
+        var1: echo "hello"
+        var2: echo "world"
+        var3: cat targetA
+    example/scope/scope1/target1:
+      _working_directory: example/scope/scope1
+      dependencies:
+      - include: false
+        target: target0
+      description: this target has the same name as a different target in a different
+        scope, and that's okay
+      mime-type: text/plain
+      options_text:
+        model: opus4.5
+      variables:
+        var1: cat targetA
+        var3: cat targetA
+    example/scope/target1:
+      _working_directory: example/scope
+      dependencies:
+      - include: false
+        target: target0
+      description: this is an example target within a scope
+      mime-type: text/plain
+      variables:
+        var1: cat targetA
+        var3: cat targetA
+    target0:
+      _working_directory: .
+      dependencies: []
+      description: a new target added for testing scope dependencies
+      mime-type: text/plain
+      variables: {}
     '''
     config = yaml.safe_load(rawyaml)
     return _configdict_to_targets(config)
@@ -181,6 +252,14 @@ def _configdict_to_targets(config):
                         targets[name].setdefault(field, {})
                         if val not in targets[name][field]:
                             targets[name][field][val] = c_value[field][val]
+
+                c_value.setdefault('dependencies', [])
+                for val in c_value['dependencies']: 
+                    targets[name]['dependencies'].append({
+                        'target': val,
+                        'include': False,
+                        })
+                    
 
     # clean the final output targets dict
     for target in targets:
