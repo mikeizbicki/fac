@@ -744,6 +744,7 @@ class BuildContext(BaseModel):
                     **os.environ,
                     **self.variables_resolved,
                     'FAC_DEPENDENCIES': self.FAC_DEPENDENCIES(),
+                    'FAC_PATH': self.path,
                     }),
                 )
             logger.info('building with cmd...', submessage=True)
