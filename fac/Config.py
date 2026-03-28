@@ -173,6 +173,7 @@ def rawyaml_to_targets(rawyaml):
       dependencies:
       - include: false
         target: target0
+        trigger_rebuild: false
       description: a different target
       mime-type: text/plain
       variables:
@@ -184,6 +185,7 @@ def rawyaml_to_targets(rawyaml):
       dependencies:
       - include: false
         target: target0
+        trigger_rebuild: false
       description: this target has the same name as a different target in a different
         scope, and that's okay
       mime-type: text/plain
@@ -197,6 +199,7 @@ def rawyaml_to_targets(rawyaml):
       dependencies:
       - include: false
         target: target0
+        trigger_rebuild: false
       description: this is an example target within a scope
       mime-type: text/plain
       variables:
