@@ -200,9 +200,9 @@ class BuildContext(BaseModel):
                     **self.variables_resolved,
                     **dict(zip(splitting_variables, split))
                     }
-            context1 = copy.deepcopy(self.model_copy(update={
+            context1 = self.model_copy(update={
                 'variables_resolved': freeze(variables_resolved1)
-                }))
+                })
             contexts1.append(context1)
         return contexts1
 
@@ -663,18 +663,17 @@ class BuildContext(BaseModel):
         # if the file already exists, we must check if it is up-to-date
         # (i.e. all dependencies are older),
         else:
-            context_path_committed_date = get_fac_timestamp(self.path)
+            fs_snapshot = FilesystemSnapshot()
+            context_path_committed_date = fs_snapshot.get_fac_timestamp(self.path)
             updated_deps = []
             for dep in self.dependencies_built:
                 if dep.get('trigger_rebuild', True):
                     path = dep['target']
                     consider_metapaths = dep.get('rebuild_on_metapaths', False)
-                    path_committed_date = get_fac_timestamp(path, consider_metapaths)
+                    path_committed_date = fs_snapshot.get_fac_timestamp(path, consider_metapaths)
                     time_diff = context_path_committed_date - path_committed_date
                     if time_diff < 0:
                         updated_deps.append(path)
-                    if 'shooting-script' in path and 'beat-details' in self.path:
-                        breakpoint()
             if updated_deps == []:
                 file_status.append('up-to-date')
                 do_build = False
@@ -795,109 +794,140 @@ class BuildContext(BaseModel):
         validate_file(self.path, self.config.get('schema_file'))
 
 
-def get_fac_timestamp(path, consider_metapaths=True):
+class FilesystemSnapshot:
     '''
-    Returns the timestamp that fac will use to determine if dependencies have
-    been updated.  If a path does not exist, the fac_timestamp is infinite.
+    This class is used to calculate the timestamps that files were modified
+    to determine when dependencies need to be rebuilt.
 
     NOTE:
-    Other build systems (e.g. make) use the timestamp on the file system;
-    we use a combination of the timestamp in git and the file system.
-    This difference is due to the fact that in ordinary build systems (like make)
-    the results of the build are never committed to the git repo,
-    but the results of our build are always committed to the git repo.
-
-    NOTE:
-    Due to the way git tracks changes,
-    some built files may not be added to the repo if building resulted
-    in a byte-for-byte copy of the original file.
-    Therefore, we also use fac's metafiles associated with each file
-    to determine it's timestamp.
-    This feature was originally added for correctly rebuilding symlinks
-    (which don't change when the path they point to changes),
-    but the implementation is more general and works for all file types.
+    The only important user-facing method is get_fac_timestamp.
+    Originally, this was a standalone function.
+    But all of the calls to git resulted in very slow code.
+    The class allows us to cache many of these calls to git,
+    which greatly speeds up the get_fac_timestamp calls when in an inner loop.
     '''
-    path_timestamp = _get_lowlevel_timestamp(path)
+    def __init__(self):
+        self._repo = git.Repo('.')
 
-    # for every path built with fac,
-    # fac can also build and track several "meta" files;
-    # exactly which files are built and tracked can depend on many factors,
-    # and so we need generic code that works for any combination of meta files
-    dirname = os.path.dirname(path)
-    filename = os.path.basename(path)
-    if consider_metapaths:
-        possible_metapaths = [
-            f'./{dirname}/.{filename}.facjson',
-            f'./{dirname}/.{filename}.fac.log',
-            ]
-        metapaths = [path for path in possible_metapaths if os.path.exists(path)]
-    else:
-        metapaths = []
+        # Cache dirty/untracked files from git status
+        result = self._repo.git.status('--porcelain')
+        self._dirty_files = set()
+        self._untracked_files = set()
+        for line in result.splitlines():
+            if line:
+                status = line[:2]
+                filepath = line[3:]
+                filepath = os.path.normpath(filepath)
+                if status == '??':
+                    self._untracked_files.add(filepath)
+                else:
+                    self._dirty_files.add(filepath)
 
-    # if no meta files exist,
-    # then the lastbuilt timestamp is the timestamp of the path;
-    # this occurs when the file has not been previously built/tracked with fac
-    if len(metapaths) == 0:
-        return path_timestamp
+        # Cache for commit timestamps
+        self._commit_timestamp_cache = {}
 
-    # if the meta timestamps are greater than the path timestamp,
-    # then the file has been rebuilt with fac,
-    # but the contents did not change,
-    # and so git did not add the file to the commit,
-    # and it keeps its older timestamp;
-    # in this case only we must use the updated meta timestamp
-    metapaths_timestamps = [_get_lowlevel_timestamp(path) for path in metapaths]
-    max_meta_timestamp = max(metapaths_timestamps)
-    if max_meta_timestamp > path_timestamp:
-        return max_meta_timestamp
-    else:
-        return path_timestamp
+    def get_fac_timestamp(self, path, consider_metapaths=True):
+        '''
+        Returns the timestamp that fac will use to determine if dependencies have
+        been updated.  If a path does not exist, the fac_timestamp is infinite.
 
+        NOTE:
+        Other build systems (e.g. make) use the timestamp on the file system;
+        we use a combination of the timestamp in git and the file system.
+        This difference is due to the fact that in ordinary build systems (like make)
+        the results of the build are never committed to the git repo,
+        but the results of our build are always committed to the git repo.
 
-def _get_lowlevel_timestamp(path):
-    '''
-    This is a low-level helper function that retrieves the timestamp of the
-    input path without looking at fac's metafiles.
-    It should never be called directly.
-    '''
-    repo = git.Repo('.')
+        NOTE:
+        Due to the way git tracks changes,
+        some built files may not be added to the repo if building resulted
+        in a byte-for-byte copy of the original file.
+        Therefore, we also use fac's metafiles associated with each file
+        to determine it's timestamp.
+        This feature was originally added for correctly rebuilding symlinks
+        (which don't change when the path they point to changes),
+        but the implementation is more general and works for all file types.
+        '''
+        path_timestamp = self._get_lowlevel_timestamp(path)
 
-    if not os.path.isfile(path):
-        return math.inf
-        raise FileNotFoundError
+        # for every path built with fac,
+        # fac can also build and track several "meta" files;
+        # exactly which files are built and tracked can depend on many factors,
+        # and so we need generic code that works for any combination of meta files
+        dirname = os.path.dirname(path)
+        filename = os.path.basename(path)
+        if consider_metapaths:
+            possible_metapaths = [
+                f'./{dirname}/.{filename}.facjson',
+                f'./{dirname}/.{filename}.fac.log',
+                ]
+            metapaths = [metapath for metapath in possible_metapaths if os.path.exists(metapath)]
+        else:
+            metapaths = []
 
-    # if a file is dirty or not in the repo,
-    # we use the last modified time on the harddrive
+        # if no meta files exist,
+        # then the lastbuilt timestamp is the timestamp of the path;
+        # this occurs when the file has not been previously built/tracked with fac
+        if len(metapaths) == 0:
+            return path_timestamp
 
-    try:
-        # Git status returns empty if file is clean
-        result = repo.git.status('--porcelain', path)
-        is_file_dirty = len(result.strip()) > 0
-    except git.exc.GitCommandError:
-        is_file_dirty = False
+        # if the meta timestamps are greater than the path timestamp,
+        # then the file has been rebuilt with fac,
+        # but the contents did not change,
+        # and so git did not add the file to the commit,
+        # and it keeps its older timestamp;
+        # in this case only we must use the updated meta timestamp
+        metapaths_timestamps = [self._get_lowlevel_timestamp(metapath) for metapath in metapaths]
+        max_meta_timestamp = max(metapaths_timestamps)
+        if max_meta_timestamp > path_timestamp:
+            return max_meta_timestamp
+        else:
+            return path_timestamp
 
-    try:
-        # If file is tracked, this won't raise an exception
-        repo.git.ls_files('--error-unmatch', path)
-        is_path_untracked = False
-    except git.exc.GitCommandError:
-        # File is untracked if it exists but ls-files fails
-        is_path_untracked = os.path.exists(path)
+    def _get_lowlevel_timestamp(self, path):
+        '''
+        This is a low-level helper function that retrieves the timestamp of the
+        input path without looking at fac's metafiles.
+        It should never be called directly.
+        '''
+        if not os.path.isfile(path):
+            return math.inf
+            raise FileNotFoundError
 
-    if is_file_dirty or is_path_untracked:
-        # FIXME:
-        # there can be bugs when clocks are not synced correctly;
-        # it is possible for git timestamps to be in the "future" for local machine
-        # this is likely to cause errors and we should warn about this
-        mtime = os.path.getmtime(path)
-        return mtime
+        # Normalize path for comparison with cached sets
+        normalized_path = os.path.normpath(path)
+        if normalized_path.startswith('./'):
+            normalized_path = normalized_path[2:]
 
-    # if the file has been committed to git and is clean,
-    # we use the git commit timestamp
-    commits = list(repo.iter_commits(paths=path, max_count=1))
-    if len(commits) > 0:
-        return commits[0].committed_date
+        # if a file is dirty or not in the repo,
+        # we use the last modified time on the harddrive
+        is_file_dirty = normalized_path in self._dirty_files
+        is_path_untracked = normalized_path in self._untracked_files
+        if is_file_dirty or is_path_untracked:
+            # FIXME:
+            # there can be bugs when clocks are not synced correctly;
+            # it is possible for git timestamps to be in the "future" for local machine
+            # this is likely to cause errors and we should warn about this
+            mtime = os.path.getmtime(path)
+            return mtime
 
-    # the above code should handle all possible cases,
-    # so this should never happen
-    assert False
+        # if the file has been committed to git and is clean,
+        # we use the git commit timestamp
+        if normalized_path in self._commit_timestamp_cache:
+            return self._commit_timestamp_cache[normalized_path]
+        else:
+            commits = list(self._repo.iter_commits(paths=path, max_count=1))
+            if len(commits) > 0:
+                timestamp = commits[0].committed_date
+                self._commit_timestamp_cache[normalized_path] = timestamp
+                return timestamp
+
+            # if there are no commits, then the path is in .gitignore;
+            # the filesystem timestamp should be used
+            else:
+                mtime = os.path.getmtime(path)
+                return mtime
+
+        # the above code should handle all possible cases,
+        # so this should never happen
+        assert False

@@ -119,6 +119,7 @@ class BuildState(Routable):
             ):
         super().__init__()
         self.print_prompt = print_prompt
+        self.do_assert_invariants = False
 
         # ensure sane git environment
         self.repo = git.Repo('.')
@@ -290,28 +291,19 @@ class BuildState(Routable):
             assert dep.get('trigger_rebuild') is not None
 
     def assert_invariants(self):
-        for key in self.contexts:
-            for context in self.contexts[key]:
-                if 'beat-details' in context.normalized_target:
-                    for dep in context.dependencies_built:
-                        self._tmp_dep_assert(dep)
-                    for dep in context.dependencies_building:
-                        self._tmp_dep_assert(dep)
-                    for dep in context.dependencies_unresolved:
-                        self._tmp_dep_assert(dep)
+        if self.do_assert_invariants:
+            # no context can be in more than one state
+            for state1 in self.contexts.keys():
+                for state2 in self.contexts.keys():
+                    if state1 != state2:
+                        for context in self.contexts[state1]:
+                            assert context not in self.contexts[state2], f'state1={state1}, state2={state2}, context={context}'
 
-        # no context can be in more than one state
-        for state1 in self.contexts.keys():
-            for state2 in self.contexts.keys():
-                if state1 != state2:
-                    for context in self.contexts[state1]:
-                        assert context not in self.contexts[state2], f'state1={state1}, state2={state2}, context={context}'
-
-        # every built_path has a corresponding context (and vice versa)
-        # FIXME:
-        # removed for testing; add back in
-        #context_paths = set([context.path for context in self.contexts['built']])
-        #assert context_paths == set(self.file_manager.get_fresh_paths())
+            # every built_path has a corresponding context (and vice versa)
+            # FIXME:
+            # removed for testing; add back in
+            #context_paths = set([context.path for context in self.contexts['built']])
+            #assert context_paths == set(self.file_manager.get_fresh_paths())
 
     ########################################
     # visualize state
@@ -343,7 +335,6 @@ class BuildState(Routable):
             }}, submessage=submessage)
 
     def _state_as_dict(self, longform=True):
-            #logger.info(f'hash: {hash(context)}', submessage=True)
         '''
         Convert the internal state into dictionary suitable for yaml conversion.
         Return a deepcopy so that the returned value does not get modified as future processing happens.
@@ -360,43 +351,7 @@ class BuildState(Routable):
                 'waiting': sorted([context.denormalized_target() for context in self.contexts['waiting']]),
                 'unresolved': sorted([context.denormalized_target() for  context in self.contexts['unresolved']]),
                 }
-        return copy.deepcopy(yaml_dict)
-
-    def debug_statediff(self, state0, msg_str=''):
-        state1 = self._state_as_dict()
-        text0 = yaml.dump(state0, default_flow_style=False, sort_keys=False)
-        text1 = yaml.dump(state1, default_flow_style=False, sort_keys=False)
-        import difflib
-        diff = difflib.unified_diff(
-                text0.splitlines(keepends=True),
-                text1.splitlines(keepends=True),
-                )
-        print(''.join(diff))
-        return
-
-        diff = DeepDiff(state0, state1, verbose_level=2)
-        
-        # ensure that the diff only has keys we recognize
-        for k in diff:
-            assert k in ['values_changed', 'iterable_item_added', 'iterable_item_removed']
-
-        # print output
-        print(10 * '-')
-        print(f'|| BuildState diff {msg_str} ||')
-        print(10 * '-')
-        output = {}
-        states = ['buildable', 'waiting', 'unresolved']
-        for state in states:
-            print(f'{state} (diff)')
-            for k in diff.get('iterable_item_removed', []):
-                print(f'< {diff["iterable_item_removed"][k]}')
-            for k in diff.get('iterable_item_added', []):
-                print(f'> {diff["iterable_item_added"][k]}')
-            for k in diff.get('values_changed', []):
-                print(f'< {diff["values_changed"][k]["old_value"]}')
-                print(f'> {diff["values_changed"][k]["new_value"]}')
-
-        return state1
+        return yaml_dict
 
     def debug_print(self, msg=None):
         '''
@@ -585,7 +540,7 @@ class BuildState(Routable):
 
             # variables_unresolved starts off the config,
             # but we pre-resolve every variable in target_env
-            variables_unresolved = dict(copy.deepcopy(self.targets_dict[normalized_target]['variables']))
+            variables_unresolved = dict(self.targets_dict[normalized_target]['variables'])
             for var in target_env:
                 if var in variables_unresolved:
                     del variables_unresolved[var]
@@ -747,7 +702,7 @@ class BuildState(Routable):
                             matches = match_pattern_starstar(freeze([dep_building['target']]), loop_context.path)
                             #matches = match_pattern_starstar(dep_targets, loop_context.path)
                             if len(matches) == 1:
-                                dep1 = dict(copy.deepcopy(dep_building))
+                                dep1 = dict(dep_building)
                                 dep1['target'] = loop_context.path
                                 if 'beat-details' in context.normalized_target:
                                     self._tmp_dep_assert(dep1)
@@ -946,7 +901,7 @@ class BuildState(Routable):
                             # construct the new *_unresolved variables
                             if normalized_target in self.targets_dict:
                                 dependencies_unresolved = self.targets_dict[normalized_target]['dependencies']
-                                variables_unresolved = dict(copy.deepcopy(self.targets_dict[normalized_target]['variables']))
+                                variables_unresolved = dict(self.targets_dict[normalized_target]['variables'])
                                 for var in variables_resolved:
                                     if var in variables_unresolved:
                                         del variables_unresolved[var]

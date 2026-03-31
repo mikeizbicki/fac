@@ -36,9 +36,10 @@ def freeze(obj):
     >>> freeze({})
     frozendict.frozendict({})
     """
-    if isinstance(obj, dict):
+    obj_type = type(obj)
+    if obj_type is dict:
         return frozendict({k: freeze(v) for k, v in obj.items()})
-    if isinstance(obj, (list, set, frozenset)):
+    if obj_type is list or obj_type is set or obj_type is frozenset:
         return frozenset(freeze(item) for item in obj)
     return obj
 
