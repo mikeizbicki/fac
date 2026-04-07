@@ -74,7 +74,6 @@ class Job:
         The main purpose is to commit all built paths to git.
         '''
         self.assert_invariants_finalizable()
-
         self.end_time = time.time()
 
         # add/commit the built targets
@@ -285,12 +284,6 @@ class BuildState(Routable):
     # sanity checking
     ########################################
 
-    def _tmp_dep_assert(self, dep):
-        if 'shooting-script' in dep['target']:
-            if not ( dep.get('trigger_rebuild') is not None):
-                breakpoint()
-            assert dep.get('trigger_rebuild') is not None
-
     def assert_invariants(self):
         if self.do_assert_invariants:
             # no context can be in more than one state
@@ -338,20 +331,11 @@ class BuildState(Routable):
     def _state_as_dict(self, longform=True):
         '''
         Convert the internal state into dictionary suitable for yaml conversion.
-        Return a deepcopy so that the returned value does not get modified as future processing happens.
         '''
         if longform:
-            yaml_dict = {
-                'buildable(long)': [context.to_dict() for context in self.contexts['buildable']],
-                'waiting(long)': [context.to_dict() for context in self.contexts['waiting']],
-                'unresolved(long)': [context.to_dict() for  context in self.contexts['unresolved']],
-                }
+            yaml_dict = {k: [context.to_dict() for context in contexts] for k, contexts in self.contexts}
         else:
-            yaml_dict = {
-                'buildable': sorted([context.denormalized_target() for context in self.contexts['buildable']]),
-                'waiting': sorted([context.denormalized_target() for context in self.contexts['waiting']]),
-                'unresolved': sorted([context.denormalized_target() for  context in self.contexts['unresolved']]),
-                }
+            yaml_dict = {k: sorted([context.denormalized_target() for context in contexts]) for k, contexts in self.contexts}
         return yaml_dict
 
     def debug_print(self, msg=None):
@@ -377,13 +361,7 @@ class BuildState(Routable):
         NOTE:
         We do not implmement __hash__ because this object is mutable and not hashable.
         '''
-        state_sets = [
-            self.contexts['built'],
-            self.contexts['buildable'],
-            self.contexts['waiting'],
-            self.contexts['unresolved'],
-        ]
-        return hash(freeze(state_sets))
+        return hash(freeze(self.contexts))
 
     ########################################
     # build files
@@ -677,8 +655,6 @@ class BuildState(Routable):
         dependencies_built1 = list(context.dependencies_built)
         dependencies_building1 = []
         for dep_building in context.dependencies_building:
-            if 'beat-details' in context.normalized_target:
-                self._tmp_dep_assert(dep_building)
             denormalized_targets = substitute_variables(dep_building['target'], context.variables_resolved)
             for denormalized_target in denormalized_targets:
                 # denormalized_target is a path whenever it does not contain '$';
@@ -688,8 +664,6 @@ class BuildState(Routable):
                     if path in self.file_manager.get_fresh_paths():
                         dep1 = dict(dep_building)
                         dep1['target'] = path
-                        if 'beat-details' in context.normalized_target:
-                            self._tmp_dep_assert(dep1)
                         dependencies_built1.append(dep1)
                     else:
                         dependencies_building1.append(dep_building)
@@ -719,10 +693,6 @@ class BuildState(Routable):
                             matches = match_pattern_starstar(freeze([dep_building['target']]), loop_context.path)
                             #matches = match_pattern_starstar(dep_targets, loop_context.path)
                             if len(matches) == 1:
-                                dep1 = dict(dep_building)
-                                dep1['target'] = loop_context.path
-                                if 'beat-details' in context.normalized_target:
-                                    self._tmp_dep_assert(dep1)
                                 # FIXME:
                                 # the if statement is needed for when fac builds more than one target at a time
                                 # (either through demon mode or multiple cmd line args)
@@ -730,6 +700,8 @@ class BuildState(Routable):
                                 # and the if statement ensures that only those paths for this context will be added;
                                 # the problem (and thing to fix) is that the match_pattern_starstar function is slow
                                 # and should not be in an inner loop
+                                dep1 = dict(dep_building)
+                                dep1['target'] = loop_context.path
                                 dependencies_built1.append(freeze(dep1))
                                 assert '$' not in dep1['target']
         context1 = context.model_copy(update={
