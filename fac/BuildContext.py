@@ -717,7 +717,7 @@ class BuildContext(BaseModel):
 
         return file_status, do_build
 
-    async def build(self):
+    async def build(self, llm=LLM()):
         '''
         Build the file.
         This function is async because API calls can be slow.
@@ -746,7 +746,7 @@ class BuildContext(BaseModel):
                     'FAC_PATH': self.path,
                     }),
                 )
-            logger.info('building with cmd...', submessage=True)
+            #logger.info('building with cmd...', submessage=True)
             try:
                 first_line = True
                 while True:
@@ -772,8 +772,8 @@ class BuildContext(BaseModel):
         # build with llm
         else:
             mode = 'wb'
-            logger.info('building with LLM...', submessage=True)
-            await LLM().generate_file(
+            #logger.info('building with LLM...', submessage=True)
+            await llm.generate_file(
                 self.mime_type[0],
                 self.path,
                 self.prompt,

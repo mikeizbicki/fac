@@ -158,6 +158,7 @@ class BuildState(Routable):
             'waiting': set(),
             'built': set(),
             'notbuilt': set(),
+            'build_required': set(),
         }
 
         # store the full dependency graph of BuildContext instances
@@ -419,25 +420,41 @@ class BuildState(Routable):
             # in theory, this should not be needed,
             # and it is a sanity debug check to ensure our state transitions work correctly
             state_hashes = set()
-            #self.debug_print(f'iter={len(state_hashes)}')
+
+            print_states = False
+            def debug_print(s):
+                if print_states:
+                    self.debug_print(s)
+
+            debug_print(f'iter={len(state_hashes)}')
             while not self.is_done():
-                state0 = self._state_as_dict()
+                state0 = self._state_hash()
+                state1 = None
 
-                # perform all state transitions
-                self.process_all_dependencies()
-                #self.debug_print(f'iter={len(state_hashes)} -- deps')
+                # perform all context state transitions
+                while state0 != state1:
+                    self.process_all_dependencies()
+                    debug_print(f'iter={len(state_hashes)} -- dependencies')
+                    self.assert_invariants()
 
+                    self.process_all_variable()
+                    debug_print(f'iter={len(state_hashes)} -- variable')
+                    self.assert_invariants()
+
+                    self.process_all_waiting()
+                    debug_print(f'iter={len(state_hashes)} -- waiting')
+                    self.assert_invariants()
+
+                    self.process_all_buildable()
+                    debug_print(f'iter={len(state_hashes)} -- buildable')
+                    self.assert_invariants()
+
+                    state1 = state0
+                    state0 = self._state_hash()
+
+                self.process_all_build_required()
+                debug_print(f'iter={len(state_hashes)} -- build_required')
                 self.assert_invariants()
-                self.debug_short()
-                self.process_all_buildable()
-                #self.debug_print(f'iter={len(state_hashes)} -- build')
-
-                self.assert_invariants()
-                self.process_all_variable()
-                #self.debug_print(f'iter={len(state_hashes)} -- vars')
-
-                self.assert_invariants()
-                #self.debug_print(f'iter={len(state_hashes) + 1}')
 
                 self._finalize_jobs()
 
@@ -789,48 +806,80 @@ class BuildState(Routable):
         for postreq in context.config.get('postreqs', []):
             self.add_target(postreq)
 
-    def process_all_buildable(self, max_workers=1, parallel_build=True):
+    def process_all_buildable(self):
         logger.debug(f'process_all_buildable()')
-        self.assert_invariants()
-        self.process_all_waiting()
-        self.assert_invariants()
 
-        # NOTE:
-        # we have a parallel and non-parallel implementation of this function;
-        # both versions should do the exact same thing;
-        # the non-parallel version is simpler (and so easier to understand),
-        # and also cannot have race conditions;
-        # it is generally slower,
-        # but is useful for debugging to ensure that the parallel version is correct
-        if not parallel_build:
-            while len(self.contexts['buildable']) > 0:
-                buildable0 = self.contexts['buildable']
-                self.contexts['buildable'] = set()
-                for context in buildable0:
-                    self.loop.run_until_complete(self._maybe_build_context(context))
-                    self.assert_invariants()
-                    self.process_all_waiting()
-                    self.assert_invariants()
+        for context in self.contexts['buildable']:
+            status, do_build = context.get_status()
 
-        else:
-            # FIXME:
-            # the code below doesn't seem to work correctly;
-            # but still might have bugs;
-            # there's still a lot more work to do to make the async code "nice"
-            sem = asyncio.Semaphore(max_workers)
-            async def limited(context):
-                async with sem:
-                    return await self._maybe_build_context(context)
-            async def run_all():
-                tasks = [limited(ctx) for ctx in self.contexts['buildable']]
-                await asyncio.gather(*tasks)
-            self.loop.run_until_complete(run_all())
-            self.contexts['buildable'] = set()
+            # print debug info
+            logger.info(f'{status} {context.path}')
+            if do_build or 'dryrun' in status:
+                # sort portions of context for better logger output
+                context_dict = context.to_dict()
+                context_dict.get('dependencies_built', []).sort(key=lambda x: x.get('target'))
+                logger.info({'context': context_dict}, submessage=True)
+                if self.print_prompt:
+                    logger.info('prompt: |', submessage=True)
+                    logger.info(context.prompt['prompt'], submessage=True)
 
-            # assert all invariants hold
-            self.assert_invariants()
-            self.process_all_waiting()
-            self.assert_invariants()
+            # assign context to new state
+            if do_build:
+                self.contexts['build_required'].add(context)
+            else:
+                if os.path.exists(context.path):
+                    self.contexts['built'].add(context)
+                    self.file_manager.register_context(context, status='fresh')
+                    for postreq in context.config.get('postreqs', []):
+                        self.add_target(postreq)
+                else:
+                    self.contexts['notbuilt'].add(context)
+                    self.file_manager.register_context(context, status='does-not-exist')
+        self.contexts['buildable'] = set()
+
+    def process_all_build_required(self, max_workers=4, parallel_build=True):
+        logger.debug(f'process_all_build_required()')
+
+        async def _build_context(context):
+            self.file_manager.register_context(context, status='building')
+            await context.build()
+            assert os.path.exists(context.path)
+            self.contexts['built'].add(context)
+            self.file_manager.register_context(context, status='fresh')
+            logger.info(f'built {context.path}')
+            for postreq in context.config.get('postreqs', []):
+                self.add_target(postreq)
+
+        num_contexts = len(self.contexts['build_required'])
+        if num_contexts == 1:
+            logger.info(f'building 1 context')
+        elif num_contexts > 1:
+            logger.info(f'building {num_contexts} contexts with max_workers={max_workers}')
+
+        with logger.make_subtree():
+            # NOTE:
+            # we have a parallel and non-parallel implementation of this function;
+            # both versions should do the exact same thing;
+            # the non-parallel version is simpler (and so easier to understand),
+            # and also cannot have race conditions;
+            # it is generally slower,
+            # but is useful for debugging to ensure that the parallel version is correct
+            if not parallel_build:
+                build_required0 = self.contexts['build_required']
+                for context in build_required0:
+                    self.loop.run_until_complete(_build_context(context))
+                self.contexts['build_required'] = set()
+
+            else:
+                sem = asyncio.Semaphore(max_workers)
+                async def limited(context):
+                    async with sem:
+                        return await _build_context(context)
+                async def run_all():
+                    tasks = [limited(ctx) for ctx in self.contexts['build_required']]
+                    await asyncio.gather(*tasks)
+                self.loop.run_until_complete(run_all())
+                self.contexts['build_required'] = set()
 
     def process_all_dependencies(self):
         contexts = self.contexts['unresolved']
