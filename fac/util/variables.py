@@ -18,10 +18,10 @@ def eval_var(expr, env, var='<unknown>', target='<unknown>', targets_dict={}):
 
     If the bash command has non-zero exit code, we raise an error.
 
-    >>> eval_var('ls /nonexistent/path', {})
+    >>> eval_var('ls /nonexistent/path', {})  # doctest: +ELLIPSIS
     Traceback (most recent call last):
         ...
-    VariableEvaluationError
+    variables.VariableEvaluationError
 
     The var and target parameters are only used for better error messages in the log.
     '''
