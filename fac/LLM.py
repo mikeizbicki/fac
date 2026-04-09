@@ -78,6 +78,8 @@ registered_models = {
     'fal-ai/veo3.1/fast/first-last-frame-to-video': {'video/out': 0.10},
     'fal-ai/kling-video/v2.5-turbo/standard/image-to-video': {'video/out': 0.042},
     'fal-ai/kling-video/o1/image-to-video': {'video/out': 0.112},
+    'fal-ai/kling-video/o3/standard/image-to-video': {'video/out': 0.084},
+    'fal-ai/kling-video/o3/pro/image-to-video': {'video/out': 0.112},
     'fal-ai/veed/fabric-1.0':               {'video/out': 0.08},
     'fal-ai/bytedance/omnihuman/v1.5':      {'video/out': 0.16},
     'fal-ai/creatify/aurora':               {'video/out': 0.14},
@@ -459,6 +461,18 @@ class LLM():
                 arguments = {
                     "prompt": data['prompt'],
                     "start_image_url": fal_client.upload_file(data['first_frame']),
+                    "end_image_url": fal_client.upload_file(data['last_frame']),
+                    "duration": str(seconds),
+                }
+            elif model in [
+                    'fal-ai/kling-video/o1/image-to-video',
+                    'fal-ai/kling-video/o3/standard/image-to-video',
+                    'fal-ai/kling-video/o3/pro/image-to-video',
+                    ]:
+                seconds = int(data.get('seconds', 5))
+                arguments = {
+                    "prompt": data['prompt'],
+                    "image_url": fal_client.upload_file(data['first_frame']),
                     "end_image_url": fal_client.upload_file(data['last_frame']),
                     "duration": str(seconds),
                 }

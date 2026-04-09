@@ -37,6 +37,8 @@ class BuildSystem:
     # build settings
     overwrite: bool = False
     dryrun: bool = False
+    lock: bool = False
+    unlock: bool = False
     include_prompt: str = None
     include_old: bool = False
     include_paths: list[str] = None
@@ -68,6 +70,10 @@ class BuildSystem:
                 mode = 'overwrite'
             if self.dryrun:
                 mode = 'dryrun'
+            if self.lock:
+                mode = 'lock'
+            if self.unlock:
+                mode = 'unlock'
             self.build_state.add_target(
                     target,
                     include_prompt=self.include_prompt,

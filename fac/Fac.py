@@ -1,11 +1,9 @@
 # stdlib imports
 from collections import defaultdict
-from typing import Any, Literal
 import asyncio
 import glob
 import itertools
 import subprocess
-import threading
 import time
 
 # external imports
@@ -21,6 +19,7 @@ from fac.BuildContext import *
 from fac.Config import *
 from fac.Errors import *
 from fac.FileManager import FileManager
+from fac.Job import *
 from fac.io_utils import *
 from fac.util.FastAPI import *
 from fac.util.PrioritySet import PrioritySet
@@ -28,78 +27,12 @@ from fac.util.collapse import *
 from fac.util.freeze import *
 from fac.util.targets import *
 from fac.util.templates import *
+from fac.util.variables import *
 
 # setup logging
 from fac.Logging import *
 #logger.setLevel(logging.DEBUG)
 logger.setLevel(logging.INFO)
-
-
-class Job:
-    '''
-    Multiple jobs can be run sequentially or concurrently in BuildState.
-    This class tracks which paths/contexts correspond to which build jobs.
-    The main purpose of tracking is so we can commit all modified files at once and with an appropriate commit message.
-    '''
-    job_count = 0
-
-    def __init__(self, build_cmd, repo, auto_commit=True):
-        self.build_cmd = build_cmd
-        self.repo = repo
-        self.auto_commit = auto_commit
-        self.contexts = set()
-        self.paths = set()
-        self.start_time = time.time()
-        self.end_time = None
-        self.job_id = Job.job_count
-        Job.job_count += 1
-
-    def register_context(self, context):
-        self.contexts.add(context)
-        if context.path_safe():
-            self.paths.add(context.path_safe())
-
-    def assert_invariants_finalizable(self):
-        # ensure finalize has not already been called
-        assert self.end_time is None
-
-        # ensure that all contexts have corresponding built paths
-        for context in self.contexts:
-            if context.path_safe() and context.mode != 'dryrun':
-                assert context.path_safe() in self.paths
-
-    def finalize(self):
-        '''
-        This method is called after all paths are finally built.
-        The main purpose is to commit all built paths to git.
-        '''
-        self.assert_invariants_finalizable()
-        self.end_time = time.time()
-
-        # add/commit the built targets
-        def try_add(path):
-            try:
-                self.repo.git.add(path)
-            except git.exc.GitCommandError:
-                pass
-        if self.auto_commit:
-            try_add('fac.yaml')
-            try_add('.fac.jsonl')
-            for context in self.contexts:
-                if context.path_safe():
-                    try_add(context.path)
-                    if context.config.get('build_options', {}).get('update_meta'):
-                        dirname = os.path.dirname(context.path)
-                        filename = os.path.basename(context.path)
-                        try_add(f'./{dirname}/.{filename}.facjson')
-                        try_add(f'./{dirname}/.{filename}.fac.log')
-            commit_message=f'[bot] {self.build_cmd}'
-
-            # the if condition below checks if we actually added files;
-            # we only commit if files were actually added;
-            # otherwise a large ugly warning will appear
-            if self.repo.index.diff('HEAD'):
-                self.repo.git.commit('-m', commit_message)
 
 
 class BuildState(Routable):
@@ -119,6 +52,13 @@ class BuildState(Routable):
         super().__init__()
         self.print_prompt = print_prompt
         self.do_assert_invariants = False
+
+        # FIXME:
+        # we need our own dedicated event loop here because
+        # we are mixing async/sync code;
+        # eventually we should move the whole interface to async to fix this wart
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
 
         # ensure sane git environment
         self.repo = git.Repo('.')
@@ -143,13 +83,6 @@ class BuildState(Routable):
         self.targets_dict = load_config(config_file)
         self.file_manager = FileManager(self.targets_dict)
 
-        # FIXME:
-        # we need our own dedicated event loop here because
-        # we are mixing async/sync code;
-        # eventually we should move the whole interface to async to fix this wart
-        self.loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self.loop)
-
         # the states
         self.contexts = {
             'unresolved': set(),
@@ -166,35 +99,6 @@ class BuildState(Routable):
         self.required_for = defaultdict(lambda: [])
 
         self._init_jobs()
-
-    @route('/list_targets', ['GET'], response_model=dict[str, Any])
-    def list_targets(self):
-        '''
-        Returns a dictionary of targets defined in the 'fac.yaml' file.
-        The keys are targets and values are config information describing how to build the targets.
-
-        ---
-
-        A target is a string that may contain shell-like variables
-        that describes a formula for generating paths.
-
-        For example:
-
-        1. The target "example.json" contains no variables and will always resolve to path "example.json".
-
-        2. The target "chapters/$CHAPTER/outline.json" with CHAPTER=['0001', '0002', '0003']
-            will resolve to the three paths:
-            - 'chapters/0001/outline.json'
-            - 'chapters/0002/outline.json'
-            - 'chapters/0003/outline.json'
-
-        The web API exposes methods for working with targets and their corresponding paths,
-        but does not expose an interface for working with the variables.
-        The variable definitions are exposed in the config values returned by this endpoint for debug purposes,
-        but they are processed internally by the webserver and shouldn't be used in the web app.
-        Any web applications must be built to handle arbitrary paths existing for each target.
-        '''
-        return self.targets_dict
 
     ########################################
     # jobs
@@ -367,29 +271,6 @@ class BuildState(Routable):
     # build files
     ########################################
 
-    def build_daemon(self):
-        '''
-        Creates a daemon thread that will continuously build any targets added with `add_target`.
-        This method is used by facd to ensure that the /add_target endpoint results in builds.
-
-        FIXME:
-        It is not safe to run build_all manually after build_daemon has been called.
-        We should probably add a lock to the build_all function to prevent this from happening.
-        '''
-        # to make this method idempotent,
-        # we will store the daemon thread as an attribute;
-        # then we only create the daemon thread if this attr doesn't exist
-        if hasattr(self, '_daemon_thread') and self._daemon_thread.is_alive():
-            return self._daemon_thread
-
-        def daemon_loop():
-            while True:
-                self.build_all()
-                time.sleep(1)
-        self._daemon_thread = threading.Thread(target=daemon_loop, daemon=True)
-        self._daemon_thread.start()
-        return self._daemon_thread
-
     def build_all(self):
         with logger.make_subtree():
             # states will store a hash of BuildState at every iteration;
@@ -473,8 +354,6 @@ class BuildState(Routable):
         Perform a dryrun on all targets in the fac.yaml.
         The dryrun lets fac know which files are already built.
         '''
-        #for target in self.targets_dict:
-            #self.add_target(target, mode='dryrun')
         self.add_target('**', mode='dryrun')
         if build_all:
             self.build_all()
@@ -493,8 +372,7 @@ class BuildState(Routable):
         Registers a target with the build system.
 
         Arguments:
-        - target (str): the target to be built; all variables must be specified; suppo
-   globstar (**)-style pattern matching
+        - target (str): the target to be built; all variables must be specified; supports globstar (**)-style pattern matching
         - include_prompt (str): allows specifying additional build instructions for the target
         - include_old (bool): should the old file be included if rebuilding?
         - mode (str):
@@ -1003,41 +881,12 @@ class BuildState(Routable):
                 continue
 
             # actually evaluate the variable
-            try:
-                value = eval_var(
-                        var,
-                        expr,
-                        context.variables_resolved,
-                        )
-            except VariableEvaluationError as e:
-                logger.error(f'Error evaluating variable {var} in target {context.normalized_target}')
-
-                # print hints for how to resolve common errors
-                patterns = [
-                    r"jq: error: Could not open file (.+?):",
-                    r"ls: cannot access '(.+?)':",
-                ]
-                for pattern in patterns:
-                    match = re.search(pattern, e.cmd.stderr)
-                    if match:
-                        path = match.group(1)
-                        target_matches = match_pattern_starstar(self.targets_dict, path)
-                        logger.error(f'HINT: {var} depends on file {path}')
-                        if len(target_matches) == 0:
-                            logger.error('HINT: there are no targets that correspond to this path')
-                        else:
-                            logger.error(f'HINT: add "{target_matches[0][0]}" to the dependencies to build the file')
-
-                # print raw output
-                logger.error('stderr: |', submessage=True)
-                for line in (e.cmd.stderr.strip()).strip().split('\n'):
-                    logger.error('  ' + line, submessage=True)
-                if len(e.cmd.stdout.strip()) > 0:
-                    logger.error('stdout: |', submessage=True)
-                    for line in (e.cmd.stdout).strip().split('\n'):
-                        logger.error('  ' + line, submessage=True)
-                logger.error({'context': context.to_dict()}, submessage=True)
-                raise e
+            value = eval_var(
+                    expr,
+                    context.variables_resolved,
+                    var,
+                    context.normalized_target,
+                    )
 
             # create new dictionaries for the resolved/unresolved variables;
             # then transfer the variable from unresolved to resolved;
@@ -1049,84 +898,9 @@ class BuildState(Routable):
             variables_unresolved1 = dict(context.variables_unresolved)
             del variables_unresolved1[var]
 
-            context1 = BuildContext(
-                    normalized_target=context.normalized_target,
-                    config=context.config,
-                    variables_resolved=variables_resolved1,
-                    variables_unresolved=variables_unresolved1,
-                    dependencies_built=context.dependencies_built,
-                    dependencies_building=context.dependencies_building,
-                    dependencies_unresolved=context.dependencies_unresolved,
-                    include_prompt=context.include_prompt,
-                    include_old=context.include_old,
-                    include_paths=context.include_paths,
-                    mode=context.mode,
-                    )
+            context1 = context.model_copy(update={
+                'variables_resolved': variables_resolved1,
+                'variables_unresolved': variables_unresolved1,
+                })
             self._add_context(context1, required_for=context, force_add=context1==context)
 
-
-################################################################################
-
-from functools import lru_cache
-@lru_cache()
-def eval_var(var, expr, env):
-    '''
-    Evaluate the bash expression with the given environment variables.
-    Note that this is operation is more than just variable expansion,
-    but actually invokes a bash subshell.
-
-    NOTE:
-    These subshells are moderately expensive,
-    and so we use an lru_cache to speed up processing.
-    This requires that expr be idempotent and side-effect free to maintain correctness.
-    It's not obvious that the performance gains are really worth this restriction.
-
-    >>> eval_var('var', 'echo "hello $NAME"', frozendict({'NAME': 'world'}))
-    'hello world'
-    '''
-    # log the effictiveness of the cache;
-    # this will only get printed on cache-misses
-    logger.debug(f'eval_var.cache_info()={eval_var.cache_info()}')
-
-    # evaluate expr in bash
-    full_command = "set -eu; " + expr.strip()
-    cmd = subprocess.run(
-        full_command,
-        shell=True,
-        capture_output=True,
-        text=True,
-        executable="/bin/bash",
-        env=env,
-        )
-    if cmd.returncode != 0:
-        raise VariableEvaluationError(var, expr, env, cmd)
-    stdout = cmd.stdout.strip()
-
-    # if val is an integer, pad it with zeros
-    lines = []
-    for line in stdout.splitlines():
-        line = line.strip()
-        if line:
-            try:
-                # zero pad integers before adding to list
-                intval = int(line)
-                line = f'{intval:04d}'
-            except ValueError:
-                pass
-            lines.append(line)
-
-    result = '\n'.join(lines)
-    return result
-
-
-class VariableEvaluationError(FACError):
-    def __init__(self, var, expr, context, result):
-        self.cmd = result
-        errorstrs = [
-            f'error evaluating {var}=$({expr})',
-            f'context={context}',
-            f"result.returncode={result.returncode}",
-            f"result.stdout={result.stdout}",
-            f"result.stderr={result.stderr}",
-            ]
-        super().__init__('\n'.join(errorstrs))

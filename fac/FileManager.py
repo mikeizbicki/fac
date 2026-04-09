@@ -13,6 +13,17 @@ from pydantic import BaseModel
 from watchfiles import awatch, Change
 
 
+class PathManager():
+    def __init__(self, context_manager):
+        self.context_mangaer = context_manager
+        self.targets_dict = context_manager.targets_dict
+        self.contexts = context_manager.contexts
+
+        self.path2context = {}
+        self.path2state = {}
+        self.rdeps = defaultdict(lambda: set())
+
+
 class EditFileRequest(BaseModel):
     content: str
     message: str = None

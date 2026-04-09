@@ -83,7 +83,7 @@ class BuildContext(BaseModel):
     # - dryrun (never builds; used for checking what paths exist for a target)
     # - build (builds only when needed; this is the typical case)
     # - overwrite (always builds)
-    mode: Literal['dryrun', 'build', 'overwrite']
+    mode: Literal['dryrun', 'build', 'overwrite', 'lock', 'unlock']
 
     ##############################
     # methods
@@ -209,7 +209,7 @@ class BuildContext(BaseModel):
     def dependencies_mode(self):
         if self.mode in ['overwrite', 'build']:
             return 'build'
-        elif self.mode in ['dryrun']:
+        elif self.mode in ['dryrun', 'lock', 'unlock']:
             return 'dryrun'
         assert False
 

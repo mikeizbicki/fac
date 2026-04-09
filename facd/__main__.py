@@ -1,9 +1,11 @@
 from contextlib import asynccontextmanager
 from importlib.resources import files
-from typing import Optional, Set
+from typing import Optional, Set, Any, Literal
 import asyncio
 import logging
 import sys
+import threading
+import time
 
 from fac.Errors import *
 from fac.Fac import BuildState
@@ -28,29 +30,6 @@ from facd import monitor_jobs
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # the lifespan function allows us to create/destroy variables
-    # that will be used when running FastAPI
-    # but not when the file is loaded in other contexts (e.g. doctests)
-
-    # register state routes
-    state = BuildState()
-    state.file_manager.start()
-    app.include_router(state.router)
-    app.include_router(state.file_manager.router)
-
-    # register git routes
-    app.include_router(git_routes.router)
-
-    # register monitor_jobs routes and set build state reference
-    monitor_jobs.set_build_state(state)
-    app.include_router(monitor_jobs.router)
-
-    # perform a dryrun to register all files with facd;
-    # build_all=False allows facd startup to continue,
-    # and the build_daemon will run the build concurrently
-    # in the background thread
-    state.full_dryrun(build_all=False)
-    state.build_daemon()
 
     yield
 
@@ -120,11 +99,80 @@ async def stream_logs():
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
     )
 
+@app.get('/list_targets', response_model=dict[str, Any])
+def list_targets():
+    '''
+    Returns a dictionary of targets defined in the 'fac.yaml' file.
+    The keys are targets and values are config information describing how to build the targets.
+
+    ---
+
+    A target is a string that may contain shell-like variables
+    that describes a formula for generating paths.
+
+    For example:
+
+    1. The target "example.json" contains no variables and will always resolve to path "example.json".
+
+    2. The target "chapters/$CHAPTER/outline.json" with CHAPTER=['0001', '0002', '0003']
+        will resolve to the three paths:
+        - 'chapters/0001/outline.json'
+        - 'chapters/0002/outline.json'
+        - 'chapters/0003/outline.json'
+
+    The web API exposes methods for working with targets and their corresponding paths,
+    but does not expose an interface for working with the variables.
+    The variable definitions are exposed in the config values returned by this endpoint for debug purposes,
+    but they are processed internally by the webserver and shouldn't be used in the web app.
+    Any web applications must be built to handle arbitrary paths existing for each target.
+    '''
+    return app.state.targets_dict
+
+def build_daemon(state):
+    '''
+    Creates a daemon thread that will continuously build any targets added with `add_target`.
+    This method is used by facd to ensure that the /add_target endpoint results in builds.
+    '''
+    def daemon_loop():
+        while True:
+            state.build_all()
+            time.sleep(1)
+    state._daemon_thread = threading.Thread(target=daemon_loop, daemon=True)
+    state._daemon_thread.start()
+    return state._daemon_thread
+
 ################################################################################
 # run the server
 ################################################################################
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--allow_dirty', action='store_true')
+    args = parser.parse_args()
+
+    # register state routes
+    state = BuildState(
+        allow_dirty=args.allow_dirty,
+        )
+    app.state = state
+    #state.file_manager.start()
+
+    # perform a dryrun to register all files with facd;
+    # build_all=False allows facd startup to continue,
+    # and the build_daemon will run the build concurrently
+    # in the background thread
+    state.full_dryrun(build_all=False)
+    build_daemon(state)
+
+    # register routes
+    app.include_router(state.router)
+    app.include_router(state.file_manager.router)
+    app.include_router(git_routes.router)
+    monitor_jobs.set_build_state(state)
+    app.include_router(monitor_jobs.router)
+
+    # start the web server
     uvicorn.run(
             app,
             host='localhost',
