@@ -1,22 +1,24 @@
-import os
+'''
+FIXME:
+This code should probably be unified with the template code.
+'''
+import re
 import subprocess
-import tempfile
-from fac.Errors import *
-from frozendict import frozendict
+from fac.Errors import FACError
+from fac.Logging import logger
+from fac.util.targets import match_pattern_starstar
 
-# FIXME:
-# This code should probably be unified with the template code.
 
-def eval_var(expr, env, var='<unknown>', target='<unknown>'):
+def eval_var(expr, env, var='<unknown>', target='<unknown>', targets_dict={}):
     '''
     Evaluate the bash expression expr with the given environment variables.
 
-    >>> eval_var('echo "hello $NAME"', frozendict({'NAME': 'world'}))
+    >>> eval_var('echo "hello $NAME"', {'NAME': 'world'})
     'hello world'
 
     If the bash command has non-zero exit code, we raise an error.
 
-    >>> eval_var('ls /nonexistent/path', frozendict({}))
+    >>> eval_var('ls /nonexistent/path', {})
     Traceback (most recent call last):
         ...
     VariableEvaluationError
@@ -49,7 +51,7 @@ def eval_var(expr, env, var='<unknown>', target='<unknown>'):
             match = re.search(pattern, cmd.stderr)
             if match:
                 path = match.group(1)
-                target_matches = match_pattern_starstar(self.targets_dict, path)
+                target_matches = match_pattern_starstar(targets_dict, path)
                 logger.error(f'HINT: {var} depends on file {path}')
                 if len(target_matches) == 0:
                     logger.error('HINT: there are no targets that correspond to this path')
@@ -64,7 +66,7 @@ def eval_var(expr, env, var='<unknown>', target='<unknown>'):
             logger.error('stdout: |', submessage=True)
             for line in stdout.split('\n'):
                 logger.error('  ' + line, submessage=True)
-        logger.error({'context': context.to_dict()}, submessage=True)
+        #logger.error({'context': context.to_dict()}, submessage=True)
         raise VariableEvaluationError
 
     # if val is an integer, pad it with zeros
@@ -86,4 +88,3 @@ def eval_var(expr, env, var='<unknown>', target='<unknown>'):
 
 class VariableEvaluationError(FACError):
     pass
-

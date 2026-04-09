@@ -10,7 +10,6 @@ import base64
 import datetime
 import json
 import os
-import sys
 import time
 import uuid
 
@@ -21,9 +20,8 @@ import openai
 import requests
 
 # project imports
-from fac.Errors import *
+from fac.Errors import FACError
 from fac.Logging import logger
-from fac.io_utils import *
 
 
 registered_providers = {
@@ -162,7 +160,7 @@ class ModelUsageSummary():
 
     def __add__(l, r):
         new = ModelUsageSummary()
-        models = set(self.model_details.keys()) | set(other.model_details.keys)
+        models = set(l.model_details.keys()) | set(r.model_details.keys)
         for model in models:
             new.model_details[model] = l.model_details[model] + r.model_details[model]
         new.tools_used = l.tools_used + r.tools_used

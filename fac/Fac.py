@@ -1,36 +1,27 @@
 # stdlib imports
 from collections import defaultdict
 import asyncio
-import glob
 import itertools
-import subprocess
-import time
+import os
 
 # external imports
-from deepdiff import DeepDiff
-from fastapi import FastAPI, APIRouter
-from frozendict import frozendict
 import git
-import uvicorn
 import yaml
 
 # project imports
-from fac.BuildContext import *
-from fac.Config import *
-from fac.Errors import *
+from fac.BuildContext import BuildContext
+from fac.Config import load_config
+from fac.Errors import DirtyRepo, FACError
 from fac.FileManager import FileManager
-from fac.Job import *
-from fac.io_utils import *
-from fac.util.FastAPI import *
-from fac.util.PrioritySet import PrioritySet
-from fac.util.collapse import *
-from fac.util.freeze import *
-from fac.util.targets import *
-from fac.util.templates import *
-from fac.util.variables import *
+from fac.Job import Job
+from fac.util.FastAPI import Routable, route
+from fac.util.freeze import freeze
+from fac.util.targets import match_pattern_starstar, extract_variables, substitute_variables, variables_transitive_substitute
+from fac.util.variables import eval_var
 
 # setup logging
-from fac.Logging import *
+import logging
+from fac.Logging import logger, with_subtree
 #logger.setLevel(logging.DEBUG)
 logger.setLevel(logging.INFO)
 
@@ -63,7 +54,7 @@ class BuildState(Routable):
         # ensure sane git environment
         self.repo = git.Repo('.')
         self.auto_commit = auto_commit
-        if auto_commit == False:
+        if not auto_commit:
             allow_dirty = True
         self.allow_dirty = allow_dirty
         if self.repo.working_dir != os.getcwd():
@@ -99,6 +90,169 @@ class BuildState(Routable):
         self.required_for = defaultdict(lambda: [])
 
         self._init_jobs()
+
+    ########################################
+    # primary public interface
+    ########################################
+
+    def full_dryrun(self, build_all=True):
+        '''
+        Perform a dryrun on all targets in the fac.yaml.
+        The dryrun lets fac know which files are already built.
+        '''
+        self.add_target('**', mode='dryrun')
+        if build_all:
+            self.build_all()
+
+    @route('/add_target', ['POST'])
+    def add_target(
+            self,
+            target: str,
+            required_for=None,
+            include_prompt=None,
+            include_old=False,
+            include_paths=None,
+            mode='build',
+            ):
+        '''
+        Registers a target with the build system.
+
+        Arguments:
+        - target (str): the target to be built; all variables must be specified; supports globstar (**)-style pattern matching
+        - include_prompt (str): allows specifying additional build instructions for the target
+        - include_old (bool): should the old file be included if rebuilding?
+        - mode (str):
+            - "build": (default) build the file only if needed
+            - "overwrite": always build the file, overwriting existing contents
+            - "dryrun": register the file with the build system, but do not build
+        '''
+        matches = match_pattern_starstar(self.targets_dict, target)
+
+        if len(matches) == 0:
+            logger.error(f'target {target} has no match in fac.yaml')
+            raise FACError()
+
+        # get job info
+        if required_for is None:
+            str_mode = ''
+            if mode == 'overwrite':
+                str_mode = ' --overwrite'
+            if mode == 'dryrun':
+                str_mode = ' --dryrun'
+            str_include_prompt = ''
+            if include_prompt:
+                str_include_prompt = f' --include_prompt={str(include_prompt)}'
+            str_include_old = ''
+            if include_old:
+                str_include_old = f' --include_old={str(include_old)}'
+            str_include_paths = ''
+            if include_paths:
+                str_include_paths = f' --include_paths={str(include_paths)}'
+            build_cmd = f'fac {target}{str_mode}{str_include_prompt}{str_include_old}{str_include_paths}'
+            job = Job(build_cmd, self.repo, auto_commit=self.auto_commit)
+            self.jobs['running'].add(job)
+        else:
+            job = self.context_to_job[required_for]
+
+        # create the contexts
+        for normalized_target, target_env in matches:
+
+            # variables_unresolved starts off the config,
+            # but we pre-resolve every variable in target_env
+            variables_unresolved = dict(self.targets_dict[normalized_target]['variables'])
+            for var in target_env:
+                if var in variables_unresolved:
+                    del variables_unresolved[var]
+
+            # build the context
+            context = BuildContext(
+                    normalized_target=normalized_target,
+                    config=self.targets_dict[normalized_target],
+                    variables_resolved=target_env,
+                    variables_unresolved=variables_unresolved,
+                    dependencies_built=[],
+                    dependencies_building=[],
+                    dependencies_unresolved=self.targets_dict[normalized_target]['dependencies'],
+                    include_prompt=include_prompt,
+                    include_old=include_old,
+                    include_paths=include_paths,
+                    mode=mode,
+                    )
+            self._add_context(context, required_for=required_for, force_add=False, job=job)
+
+    def build_all(self):
+        with logger.make_subtree():
+            # states will store a hash of BuildState at every iteration;
+            # we will use this set to ensure that we don't get stuck in an infinite loop
+            # repeating the same cycle of states forever;
+            # in theory, this should not be needed,
+            # and it is a sanity debug check to ensure our state transitions work correctly
+            state_hashes = set()
+
+            print_states = False
+            def debug_print(s):
+                if print_states:
+                    self.debug_print(s)
+
+            debug_print(f'iter={len(state_hashes)}')
+            while not self.is_done():
+                state0 = self._state_hash()
+                state1 = None
+
+                # perform all context state transitions
+                while state0 != state1:
+                    self.process_all_dependencies()
+                    debug_print(f'iter={len(state_hashes)} -- dependencies')
+                    self.assert_invariants()
+
+                    self.process_all_variable()
+                    debug_print(f'iter={len(state_hashes)} -- variable')
+                    self.assert_invariants()
+
+                    self.process_all_waiting()
+                    debug_print(f'iter={len(state_hashes)} -- waiting')
+                    self.assert_invariants()
+
+                    self.process_all_buildable()
+                    debug_print(f'iter={len(state_hashes)} -- buildable')
+                    self.assert_invariants()
+
+                    state1 = state0
+                    state0 = self._state_hash()
+
+                self.process_all_build_required()
+                debug_print(f'iter={len(state_hashes)} -- build_required')
+                self.assert_invariants()
+
+                self._finalize_jobs()
+
+                # sanity infinite loop check
+                state_hash = self._state_hash()
+                if state_hash in state_hashes:
+                    all_dryrun = True
+                    for context in itertools.chain(
+                            self.contexts['buildable'],
+                            self.contexts['waiting'],
+                            self.contexts['unresolved'],
+                            ):
+                        if context.mode != 'dryrun':
+                            all_dryrun = False
+                    if not all_dryrun:
+                        logger.error('duplicate state detected --- this is a bug in fac')
+                    else:
+                        pass
+                        #logger.warning('evaluated as far as dryrun will allow')
+                        #logger.warning(self.get_states(show_len=True), submessage=True)
+                    break
+                state_hashes.add(state_hash)
+            self._finalize_jobs()
+
+    def is_done(self):
+        return not any([
+            len(self.contexts['unresolved']) > 0,
+            len(self.contexts['buildable']) > 0,
+            len(self.contexts['waiting']) > 0,
+            ])
 
     ########################################
     # jobs
@@ -268,171 +422,8 @@ class BuildState(Routable):
         return hash(freeze(self.contexts))
 
     ########################################
-    # build files
-    ########################################
-
-    def build_all(self):
-        with logger.make_subtree():
-            # states will store a hash of BuildState at every iteration;
-            # we will use this set to ensure that we don't get stuck in an infinite loop
-            # repeating the same cycle of states forever;
-            # in theory, this should not be needed,
-            # and it is a sanity debug check to ensure our state transitions work correctly
-            state_hashes = set()
-
-            print_states = False
-            def debug_print(s):
-                if print_states:
-                    self.debug_print(s)
-
-            debug_print(f'iter={len(state_hashes)}')
-            while not self.is_done():
-                state0 = self._state_hash()
-                state1 = None
-
-                # perform all context state transitions
-                while state0 != state1:
-                    self.process_all_dependencies()
-                    debug_print(f'iter={len(state_hashes)} -- dependencies')
-                    self.assert_invariants()
-
-                    self.process_all_variable()
-                    debug_print(f'iter={len(state_hashes)} -- variable')
-                    self.assert_invariants()
-
-                    self.process_all_waiting()
-                    debug_print(f'iter={len(state_hashes)} -- waiting')
-                    self.assert_invariants()
-
-                    self.process_all_buildable()
-                    debug_print(f'iter={len(state_hashes)} -- buildable')
-                    self.assert_invariants()
-
-                    state1 = state0
-                    state0 = self._state_hash()
-
-                self.process_all_build_required()
-                debug_print(f'iter={len(state_hashes)} -- build_required')
-                self.assert_invariants()
-
-                self._finalize_jobs()
-
-                # sanity infinite loop check
-                state_hash = self._state_hash()
-                if state_hash in state_hashes:
-                    all_dryrun = True
-                    for context in itertools.chain(
-                            self.contexts['buildable'],
-                            self.contexts['waiting'],
-                            self.contexts['unresolved'],
-                            ):
-                        if context.mode != 'dryrun':
-                            all_dryrun = False
-                    if not all_dryrun:
-                        logger.error('duplicate state detected --- this is a bug in fac')
-                    else:
-                        pass
-                        #logger.warning('evaluated as far as dryrun will allow')
-                        #logger.warning(self.get_states(show_len=True), submessage=True)
-                    break
-                state_hashes.add(state_hash)
-            self._finalize_jobs()
-
-    def is_done(self):
-        return not any([
-            len(self.contexts['unresolved']) > 0,
-            len(self.contexts['buildable']) > 0,
-            len(self.contexts['waiting']) > 0,
-            ])
-
-    ########################################
     # state transition methods
     ########################################
-
-    def full_dryrun(self, build_all=True):
-        '''
-        Perform a dryrun on all targets in the fac.yaml.
-        The dryrun lets fac know which files are already built.
-        '''
-        self.add_target('**', mode='dryrun')
-        if build_all:
-            self.build_all()
-
-    @route('/add_target', ['POST'])
-    def add_target(
-            self,
-            target: str,
-            required_for=None,
-            include_prompt=None,
-            include_old=False,
-            include_paths=None,
-            mode='build',
-            ):
-        '''
-        Registers a target with the build system.
-
-        Arguments:
-        - target (str): the target to be built; all variables must be specified; supports globstar (**)-style pattern matching
-        - include_prompt (str): allows specifying additional build instructions for the target
-        - include_old (bool): should the old file be included if rebuilding?
-        - mode (str):
-            - "build": (default) build the file only if needed
-            - "overwrite": always build the file, overwriting existing contents
-            - "dryrun": register the file with the build system, but do not build
-        '''
-        matches = match_pattern_starstar(self.targets_dict, target)
-
-        if len(matches) == 0:
-            logger.error(f'target {target} has no match in fac.yaml')
-            raise FACError()
-
-        # get job info
-        if required_for is None:
-            str_mode = ''
-            if mode == 'overwrite':
-                str_mode = ' --overwrite'
-            if mode == 'dryrun':
-                str_mode = ' --dryrun'
-            str_include_prompt = ''
-            if include_prompt:
-                str_include_prompt = f' --include_prompt={str(include_prompt)}'
-            str_include_old = ''
-            if include_old:
-                str_include_old = f' --include_old={str(include_old)}'
-            str_include_paths = ''
-            if include_paths:
-                str_include_paths = f' --include_paths={str(include_paths)}'
-            build_cmd = f'fac {target}{str_mode}{str_include_prompt}{str_include_old}{str_include_paths}'
-            job = Job(build_cmd, self.repo, auto_commit=self.auto_commit)
-            self.jobs['running'].add(job)
-        else:
-            job = self.context_to_job[context]
-
-        # create the contexts
-        for normalized_target, target_env in matches:
-
-            # variables_unresolved starts off the config,
-            # but we pre-resolve every variable in target_env
-            variables_unresolved = dict(self.targets_dict[normalized_target]['variables'])
-            for var in target_env:
-                if var in variables_unresolved:
-                    del variables_unresolved[var]
-
-            # build the context
-            context = BuildContext(
-                    normalized_target=normalized_target,
-                    config=self.targets_dict[normalized_target],
-                    variables_resolved=target_env,
-                    variables_unresolved=variables_unresolved,
-                    dependencies_built=[],
-                    dependencies_building=[],
-                    dependencies_unresolved=self.targets_dict[normalized_target]['dependencies'],
-                    include_prompt=include_prompt,
-                    include_old=include_old,
-                    include_paths=include_paths,
-                    mode=mode,
-                    )
-            self._add_context(context, required_for=required_for, force_add=False, job=job)
 
     def _add_context(
             self,
@@ -518,7 +509,7 @@ class BuildState(Routable):
             self.file_manager.register_context(context, 'queued')
 
     def process_all_waiting(self):
-        logger.debug(f'process_all_waiting()')
+        logger.debug('process_all_waiting()')
         self.debug_short(submessage=True)
         waiting0 = self.contexts['waiting']
         self.contexts['waiting'] = set()
@@ -528,7 +519,7 @@ class BuildState(Routable):
 
     @with_subtree(logger)
     def process_waiting(self, context, waiting0):
-        logger.debug(f'process_waiting()')
+        logger.debug('process_waiting()')
         logger.debug({'context': context.to_dict()}, submessage=True)
         dependencies_built1 = list(context.dependencies_built)
         dependencies_building1 = []
@@ -566,7 +557,6 @@ class BuildState(Routable):
                     if not all_targets_built:
                         dependencies_building1.append(dep_building)
                     else:
-                        dep_targets = freeze([dep_target['target'] for dep_target in context.config['dependencies']])
                         for loop_context in self.contexts['built']:
                             matches = match_pattern_starstar(freeze([dep_building['target']]), loop_context.path)
                             #matches = match_pattern_starstar(dep_targets, loop_context.path)
@@ -657,7 +647,7 @@ class BuildState(Routable):
             self.add_target(postreq)
 
     def process_all_buildable(self):
-        logger.debug(f'process_all_buildable()')
+        logger.debug('process_all_buildable()')
 
         for context in self.contexts['buildable']:
             status, do_build = context.get_status()
@@ -688,7 +678,7 @@ class BuildState(Routable):
         self.contexts['buildable'] = set()
 
     def process_all_build_required(self, max_workers=4, parallel_build=True):
-        logger.debug(f'process_all_build_required()')
+        logger.debug('process_all_build_required()')
 
         async def _build_context(context):
             self.file_manager.register_context(context, status='building')
@@ -702,7 +692,7 @@ class BuildState(Routable):
 
         num_contexts = len(self.contexts['build_required'])
         if num_contexts == 1:
-            logger.info(f'building 1 context')
+            logger.info('building 1 context')
         elif num_contexts > 1:
             logger.info(f'building {num_contexts} contexts with max_workers={max_workers}')
 
@@ -734,7 +724,7 @@ class BuildState(Routable):
     def process_all_dependencies(self):
         contexts = self.contexts['unresolved']
         self.contexts['unresolved'] = set()
-        logger.debug(f'process_all_dependencies()')
+        logger.debug('process_all_dependencies()')
         with logger.make_subtree():
           for context in contexts:
             logger.debug({'context': context.to_dict()})
@@ -840,7 +830,12 @@ class BuildState(Routable):
                     'dependencies_building': frozenset(dependencies_building1),
                     'dependencies_unresolved': frozenset(dependencies_unresolved1),
                     })
-                self._add_context(context1, required_for=context, force_add=context1==context)
+                force_add = context1 == context
+                self._add_context(
+                    context1,
+                    required_for=context,
+                    force_add=force_add,
+                    )
 
     def process_all_variable(self):
 
@@ -882,11 +877,12 @@ class BuildState(Routable):
 
             # actually evaluate the variable
             value = eval_var(
-                    expr,
-                    context.variables_resolved,
-                    var,
-                    context.normalized_target,
-                    )
+                expr,
+                context.variables_resolved,
+                var,
+                context.normalized_target,
+                self.targets_dict
+                )
 
             # create new dictionaries for the resolved/unresolved variables;
             # then transfer the variable from unresolved to resolved;
@@ -902,5 +898,9 @@ class BuildState(Routable):
                 'variables_resolved': variables_resolved1,
                 'variables_unresolved': variables_unresolved1,
                 })
-            self._add_context(context1, required_for=context, force_add=context1==context)
-
+            force_add = context1 == context
+            self._add_context(
+                context1,
+                required_for=context,
+                force_add=force_add,
+                )

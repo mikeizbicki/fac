@@ -6,8 +6,6 @@ import contextvars
 import logging
 
 # external lib imports
-import json_repair
-import jsonschema
 import yaml
 
 

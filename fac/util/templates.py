@@ -5,6 +5,7 @@ we will invoke a bash subshell to actually process these templates and convert t
 '''
 
 import os
+import re
 import subprocess
 import tempfile
 
@@ -108,12 +109,12 @@ __EOF_DELIMITER_END__
         result = subprocess.run([script_path], capture_output=True, text=True, env={**os.environ, **env_vars})
         if result.returncode != 0 or len(result.stderr.strip()) > 0:
             error = TemplateProcessingError(
-                    result.returncode,
-                    result.stdout,
-                    result.stderr,
-                    env_vars,
-                    script_content,
-                    )
+                result.returncode,
+                result.stdout,
+                result.stderr,
+                env_vars,
+                script_content,
+                )
             if print_function and template_name:
                 print_function(f'error processing template {template_name}: {error.get_bash_error()}')
                 error.print_template(print_function=print_function)
@@ -162,16 +163,15 @@ class TemplateProcessingError(Exception):
             print_function('template:', submessage=True)
             error_line_number = int(match.group(1))
             lines = self.script_content.split('\n')
-            lines = lines [4:-1] # MAGIC NUMBERS that extract the heredoc from the script
+            lines = lines[4:-1]  # MAGIC NUMBERS that extract the heredoc from the script
             start_line = max(0, error_line_number - window_size)
             stop_line = min(error_line_number + window_size, len(lines))
             num_digits = len(str(stop_line))
             for line_number in range(start_line, stop_line):
-                if line_number == error_line_number - 3: # MAGIC NUMBER that correctly adjusts line number FIXME: doesn't actually always work
+                if line_number == error_line_number - 3:  # MAGIC NUMBER that correctly adjusts line number FIXME: doesn't actually always work
                     pointer = '-->'
                 else:
                     pointer = '   '
                 print_function(f' {pointer} {line_number + 1:>{num_digits}}: {lines[line_number]}')
         else:
-            print_function(f'bash error did not contain line number information :(', submessage=True)
-
+            print_function('bash error did not contain line number information :(', submessage=True)

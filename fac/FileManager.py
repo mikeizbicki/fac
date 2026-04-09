@@ -4,8 +4,8 @@ import asyncio
 import json
 import os
 
-from fac.util.FastAPI import *
-from fac.util.targets import *
+from fac.util.FastAPI import Routable, route
+from fac.util.targets import match_pattern_starstar
 
 from fastapi import Request, HTTPException
 from fastapi.responses import StreamingResponse, FileResponse
@@ -59,7 +59,6 @@ class FileManager(Routable):
             pass
         else:
             if status == 'fresh' or context.mode != 'dryrun':
-                mime_type = self.targets_dict.get(context.normalized_target, {}).get('mime-type')
                 self._set_status(context.path, status)
 
     def _set_status(self, path, status, handle_rdeps=True):

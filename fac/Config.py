@@ -9,8 +9,8 @@ import os
 import re
 
 # internal imports
-from fac.Logging import *
-from fac.util.freeze import *
+from fac.Logging import logger
+from fac.util.freeze import freeze, thaw
 
 # external lib imports
 import yaml

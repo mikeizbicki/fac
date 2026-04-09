@@ -1,26 +1,30 @@
 # stdlib imports
-from collections import defaultdict
-from dataclasses import dataclass
 from frozendict import frozendict
 from functools import cached_property
 from typing import Any, Literal
+import asyncio
 import copy
 import hashlib
 import itertools
+import json
 import math
+import os
+import subprocess
 
 # external imports
 from pydantic import BaseModel
 import git
+import jsonschema
 import yaml
 
 # project imports
-from fac.Errors import *
-from fac.LLM import LLM, LLMError
-from fac.io_utils import *
-from fac.util.freeze import *
-from fac.util.targets import *
-from fac.util.templates import *
+from fac.Errors import CommandExecutionError
+from fac.LLM import LLM
+from fac.Logging import logger
+from fac.io_utils import FacJSON, validate_file, binary_file_to_base64_url
+from fac.util.freeze import freeze
+from fac.util.targets import match_pattern_starstar, substitute_variables, extract_variables, variables_transitive_substitute
+from fac.util.templates import process_template
 
 
 class BuildContext(BaseModel):
@@ -446,17 +450,14 @@ class BuildContext(BaseModel):
         prompt_instructions = f'<instructions>\nGenerate the file "{self.path}" based on the information below.\n</instructions>\n'
 
         if 'description' in self.config:
-            try:
-                prompt_description = '<file_description>\n'
-                prompt_description += process_template(
-                        self.config['description'],
-                        env_vars=self.variables_resolved,
-                        print_function=logger.error,
-                        template_name='description',
-                        )
-                prompt_description += '\n</file_description>\n'
-            except TemplateProcessingError as e:
-                raise FACError()
+            prompt_description = '<file_description>\n'
+            prompt_description += process_template(
+                    self.config['description'],
+                    env_vars=self.variables_resolved,
+                    print_function=logger.error,
+                    template_name='description',
+                    )
+            prompt_description += '\n</file_description>\n'
         else:
             prompt_description = ''
 
@@ -468,7 +469,6 @@ class BuildContext(BaseModel):
         # and these will be passed to the models later
         binary_files = []
         all_paths = set()
-        truncated_prompt = None
         dependencies = list(self.dependencies_built)
         dependencies += [{'target': path} for path in self.include_paths or []]
         files_prompt = ''
@@ -539,9 +539,8 @@ class BuildContext(BaseModel):
                     # haven't needed it
                     from lxml import etree
                     from io import BytesIO
-                    parser = etree.XMLParser(remove_blank_text=True)
                     try:
-                        dtd = etree.DTD(BytesIO(schema_text.encode('utf-8')))
+                        etree.DTD(BytesIO(schema_text.encode('utf-8')))
                     except etree.DTDParseError as e:
                         logger.error('invalid DTD schema for xml')
                         logger.error(str(e.error_log), submessage=True)
@@ -690,8 +689,11 @@ class BuildContext(BaseModel):
             with open(self.path, 'rb') as fin:
                 hash_contents_fin = hashlib.sha256(fin.read()).hexdigest()
                 contents_changed = hash_contents_fin != facjson.get('hash_contents')
-        except FileNotFoundError as e:
+        except FileNotFoundError:
             contents_changed = True
+        if not contents_changed:
+            do_build = False
+
         if 'new' not in file_status and 'up-to-date' not in file_status:
             if not self.config.get('cmd') and facjson.get('hash_prompt'):
                 prompt_changed = self.prompt_hash != facjson.get('hash_prompt')
@@ -763,7 +765,7 @@ class BuildContext(BaseModel):
 
             if process.returncode != 0:
                 stdout = await process.stdout.read()
-                logger.error(f"error running the following build script:", submessage=True)
+                logger.error("error running the following build script:", submessage=True)
                 for i, line in enumerate(self.config['cmd'].split('\n')):
                     logger.error(f"line {i+1}: {line}", submessage=True)
                 logger.error(stdout.decode('ascii'), submessage=True)

@@ -8,15 +8,15 @@ import base64
 import json
 import mimetypes
 import os
-import sys
 
 # external lib imports
 import json_repair
 import jsonschema
+import mdformat
 
 # project imports
-from fac.Logging import *
-from fac.Errors import *
+from fac.Logging import logger
+from fac.Errors import FACError
 
 
 def validate_file(path, schema_file=None, fix=False):

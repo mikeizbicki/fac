@@ -6,21 +6,9 @@ The Latin verb `facio` means to do/make, and fac is the imperative form.
 
 from dataclasses import fields, dataclass
 import typing
-from fac.Config import *
-from fac.Fac import *
-
-def str2bool(v):
-    '''
-    For use with argparse and creating boolean parameters.
-    '''
-    if isinstance(v, bool):
-        return v
-    if v.lower() in ('yes', 'true', 't', 'y', '1'):
-        return True
-    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-        return False
-    else:
-        raise argparse.ArgumentTypeError('Boolean value expected.')
+from fac.Config import pprint_targets
+from fac.Fac import BuildState
+from fac.Logging import logger
 
 @dataclass
 class BuildSystem:
@@ -90,6 +78,20 @@ def main():
     import fac.Fac
     import argcomplete
     import argparse
+
+    def str2bool(v):
+        '''
+        For use with argparse and creating boolean parameters.
+        '''
+        if isinstance(v, bool):
+            return v
+        if v.lower() in ('yes', 'true', 't', 'y', '1'):
+            return True
+        elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+            return False
+        else:
+            raise argparse.ArgumentTypeError('Boolean value expected.')
+
     parser = argparse.ArgumentParser()
     parser.add_argument('targets', nargs='*').completer = fac.Config.fac_targets_completer
     parser.add_argument('--dev', action='store_true', help='run in developer mode')
