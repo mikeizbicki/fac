@@ -8,7 +8,7 @@ import threading
 import time
 
 from fac.Errors import *
-from fac.Fac import BuildState
+from fac.Fac import Fac
 from fac.Logging import *
 
 from fastapi import FastAPI, APIRouter, HTTPException, Request
@@ -152,7 +152,7 @@ def main():
     args = parser.parse_args()
 
     # register state routes
-    state = BuildState(
+    state = Fac(
         allow_dirty=args.allow_dirty,
         )
     app.state = state

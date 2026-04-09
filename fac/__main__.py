@@ -7,7 +7,7 @@ The Latin verb `facio` means to do/make, and fac is the imperative form.
 from dataclasses import fields, dataclass
 import typing
 from fac.Config import pprint_targets
-from fac.Fac import BuildState
+from fac.Fac import Fac
 from fac.Logging import logger
 
 @dataclass
@@ -36,7 +36,7 @@ class BuildSystem:
     def __post_init__(self):
         if self.dryrun:
             self.auto_commit = False
-        self.build_state = BuildState(
+        self.build_state = Fac(
                 self.config_file,
                 allow_dirty=self.allow_dirty,
                 auto_commit=self.auto_commit,

@@ -26,7 +26,7 @@ from fac.Logging import logger, with_subtree
 logger.setLevel(logging.INFO)
 
 
-class BuildState(Routable):
+class Fac(Routable):
     '''
     The build system should be thought of like a state machine,
     where the contexts* attributes represent the different states a context can be in.
@@ -42,7 +42,7 @@ class BuildState(Routable):
             ):
         super().__init__()
         self.print_prompt = print_prompt
-        self.do_assert_invariants = False
+        self.do_assert_invariants = True
 
         # FIXME:
         # we need our own dedicated event loop here because
@@ -72,7 +72,6 @@ class BuildState(Routable):
 
         # create important variables
         self.targets_dict = load_config(config_file)
-        self.file_manager = FileManager(self.targets_dict)
 
         # the states
         self.contexts = {
@@ -83,6 +82,13 @@ class BuildState(Routable):
             'notbuilt': set(),
             'build_required': set(),
         }
+        self.path2context = {}
+
+        # every built context has a dependencies_built field that stores the paths
+        # that were needed to build the context;
+        # self.rdeps is a lookup for the reverse direction;
+        # the keys are paths, and the values are the paths built from the key
+        self.rdeps = defaultdict(lambda: set())
 
         # store the full dependency graph of BuildContext instances
         # keys: a BuildContext
@@ -344,18 +350,22 @@ class BuildState(Routable):
 
     def assert_invariants(self):
         if self.do_assert_invariants:
+
+            # ensure every path has a context and vice versa
+            for state in self.contexts:
+                for context in self.contexts[state]:
+                    if context.path_safe():
+                        assert context.path_safe() in self.path2context
+                        assert self.path2context[context.path_safe()] == context
+            #for context in self.path2context.values():
+                #assert any([context in self.contexts[state] for state in self.contexts])
+
             # no context can be in more than one state
             for state1 in self.contexts.keys():
                 for state2 in self.contexts.keys():
                     if state1 != state2:
                         for context in self.contexts[state1]:
                             assert context not in self.contexts[state2], f'state1={state1}, state2={state2}, context={context}'
-
-            # every built_path has a corresponding context (and vice versa)
-            # FIXME:
-            # removed for testing; add back in
-            #context_paths = set([context.path for context in self.contexts['built']])
-            #assert context_paths == set(self.file_manager.get_fresh_paths())
 
     ########################################
     # visualize state
@@ -425,6 +435,20 @@ class BuildState(Routable):
     # state transition methods
     ########################################
 
+    def _get_built_paths(self):
+        return [context.path for context in self.contexts['built']]
+
+    def _set_context_state(self, context, state):
+        '''
+        This helper function should be used when assigning a context to a state
+        instead of directly running self.contexts[state].add()
+        '''
+        self.contexts[state].add(context)
+        if context.path_safe():
+            self.path2context[context.path] = context
+            for dep in context.dependencies_built:
+                self.rdeps[dep['target']].add(context.path)
+
     def _add_context(
             self,
             context: BuildContext,
@@ -470,7 +494,7 @@ class BuildState(Routable):
             if not force_add and (state_name, context) in self._contexts_history:
                 return
             self._contexts_history.add((state_name, context))
-            self.contexts[state_name].add(context)
+            self._set_context_state(context, state_name)
 
         if context != required_for:
             self.required_for[context].append(required_for)
@@ -504,10 +528,6 @@ class BuildState(Routable):
                 else:
                     maybe_add('unresolved')
 
-            # if the context has been resolved to a path,
-            # register it as queued
-            self.file_manager.register_context(context, 'queued')
-
     def process_all_waiting(self):
         logger.debug('process_all_waiting()')
         self.debug_short(submessage=True)
@@ -530,7 +550,7 @@ class BuildState(Routable):
                 # paths and targets must be handled differently
                 if '$' not in denormalized_target:
                     path = denormalized_target
-                    if path in self.file_manager.get_fresh_paths():
+                    if path in self._get_built_paths():
                         dep1 = dict(dep_building)
                         dep1['target'] = path
                         dependencies_built1.append(dep1)
@@ -609,7 +629,6 @@ class BuildState(Routable):
         NOTE:
         The difference between this function and BuildContext.build is:
         - this function only builds when needed
-        - this function updates self.file_manager
         - this function handles postreqs
           (It doesn't build them directly, but adds them to the build system.
           This ensures that any additional var/dep process get processed,
@@ -632,16 +651,14 @@ class BuildState(Routable):
 
             # build context
             if do_build:
-                self.file_manager.register_context(context, status='building')
+                self._set_context_state(context, 'building')
                 await context.build()
 
         if os.path.exists(context.path):
-            self.contexts['built'].add(context)
-            self.file_manager.register_context(context, status='fresh')
+            self._set_context_state(context, 'built')
         else:
             # this should only happen on a dry-run
-            self.contexts['notbuilt'].add(context)
-            self.file_manager.register_context(context, status='does-not-exist')
+            self._set_context_state(context, 'notbuilt')
 
         for postreq in context.config.get('postreqs', []):
             self.add_target(postreq)
@@ -665,27 +682,23 @@ class BuildState(Routable):
 
             # assign context to new state
             if do_build:
-                self.contexts['build_required'].add(context)
+                self._set_context_state(context, 'build_required')
             else:
                 if os.path.exists(context.path):
-                    self.contexts['built'].add(context)
-                    self.file_manager.register_context(context, status='fresh')
+                    self._set_context_state(context, 'built')
                     for postreq in context.config.get('postreqs', []):
                         self.add_target(postreq)
                 else:
-                    self.contexts['notbuilt'].add(context)
-                    self.file_manager.register_context(context, status='does-not-exist')
+                    self._set_context_state(context, 'notbuilt')
         self.contexts['buildable'] = set()
 
     def process_all_build_required(self, max_workers=4, parallel_build=True):
         logger.debug('process_all_build_required()')
 
         async def _build_context(context):
-            self.file_manager.register_context(context, status='building')
             await context.build()
             assert os.path.exists(context.path)
-            self.contexts['built'].add(context)
-            self.file_manager.register_context(context, status='fresh')
+            self._set_context_state(context, 'built')
             logger.info(f'built {context.path}')
             for postreq in context.config.get('postreqs', []):
                 self.add_target(postreq)
@@ -844,12 +857,12 @@ class BuildState(Routable):
         for context in contexts:
             # do not process contexts that still require dependencies to be built
             if len(context.dependencies_building) > 0:
-                self.contexts['unresolved'].add(context)
+                self._set_context_state(context, 'unresolved')
                 continue
 
             # do not process contexts that do not need more variables built
             if len(context.variables_unresolved) == 0:
-                self.contexts['unresolved'].add(context)
+                self._set_context_state(context, 'unresolved')
                 continue
 
             # do not process if dependencies not yet built
