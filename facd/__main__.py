@@ -125,7 +125,13 @@ async def stream_logs():
 ################################################################################
 
 def main():
-    uvicorn.run(app, host='localhost', port=8080, timeout_graceful_shutdown=1)
+    uvicorn.run(
+            app,
+            host='localhost',
+            port=8080,
+            timeout_graceful_shutdown=1,
+            log_level='warning',
+            )
 
 if __name__ == '__main__':
     main()
