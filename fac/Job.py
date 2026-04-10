@@ -1,6 +1,34 @@
+'''
+This file contains all code for managing git.
+'''
+
 import git
 import os
 import time
+
+from fac.Logging import logger, with_subtree
+
+
+def assert_git_sane(allow_dirty=False):
+    '''
+    Used on program startup.
+    Ensures that all Job instances will correctly commit.
+    '''
+    repo = git.Repo('.')
+
+    if repo.working_dir != os.getcwd():
+        logger.error('must be in root of git repo')
+        raise DirtyRepo()
+
+    if repo.is_dirty(untracked_files=True):
+        if allow_dirty:
+            logger.warning('git repo is dirty but proceeding with --allow_dirty')
+        else:
+            logger.error('git repo is dirty')
+            logger.error('you can clean the repo by committing all changes', submessage=True)
+            logger.error('you can clean the repo by deleting all changes with `git checkout . && git clean -fd`', submessage=True)
+            logger.error('you can allow running with a dirty repo using --allow_dirty or --auto_commit=False', submessage=True)
+            raise DirtyRepo()
 
 
 class Job:
@@ -11,9 +39,9 @@ class Job:
     '''
     job_count = 0
 
-    def __init__(self, build_cmd, repo, auto_commit=True):
+    def __init__(self, build_cmd, auto_commit=True):
         self.build_cmd = build_cmd
-        self.repo = repo
+        self.repo = git.Repo('.')
         self.auto_commit = auto_commit
         self.contexts = set()
         self.paths = set()

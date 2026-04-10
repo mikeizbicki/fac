@@ -162,12 +162,12 @@ def main():
     # build_all=False allows facd startup to continue,
     # and the build_daemon will run the build concurrently
     # in the background thread
-    state.full_dryrun(build_all=False)
+    state.add_target('**', mode='dryrun')
     build_daemon(state)
 
     # register routes
     app.include_router(state.router)
-    app.include_router(state.file_manager.router)
+    #app.include_router(state.file_manager.router)
     app.include_router(git_routes.router)
     monitor_jobs.set_build_state(state)
     app.include_router(monitor_jobs.router)

@@ -5,7 +5,6 @@ import itertools
 import os
 
 # external imports
-import git
 import yaml
 
 # project imports
@@ -13,7 +12,7 @@ from fac.BuildContext import BuildContext
 from fac.Config import load_config
 from fac.Errors import DirtyRepo, FACError
 from fac.FileManager import FileManager
-from fac.Job import Job
+from fac.Job import Job, assert_git_sane
 from fac.util.FastAPI import Routable, route
 from fac.util.freeze import freeze
 from fac.util.targets import match_pattern_starstar, extract_variables, substitute_variables, variables_transitive_substitute
@@ -41,8 +40,20 @@ class Fac(Routable):
             print_prompt=False,
             ):
         super().__init__()
-        self.print_prompt = print_prompt
-        self.do_assert_invariants = True
+
+        # set git-related configuration
+        self.auto_commit = auto_commit
+        if not auto_commit:
+            allow_dirty = True
+        self.allow_dirty = allow_dirty
+        assert_git_sane(allow_dirty)
+
+        # set default values for controlling runtime behavior
+        self._max_workers = 4
+        self._parallel_build = True
+        self._do_assert_invariants = False
+        self._print_prompt = print_prompt
+        self._print_states_when_building = False
 
         # FIXME:
         # we need our own dedicated event loop here because
@@ -50,25 +61,6 @@ class Fac(Routable):
         # eventually we should move the whole interface to async to fix this wart
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
-
-        # ensure sane git environment
-        self.repo = git.Repo('.')
-        self.auto_commit = auto_commit
-        if not auto_commit:
-            allow_dirty = True
-        self.allow_dirty = allow_dirty
-        if self.repo.working_dir != os.getcwd():
-            logger.error('must be in root of git repo')
-            raise DirtyRepo()
-        if self.repo.is_dirty(untracked_files=True):
-            if allow_dirty:
-                logger.warning('git repo is dirty but proceeding with --allow_dirty')
-            else:
-                logger.error('git repo is dirty')
-                logger.error('you can clean the repo by committing all changes', submessage=True)
-                logger.error('you can clean the repo by deleting all changes with `git checkout . && git clean -fd`', submessage=True)
-                logger.error('you can allow running with a dirty repo using --allow_dirty or --auto_commit=False', submessage=True)
-                raise DirtyRepo()
 
         # create important variables
         self.targets_dict = load_config(config_file)
@@ -78,6 +70,7 @@ class Fac(Routable):
             'unresolved': set(),
             'buildable': set(),
             'waiting': set(),
+            'building': set(),
             'built': set(),
             'notbuilt': set(),
             'build_required': set(),
@@ -100,15 +93,6 @@ class Fac(Routable):
     ########################################
     # primary public interface
     ########################################
-
-    def full_dryrun(self, build_all=True):
-        '''
-        Perform a dryrun on all targets in the fac.yaml.
-        The dryrun lets fac know which files are already built.
-        '''
-        self.add_target('**', mode='dryrun')
-        if build_all:
-            self.build_all()
 
     @route('/add_target', ['POST'])
     def add_target(
@@ -155,7 +139,7 @@ class Fac(Routable):
             if include_paths:
                 str_include_paths = f' --include_paths={str(include_paths)}'
             build_cmd = f'fac {target}{str_mode}{str_include_prompt}{str_include_old}{str_include_paths}'
-            job = Job(build_cmd, self.repo, auto_commit=self.auto_commit)
+            job = Job(build_cmd, auto_commit=self.auto_commit)
             self.jobs['running'].add(job)
         else:
             job = self.context_to_job[required_for]
@@ -187,22 +171,29 @@ class Fac(Routable):
             self._add_context(context, required_for=required_for, force_add=False, job=job)
 
     def build_all(self):
+        # NOTE:
+        # we will store a hash of self.contexts at every iteration;
+        # we will use this set to ensure that we don't get stuck
+        # in an infinite loop repeating the same cycle of states forever;
+        # the original/main purpose of these checks
+        # is to catch bugs in the build system;
+        state_hashes = set()
+        def state_hash():
+            return hash(freeze(self.contexts))
+
+        def debug_print(s):
+            if self._print_states_when_building:
+                self.debug_print(s)
+
         with logger.make_subtree():
-            # states will store a hash of BuildState at every iteration;
-            # we will use this set to ensure that we don't get stuck in an infinite loop
-            # repeating the same cycle of states forever;
-            # in theory, this should not be needed,
-            # and it is a sanity debug check to ensure our state transitions work correctly
-            state_hashes = set()
-
-            print_states = False
-            def debug_print(s):
-                if print_states:
-                    self.debug_print(s)
-
             debug_print(f'iter={len(state_hashes)}')
-            while not self.is_done():
-                state0 = self._state_hash()
+            while any([
+                    len(self.contexts['unresolved']) > 0,
+                    len(self.contexts['buildable']) > 0,
+                    len(self.contexts['waiting']) > 0,
+                    ]):
+
+                state0 = state_hash()
                 state1 = None
 
                 # perform all context state transitions
@@ -224,17 +215,18 @@ class Fac(Routable):
                     self.assert_invariants()
 
                     state1 = state0
-                    state0 = self._state_hash()
+                    state0 = state_hash()
 
                 self.process_all_build_required()
                 debug_print(f'iter={len(state_hashes)} -- build_required')
                 self.assert_invariants()
 
+                # now that we have built some contexts,
+                # we should allow any jobs
                 self._finalize_jobs()
 
-                # sanity infinite loop check
-                state_hash = self._state_hash()
-                if state_hash in state_hashes:
+                # perform duplicate state check
+                if state0 in state_hashes:
                     all_dryrun = True
                     for context in itertools.chain(
                             self.contexts['buildable'],
@@ -246,19 +238,10 @@ class Fac(Routable):
                     if not all_dryrun:
                         logger.error('duplicate state detected --- this is a bug in fac')
                     else:
-                        pass
-                        #logger.warning('evaluated as far as dryrun will allow')
-                        #logger.warning(self.get_states(show_len=True), submessage=True)
+                        logger.info('evaluated as far as dryrun will allow')
                     break
-                state_hashes.add(state_hash)
+                state_hashes.add(state0)
             self._finalize_jobs()
-
-    def is_done(self):
-        return not any([
-            len(self.contexts['unresolved']) > 0,
-            len(self.contexts['buildable']) > 0,
-            len(self.contexts['waiting']) > 0,
-            ])
 
     ########################################
     # jobs
@@ -289,7 +272,6 @@ class Fac(Routable):
             for context in self.contexts[state_name]:
                 assert context in self.context_to_job
                 assert context in self.context_to_job[context].contexts
-
                 if context.path_safe():
                     assert context.path in self.path_to_job
                     assert context.path in self.path_to_job[context.path].paths
@@ -349,14 +331,13 @@ class Fac(Routable):
     ########################################
 
     def assert_invariants(self):
-        if self.do_assert_invariants:
+        if self._do_assert_invariants:
             # no context can be in more than one state
             for state1 in self.contexts.keys():
                 for state2 in self.contexts.keys():
                     if state1 != state2:
                         for context in self.contexts[state1]:
                             assert context not in self.contexts[state2], f'state1={state1}, state2={state2}, context={context}'
-            
 
             # ensure every path has a context and vice versa
             for state in self.contexts:
@@ -436,17 +417,6 @@ class Fac(Routable):
         print(f'|| BuildState {msg_str} ||')
         print(40 * '=')
         print(yaml.dump(self._state_as_dict(), default_flow_style=False, sort_keys=False))
-
-    def _state_hash(self):
-        '''
-        Compute a hash of the states.
-        This is a debug utility function.
-        It is used to ensure that we do not get stuck in an infinite loop processing a cycle of states.
-
-        NOTE:
-        We do not implmement __hash__ because this object is mutable and not hashable.
-        '''
-        return hash(freeze(self.contexts))
 
     ########################################
     # state transition methods
@@ -639,47 +609,6 @@ class Fac(Routable):
                         ret[dispval] |= recursion
         return ret
 
-    async def _maybe_build_context(self, context):
-        '''
-        Build a single context if needed.
-
-        NOTE:
-        The difference between this function and BuildContext.build is:
-        - this function only builds when needed
-        - this function handles postreqs
-          (It doesn't build them directly, but adds them to the build system.
-          This ensures that any additional var/dep process get processed,
-          and that the build is scheduled properly.)
-        '''
-        status, do_build = context.get_status()
-        logger.info(f'{status} {context.path}')
-        if context.normalized_target not in self.targets_dict:
-            logger.warning(f'target {context.normalized_target} not in self.target_dicts, cannot build', submessage=True)
-        else:
-            # print context info
-            if do_build or 'dryrun' in status:
-                # sort portions of context for better logger output
-                context_dict = context.to_dict()
-                context_dict.get('dependencies_built', []).sort(key=lambda x: x.get('target'))
-                logger.info({'context': context_dict}, submessage=True)
-                if self.print_prompt:
-                    logger.info('prompt: |', submessage=True)
-                    logger.info(context.prompt['prompt'], submessage=True)
-
-            # build context
-            if do_build:
-                self._set_context_state(context, 'building')
-                await context.build()
-
-        if os.path.exists(context.path):
-            self._set_context_state(context, 'built')
-        else:
-            # this should only happen on a dry-run
-            self._set_context_state(context, 'notbuilt')
-
-        for postreq in context.config.get('postreqs', []):
-            self.add_target(postreq)
-
     def process_all_buildable(self):
         logger.debug('process_all_buildable()')
 
@@ -693,7 +622,7 @@ class Fac(Routable):
                 context_dict = context.to_dict()
                 context_dict.get('dependencies_built', []).sort(key=lambda x: x.get('target'))
                 logger.info({'context': context_dict}, submessage=True)
-                if self.print_prompt:
+                if self._print_prompt:
                     logger.info('prompt: |', submessage=True)
                     logger.info(context.prompt['prompt'], submessage=True)
 
@@ -709,7 +638,7 @@ class Fac(Routable):
                     self._set_context_state(context, 'notbuilt')
         self.contexts['buildable'] = set()
 
-    def process_all_build_required(self, max_workers=4, parallel_build=True):
+    def process_all_build_required(self):
         logger.debug('process_all_build_required()')
 
         async def _build_context(context):
@@ -724,7 +653,7 @@ class Fac(Routable):
         if num_contexts == 1:
             logger.info('building 1 context')
         elif num_contexts > 1:
-            logger.info(f'building {num_contexts} contexts with max_workers={max_workers}')
+            logger.info(f'building {num_contexts} contexts with max_workers={self._max_workers}')
 
         with logger.make_subtree():
             # NOTE:
@@ -734,14 +663,14 @@ class Fac(Routable):
             # and also cannot have race conditions;
             # it is generally slower,
             # but is useful for debugging to ensure that the parallel version is correct
-            if not parallel_build:
+            if not self._parallel_build:
                 build_required0 = self.contexts['build_required']
                 for context in build_required0:
                     self.loop.run_until_complete(_build_context(context))
                 self.contexts['build_required'] = set()
 
             else:
-                sem = asyncio.Semaphore(max_workers)
+                sem = asyncio.Semaphore(self._max_workers)
                 async def limited(context):
                     async with sem:
                         return await _build_context(context)
