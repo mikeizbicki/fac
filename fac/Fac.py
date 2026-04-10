@@ -55,13 +55,6 @@ class Fac(Routable):
         self._print_prompt = print_prompt
         self._print_states_when_building = False
 
-        # FIXME:
-        # we need our own dedicated event loop here because
-        # we are mixing async/sync code;
-        # eventually we should move the whole interface to async to fix this wart
-        self.loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self.loop)
-
         # create important variables
         self.targets_dict = load_config(config_file)
 
@@ -76,6 +69,7 @@ class Fac(Routable):
             'build_required': set(),
         }
         self.path2context = {}
+        self.contexts_callbacks = []
 
         # every built context has a dependencies_built field that stores the paths
         # that were needed to build the context;
@@ -170,7 +164,23 @@ class Fac(Routable):
                     )
             self._add_context(context, required_for=required_for, force_add=False, job=job)
 
+    async def build_daemon(self):
+        loop = asyncio.get_event_loop()
+        while True:
+            # Run sync build_all in executor so it doesn't block the event loop
+            await loop.run_in_executor(None, self.build_all)
+            await asyncio.sleep(1)
+
     def build_all(self):
+        # FIXME:
+        # we need our own dedicated event loop here because
+        # we are mixing async/sync code;
+        # eventually we should move the whole interface to async to fix this wart
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(self.async_build_all())
+
+    async def async_build_all(self):
         # NOTE:
         # we will store a hash of self.contexts at every iteration;
         # we will use this set to ensure that we don't get stuck
@@ -217,7 +227,7 @@ class Fac(Routable):
                     state1 = state0
                     state0 = state_hash()
 
-                self.process_all_build_required()
+                await self.process_all_build_required()
                 debug_print(f'iter={len(state_hashes)} -- build_required')
                 self.assert_invariants()
 
@@ -281,10 +291,10 @@ class Fac(Routable):
                     assert context.path in self.path_to_job
                     assert context.path in self.path_to_job[context.path].paths
 
-    def add_callback(self, f):
+    def add_jobs_callback(self, f):
         self.jobs_callbacks.append(f)
 
-    def run_callbacks(self):
+    def run_jobs_callbacks(self):
         for f in self.jobs_callbacks:
             f()
 
@@ -326,7 +336,7 @@ class Fac(Routable):
                 logger.info(f'finalizing job {job.job_id}')
                 job.finalize()
                 self.jobs['succeeded'].add(job)
-                self.run_callbacks()
+                self.run_jobs_callbacks()
             else:
                 self.jobs['running'].add(job)
         self.assert_invariants_jobs()
@@ -643,7 +653,7 @@ class Fac(Routable):
                     self._set_context_state(context, 'notbuilt')
         self.contexts['buildable'] = set()
 
-    def process_all_build_required(self):
+    async def process_all_build_required(self):
         logger.debug('process_all_build_required()')
 
         async def _build_context(context):
@@ -671,7 +681,7 @@ class Fac(Routable):
             if not self._parallel_build:
                 build_required0 = self.contexts['build_required']
                 for context in build_required0:
-                    self.loop.run_until_complete(_build_context(context))
+                    await _build_context(context)
                 self.contexts['build_required'] = set()
 
             else:
@@ -679,10 +689,8 @@ class Fac(Routable):
                 async def limited(context):
                     async with sem:
                         return await _build_context(context)
-                async def run_all():
-                    tasks = [limited(ctx) for ctx in self.contexts['build_required']]
-                    await asyncio.gather(*tasks)
-                self.loop.run_until_complete(run_all())
+                tasks = [limited(ctx) for ctx in self.contexts['build_required']]
+                await asyncio.gather(*tasks)
                 self.contexts['build_required'] = set()
 
     def process_all_dependencies(self):

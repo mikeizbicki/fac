@@ -30,11 +30,17 @@ from facd import monitor_jobs
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    daemon_task = asyncio.create_task(app.state.build_daemon())
 
     yield
 
+    try:
+        daemon_task.cancel()
+        await daemon_task
+    except asyncio.CancelledError:
+        pass
+
     # cleanup code here
-    await state.built_paths.shutdown()
     await git_routes.shutdown_git_routes()
 
 app = FastAPI(title="fac build server", lifespan=lifespan)
@@ -128,19 +134,6 @@ def list_targets():
     '''
     return app.state.targets_dict
 
-def build_daemon(state):
-    '''
-    Creates a daemon thread that will continuously build any targets added with `add_target`.
-    This method is used by facd to ensure that the /add_target endpoint results in builds.
-    '''
-    def daemon_loop():
-        while True:
-            state.build_all()
-            time.sleep(1)
-    state._daemon_thread = threading.Thread(target=daemon_loop, daemon=True)
-    state._daemon_thread.start()
-    return state._daemon_thread
-
 ################################################################################
 # run the server
 ################################################################################
@@ -161,9 +154,7 @@ def main():
     # perform a dryrun to register all files with facd;
     # build_all=False allows facd startup to continue,
     # and the build_daemon will run the build concurrently
-    # in the background thread
     state.add_target('**', mode='dryrun')
-    build_daemon(state)
 
     # register routes
     app.include_router(state.router)
