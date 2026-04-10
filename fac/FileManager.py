@@ -48,6 +48,8 @@ class FileManager(Routable):
             return
 
         self.path2context[context.path] = context
+        self.path2status[context.path] = status
+        return
 
         # update rdeps
         for dep in context.dependencies_built:

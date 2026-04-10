@@ -149,7 +149,7 @@ def main():
         allow_dirty=args.allow_dirty,
         )
     app.state = state
-    #state.file_manager.start()
+    #state.path_manager.start()
 
     # perform a dryrun to register all files with facd;
     # build_all=False allows facd startup to continue,
@@ -158,7 +158,7 @@ def main():
 
     # register routes
     app.include_router(state.router)
-    #app.include_router(state.file_manager.router)
+    app.include_router(state.path_manager.router)
     app.include_router(git_routes.router)
     monitor_jobs.set_build_state(state)
     app.include_router(monitor_jobs.router)

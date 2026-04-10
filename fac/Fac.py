@@ -69,7 +69,7 @@ class Fac(Routable):
             'build_required': set(),
         }
         self.path2context = {}
-        self.contexts_callbacks = []
+        self.path_manager = FileManager(self.targets_dict)
 
         # every built context has a dependencies_built field that stores the paths
         # that were needed to build the context;
@@ -450,6 +450,7 @@ class Fac(Routable):
             self.path2context[context.path] = context
             for dep in context.dependencies_built:
                 self.rdeps[dep['target']].add(context.path)
+                self.path_manager.register_context(context, state)
 
     def _add_context(
             self,
