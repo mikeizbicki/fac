@@ -238,7 +238,12 @@ class Fac(Routable):
                     if not all_dryrun:
                         logger.error('duplicate state detected --- this is a bug in fac')
                     else:
-                        logger.info('evaluated as far as dryrun will allow')
+                        pass
+                        # FIXME:
+                        # it would be nice to log this event,
+                        # but it currently happens too often;
+                        # we need to make it happen only once
+                        #logger.info('evaluated as far as dryrun will allow')
                     break
                 state_hashes.add(state0)
             self._finalize_jobs()
