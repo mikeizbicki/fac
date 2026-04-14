@@ -370,6 +370,10 @@ class BuildContext(BaseModel):
         # ensure normalized_target will resolve to exactly one path
         self.path
 
+        # empty configs represent files not in fac.yaml;
+        # this means they can't be built
+        assert self.config, f'the most likely cause of this error is that the target {self.normalized_target} is used as a dependency but does not have a corresponding target defined in the fac.yaml file'
+
         # target variables must have been previously split
         for var, value in self.variables_resolved.items():
             if var in self.target_variables:
@@ -729,6 +733,12 @@ class BuildContext(BaseModel):
         Any side-effects of the build command will occur,
         and in particular any existing file will be overwritten.
         '''
+        # NOTE:
+        # we ensure the prompt has been generated before running any code;
+        # this calls the assert_invariants_buildable method internally
+        # (if it hasn't already been called)
+        self.prompt
+
         # create output directory if needed
         dirname = os.path.dirname(self.path)
         if len(dirname) > 0:

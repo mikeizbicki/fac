@@ -11,7 +11,7 @@ import yaml
 from fac.BuildContext import BuildContext
 from fac.Config import load_config
 from fac.Errors import DirtyRepo, FACError
-from fac.FileManager import FileManager
+from fac.FileManager import PathRoutes
 from fac.Job import Job, assert_git_sane
 from fac.util.FastAPI import Routable, route
 from fac.util.freeze import freeze
@@ -54,13 +54,7 @@ class Fac(Routable):
         self._do_assert_invariants = False
         self._print_prompt = print_prompt
         self._print_states_when_building = False
-
-        # FIXME:
-        # we need our own dedicated event loop here because
-        # we are mixing async/sync code;
-        # eventually we should move the whole interface to async to fix this wart
-        self.loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self.loop)
+        self._shutdown = False
 
         # create important variables
         self.targets_dict = load_config(config_file)
@@ -76,6 +70,7 @@ class Fac(Routable):
             'build_required': set(),
         }
         self.path2context = {}
+        self.path_routes = PathRoutes(self.targets_dict)
 
         # every built context has a dependencies_built field that stores the paths
         # that were needed to build the context;
@@ -170,7 +165,27 @@ class Fac(Routable):
                     )
             self._add_context(context, required_for=required_for, force_add=False, job=job)
 
+    async def build_daemon(self):
+        loop = asyncio.get_event_loop()
+        try:
+            while True:
+                # Run sync build_all in executor so it doesn't block the event loop
+                await loop.run_in_executor(None, self.build_all)
+                await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            self._shutdown = True
+            logger.warning('build_daemon cancelled')
+
     def build_all(self):
+        # FIXME:
+        # we need our own dedicated event loop here because
+        # we are mixing async/sync code;
+        # eventually we should move the whole interface to async to fix this wart
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(self.async_build_all())
+
+    async def async_build_all(self):
         # NOTE:
         # we will store a hash of self.contexts at every iteration;
         # we will use this set to ensure that we don't get stuck
@@ -191,13 +206,13 @@ class Fac(Routable):
                     len(self.contexts['unresolved']) > 0,
                     len(self.contexts['buildable']) > 0,
                     len(self.contexts['waiting']) > 0,
-                    ]):
+                    ]) and not self._shutdown:
 
                 state0 = state_hash()
                 state1 = None
 
                 # perform all context state transitions
-                while state0 != state1:
+                while state0 != state1 and not self._shutdown:
                     self.process_all_dependencies()
                     debug_print(f'iter={len(state_hashes)} -- dependencies')
                     self.assert_invariants()
@@ -217,7 +232,7 @@ class Fac(Routable):
                     state1 = state0
                     state0 = state_hash()
 
-                self.process_all_build_required()
+                await self.process_all_build_required()
                 debug_print(f'iter={len(state_hashes)} -- build_required')
                 self.assert_invariants()
 
@@ -281,10 +296,10 @@ class Fac(Routable):
                     assert context.path in self.path_to_job
                     assert context.path in self.path_to_job[context.path].paths
 
-    def add_callback(self, f):
+    def add_jobs_callback(self, f):
         self.jobs_callbacks.append(f)
 
-    def run_callbacks(self):
+    def run_jobs_callbacks(self):
         for f in self.jobs_callbacks:
             f()
 
@@ -326,7 +341,7 @@ class Fac(Routable):
                 logger.info(f'finalizing job {job.job_id}')
                 job.finalize()
                 self.jobs['succeeded'].add(job)
-                self.run_callbacks()
+                self.run_jobs_callbacks()
             else:
                 self.jobs['running'].add(job)
         self.assert_invariants_jobs()
@@ -404,7 +419,7 @@ class Fac(Routable):
         Convert the internal state into dictionary suitable for yaml conversion.
         '''
         if longform:
-            yaml_dict = {k: [context.to_dict() for context in contexts] for k, contexts in self.contexts}
+            yaml_dict = {k: [context.to_dict() for context in contexts] for k, contexts in self.contexts.items()}
         else:
             yaml_dict = {k: sorted([context.denormalized_target() for context in contexts]) for k, contexts in self.contexts}
         return yaml_dict
@@ -440,6 +455,7 @@ class Fac(Routable):
             self.path2context[context.path] = context
             for dep in context.dependencies_built:
                 self.rdeps[dep['target']].add(context.path)
+                self.path_routes.register_context(context, state)
 
     def _add_context(
             self,
@@ -643,7 +659,7 @@ class Fac(Routable):
                     self._set_context_state(context, 'notbuilt')
         self.contexts['buildable'] = set()
 
-    def process_all_build_required(self):
+    async def process_all_build_required(self):
         logger.debug('process_all_build_required()')
 
         async def _build_context(context):
@@ -671,7 +687,7 @@ class Fac(Routable):
             if not self._parallel_build:
                 build_required0 = self.contexts['build_required']
                 for context in build_required0:
-                    self.loop.run_until_complete(_build_context(context))
+                    await _build_context(context)
                 self.contexts['build_required'] = set()
 
             else:
@@ -679,10 +695,8 @@ class Fac(Routable):
                 async def limited(context):
                     async with sem:
                         return await _build_context(context)
-                async def run_all():
-                    tasks = [limited(ctx) for ctx in self.contexts['build_required']]
-                    await asyncio.gather(*tasks)
-                self.loop.run_until_complete(run_all())
+                tasks = [limited(ctx) for ctx in self.contexts['build_required']]
+                await asyncio.gather(*tasks)
                 self.contexts['build_required'] = set()
 
     def process_all_dependencies(self):
@@ -699,7 +713,7 @@ class Fac(Routable):
                     logger.debug(f"dep['target']={dep['target']}")
 
                     # if the dependency requires variables that are unresolved,
-                    # we readd it to the state machine to be processed later
+                    # we re-add it to the state machine to be processed later
                     dep_vars = extract_variables(dep['target'])
                     variables_still_needed = [
                             var for var in context.variables_unresolved if var in dep_vars

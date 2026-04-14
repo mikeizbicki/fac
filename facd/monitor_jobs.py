@@ -25,7 +25,7 @@ def set_build_state(state):
     _build_state = state
     
     # Register callback with BuildState
-    state.add_callback(_on_jobs_changed)
+    state.add_jobs_callback(_on_jobs_changed)
 
 
 def _on_jobs_changed():
