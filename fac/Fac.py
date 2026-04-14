@@ -11,7 +11,7 @@ import yaml
 from fac.BuildContext import BuildContext
 from fac.Config import load_config
 from fac.Errors import DirtyRepo, FACError
-from fac.FileManager import FileManager
+from fac.FileManager import PathRoutes
 from fac.Job import Job, assert_git_sane
 from fac.util.FastAPI import Routable, route
 from fac.util.freeze import freeze
@@ -54,6 +54,7 @@ class Fac(Routable):
         self._do_assert_invariants = False
         self._print_prompt = print_prompt
         self._print_states_when_building = False
+        self._shutdown = False
 
         # create important variables
         self.targets_dict = load_config(config_file)
@@ -69,7 +70,7 @@ class Fac(Routable):
             'build_required': set(),
         }
         self.path2context = {}
-        self.path_manager = FileManager(self.targets_dict)
+        self.path_routes = PathRoutes(self.targets_dict)
 
         # every built context has a dependencies_built field that stores the paths
         # that were needed to build the context;
@@ -166,10 +167,14 @@ class Fac(Routable):
 
     async def build_daemon(self):
         loop = asyncio.get_event_loop()
-        while True:
-            # Run sync build_all in executor so it doesn't block the event loop
-            await loop.run_in_executor(None, self.build_all)
-            await asyncio.sleep(1)
+        try:
+            while True:
+                # Run sync build_all in executor so it doesn't block the event loop
+                await loop.run_in_executor(None, self.build_all)
+                await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            self._shutdown = True
+            logger.warning('build_daemon cancelled')
 
     def build_all(self):
         # FIXME:
@@ -201,13 +206,13 @@ class Fac(Routable):
                     len(self.contexts['unresolved']) > 0,
                     len(self.contexts['buildable']) > 0,
                     len(self.contexts['waiting']) > 0,
-                    ]):
+                    ]) and not self._shutdown:
 
                 state0 = state_hash()
                 state1 = None
 
                 # perform all context state transitions
-                while state0 != state1:
+                while state0 != state1 and not self._shutdown:
                     self.process_all_dependencies()
                     debug_print(f'iter={len(state_hashes)} -- dependencies')
                     self.assert_invariants()
@@ -450,7 +455,7 @@ class Fac(Routable):
             self.path2context[context.path] = context
             for dep in context.dependencies_built:
                 self.rdeps[dep['target']].add(context.path)
-                self.path_manager.register_context(context, state)
+                self.path_routes.register_context(context, state)
 
     def _add_context(
             self,
@@ -708,7 +713,7 @@ class Fac(Routable):
                     logger.debug(f"dep['target']={dep['target']}")
 
                     # if the dependency requires variables that are unresolved,
-                    # we readd it to the state machine to be processed later
+                    # we re-add it to the state machine to be processed later
                     dep_vars = extract_variables(dep['target'])
                     variables_still_needed = [
                             var for var in context.variables_unresolved if var in dep_vars

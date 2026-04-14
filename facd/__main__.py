@@ -3,6 +3,7 @@ from importlib.resources import files
 from typing import Optional, Set, Any, Literal
 import asyncio
 import logging
+import signal
 import sys
 import threading
 import time
@@ -10,7 +11,9 @@ import time
 from fac.Errors import *
 from fac.Fac import Fac
 from fac.Logging import *
+import fac.Errors
 
+import git
 from fastapi import FastAPI, APIRouter, HTTPException, Request
 from fastapi import FastAPI, APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -33,15 +36,29 @@ async def lifespan(app: FastAPI):
     daemon_task = asyncio.create_task(app.state.build_daemon())
 
     yield
+    logger.warning('shutting down (within lifespan)')
+
+    # cleanup code here
+    app.state.path_routes.shutdown()
+    await git_routes.shutdown_git_routes()
+    await asyncio.sleep(1)
 
     try:
         daemon_task.cancel()
         await daemon_task
-    except asyncio.CancelledError:
-        pass
 
-    # cleanup code here
-    await git_routes.shutdown_git_routes()
+    # When the server shuts down (e.g. by pressing CTRL-C)
+    # and the build_daemon is in the middle of a build,
+    # these are all common errors that get thrown.
+    # The exact error depends on where in the build process shutdown is triggered.
+    except (
+            asyncio.CancelledError,
+            git.exc.GitCommandError,
+            fac.Errors.FACError,
+            ValueError,
+            BrokenPipeError
+            ):
+        pass
 
 app = FastAPI(title="fac build server", lifespan=lifespan)
 
@@ -158,7 +175,7 @@ def main():
 
     # register routes
     app.include_router(state.router)
-    app.include_router(state.path_manager.router)
+    app.include_router(state.path_routes.router)
     app.include_router(git_routes.router)
     monitor_jobs.set_build_state(state)
     app.include_router(monitor_jobs.router)
@@ -168,7 +185,7 @@ def main():
             app,
             host='localhost',
             port=8080,
-            timeout_graceful_shutdown=1,
+            timeout_graceful_shutdown=5,
             log_level='warning',
             )
 
