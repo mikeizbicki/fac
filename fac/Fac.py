@@ -419,7 +419,7 @@ class Fac(Routable):
         Convert the internal state into dictionary suitable for yaml conversion.
         '''
         if longform:
-            yaml_dict = {k: [context.to_dict() for context in contexts] for k, contexts in self.contexts}
+            yaml_dict = {k: [context.to_dict() for context in contexts] for k, contexts in self.contexts.items()}
         else:
             yaml_dict = {k: sorted([context.denormalized_target() for context in contexts]) for k, contexts in self.contexts}
         return yaml_dict
