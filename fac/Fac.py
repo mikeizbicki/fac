@@ -13,6 +13,7 @@ from fac.Config import load_config
 from fac.Errors import DirtyRepo, FACError
 from fac.FileManager import PathRoutes
 from fac.Job import Job, assert_git_sane
+from fac.io_utils import FacJSON
 from fac.util.FastAPI import Routable, route
 from fac.util.freeze import freeze
 from fac.util.targets import match_pattern_starstar, extract_variables, substitute_variables, variables_transitive_substitute
@@ -49,7 +50,7 @@ class Fac(Routable):
         assert_git_sane(allow_dirty)
 
         # set default values for controlling runtime behavior
-        self._max_workers = 4
+        self._max_workers = 20
         self._parallel_build = True
         self._do_assert_invariants = False
         self._print_prompt = print_prompt
@@ -634,7 +635,22 @@ class Fac(Routable):
         logger.debug('process_all_buildable()')
 
         for context in self.contexts['buildable']:
-            status, do_build = context.get_status()
+            # lock/unlock files
+            if context.mode == 'lock':
+                status = ['lock']
+                do_build = False
+                facjson = FacJSON(context.path)
+                facjson.set('locked', True)
+                facjson.save()
+            elif context.mode == 'unlock':
+                status = ['unlock']
+                do_build = False
+                facjson = FacJSON(context.path)
+                facjson.set('locked', False)
+                facjson.save()
+            else:
+                # determine if context needs building
+                status, do_build = context.get_status()
 
             # print debug info
             logger.info(f'{status} {context.path}')
@@ -646,6 +662,10 @@ class Fac(Routable):
                 if self._print_prompt:
                     logger.info('prompt: |', submessage=True)
                     logger.info(context.prompt['prompt'], submessage=True)
+            if context.mode == 'lock':
+                logger.info('lock', submessage=True)
+            if context.mode == 'unlock':
+                logger.info('unlock', submessage=True)
 
             # assign context to new state
             if do_build:
@@ -761,7 +781,7 @@ class Fac(Routable):
                                 **target_env,
                                 })
                             for var in dict(variables_resolved):
-                                assert '$' not in variables_resolved[var]
+                                #assert '$' not in variables_resolved[var]
                                 if var not in target_variables:
                                     del variables_resolved[var]
 

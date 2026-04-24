@@ -6,6 +6,7 @@ import git
 import os
 import time
 
+from fac.Errors import DirtyRepo
 from fac.Logging import logger, with_subtree
 
 
@@ -80,15 +81,15 @@ class Job:
                 pass
         if self.auto_commit:
             try_add('fac.yaml')
-            try_add('.fac.jsonl')
+            try_add('.buildlog')
             for context in self.contexts:
                 if context.path_safe():
                     try_add(context.path)
-                    if context.config.get('build_options', {}).get('update_meta'):
+                    if context.config.get('build_options', {}).get('update_meta', True):
                         dirname = os.path.dirname(context.path)
                         filename = os.path.basename(context.path)
                         try_add(f'./{dirname}/.{filename}.facjson')
-                        try_add(f'./{dirname}/.{filename}.fac.log')
+                        try_add(f'./{dirname}/.{filename}.buildlog')
             commit_message=f'[bot] {self.build_cmd}'
 
             # the if condition below checks if we actually added files;

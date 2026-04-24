@@ -4,6 +4,7 @@ from functools import cached_property
 from typing import Any, Literal
 import asyncio
 import copy
+import datetime
 import hashlib
 import itertools
 import json
@@ -302,7 +303,7 @@ class BuildContext(BaseModel):
         '''
         paths = self.denormalized_target()
         assert len(paths) == 1
-        assert '$' not in paths[0]
+        assert '$' not in paths[0], paths
         return paths[0]
 
     def path_safe(self):
@@ -656,8 +657,8 @@ class BuildContext(BaseModel):
         build_if = self.config.get('build_options', {}).get('build_if', 'True')
         build_if = process_template(build_if, self.variables_resolved)
         if build_if.lower() == 'false':
-            do_build = False
             file_status.append('build_if:False')
+            do_build = False
 
         # build files that don't already exist
         if not os.path.exists(self.path):
@@ -695,8 +696,9 @@ class BuildContext(BaseModel):
                 contents_changed = hash_contents_fin != facjson.get('hash_contents')
         except FileNotFoundError:
             contents_changed = True
-        if not contents_changed:
-            do_build = False
+        #if not contents_changed:
+            #file_status.append('contents_unchanged')
+            #do_build = False
 
         if 'new' not in file_status and 'up-to-date' not in file_status:
             if not self.config.get('cmd') and facjson.get('hash_prompt'):
@@ -712,13 +714,21 @@ class BuildContext(BaseModel):
                     file_status.append('prompt-same')
                     do_build = False
 
+        # do not build if locked
+        facjson = FacJSON(self.path)
+        locked = facjson.get('locked', False)
+        if locked:
+            file_status.append('locked')
+            do_build = False
+
         # overwrite do_build based on mode
         if self.mode == 'overwrite':
             file_status.append('overwrite')
             do_build = True
 
-        if do_build and self.mode == 'dryrun':
-            file_status.append('dryrun')
+        if do_build and self.mode in ['dryrun', 'lock', 'unlock']:
+            if self.mode == 'dryrun':
+                file_status.append('dryrun')
             do_build = False
 
         return file_status, do_build
@@ -783,15 +793,42 @@ class BuildContext(BaseModel):
 
         # build with llm
         else:
-            mode = 'wb'
-            #logger.info('building with LLM...', submessage=True)
-            await llm.generate_file(
-                self.mime_type[0],
-                self.path,
-                self.prompt,
-                mode=mode,
-                model=self.config.get('model'),
+            major_type, minor_type = self.mime_type
+            if major_type == 'image':
+                usage = await llm.image_async(self.path, self.prompt)
+            elif major_type == 'audio':
+                usage = await llm.audio_async(self.path, self.prompt)
+            elif major_type == 'video':
+                usage = await llm.video_async(self.path, self.prompt)
+            elif major_type == 'text':
+                text, usage = await llm.text_async(self.prompt, model=self.config.get('model'))
+                with open(self.path, 'wt', encoding='utf-8') as fout:
+                    fout.write(text)
+            else:
+                raise ValueError(f'unsupported mime-type: {self.mime_type}')
+
+        # update .buildlog files
+        buildlog = {
+            "__fac_version__": '0.0.0-dev',
+            "time": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "path": self.path,
+            "build_id": 'FIXME',
+            }
+        try:
+            buildlog["cost"] = usage.total_cost()
+            buildlog["usage"] = usage.__dict__
+        except NameError:
+            pass
+        buildlog_jsonl = json.dumps(buildlog) + '\n'
+        buildlog_path = os.path.join(
+                os.path.dirname(self.path),
+                '.' + os.path.basename(self.path) + '.buildlog'
                 )
+        if self.config.get('build_options', {}).get('update_meta', True):
+            with open(buildlog_path, 'at') as fout:
+                fout.write(buildlog_jsonl)
+            with open('.buildlog', 'at') as fout:
+                fout.write(buildlog_jsonl)
 
         # record new hashes for future skip-tests
         if self.config.get('build_options', {}).get('update_meta'):
@@ -860,6 +897,16 @@ class FilesystemSnapshot:
         (which don't change when the path they point to changes),
         but the implementation is more general and works for all file types.
         '''
+        path_timestamp = self._get_fac_timestamp(path, consider_metapaths)
+        #if consider_metapaths and os.path.islink(path):
+        if os.path.islink(path):
+            realpath = os.path.realpath(path)
+            realpath_timestamp = self.get_fac_timestamp(realpath, consider_metapaths)
+        else:
+            realpath_timestamp = 0
+        return max(realpath_timestamp, path_timestamp)
+
+    def _get_fac_timestamp(self, path, consider_metapaths=True):
         path_timestamp = self._get_lowlevel_timestamp(path)
 
         # for every path built with fac,
@@ -870,8 +917,7 @@ class FilesystemSnapshot:
         filename = os.path.basename(path)
         if consider_metapaths:
             possible_metapaths = [
-                f'./{dirname}/.{filename}.facjson',
-                f'./{dirname}/.{filename}.fac.log',
+                f'./{dirname}/.{filename}.buildlog',
                 ]
             metapaths = [metapath for metapath in possible_metapaths if os.path.exists(metapath)]
         else:
