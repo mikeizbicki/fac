@@ -292,7 +292,7 @@ class LLM():
 
         # openAI models:
         if provider == 'openai':
-            quality = data.get('quality', 'low')
+            quality = data.get('quality', 'high')
             size = '1536x1024'
             if data.get('orientation') == 'square':
                 size = '1024x1024'
@@ -327,19 +327,17 @@ class LLM():
 
         elif provider == 'fal-ai':
             #base64_urls = [binary_file_to_base64_url(path) for path in data['reference_images']]
-            elements = [path for path in data['reference_images']]
+            elements = [path for path in data.get('reference_images', [])]
             elements_urls = [self.fal_upload_file(element) for element in elements]
 
             # call the api and await result
-            handler = await fal_client.submit_async(
-                model,
-                arguments={
-                    "prompt": data['prompt'],
-                    "num_images": 1,
-                    "aspect_ratio": "16:9",
-                    "image_urls": elements_urls,
-                },
-            )
+            arguments={
+                "prompt": data['prompt'],
+                "num_images": 1,
+                "aspect_ratio": "16:9",
+                "image_urls": elements_urls,
+            }
+            handler = await fal_client.submit_async(model, arguments)
             try:
                 async for event in handler.iter_events(with_logs=True):
                     pass
@@ -363,6 +361,7 @@ class LLM():
                     submessage=True,
                     max_line_length=300,
                     )
+                raise LLMError
 
             # download the image
             response = requests.get(result['images'][0]['url'])
