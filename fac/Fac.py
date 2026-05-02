@@ -682,13 +682,20 @@ class Fac(Routable):
     async def process_all_build_required(self):
         logger.debug('process_all_build_required()')
 
+        failures = []
+
         async def _build_context(context):
-            await context.build()
-            assert os.path.exists(context.path)
-            self._set_context_state(context, 'built')
-            logger.info(f'built {context.path}')
-            for postreq in context.config.get('postreqs', []):
-                self.add_target(postreq)
+            try:
+                await context.build()
+                assert os.path.exists(context.path)
+                self._set_context_state(context, 'built')
+                logger.info(f'built {context.path}')
+                for postreq in context.config.get('postreqs', []):
+                    self.add_target(postreq)
+            except Exception as e:
+                logger.error(f'failed to build {context.path}: {e}')
+                self._set_context_state(context, 'notbuilt')
+                failures.append((context, e))
 
         num_contexts = len(self.contexts['build_required'])
         if num_contexts == 1:
@@ -697,13 +704,6 @@ class Fac(Routable):
             logger.info(f'building {num_contexts} contexts with max_workers={self._max_workers}')
 
         with logger.make_subtree():
-            # NOTE:
-            # we have a parallel and non-parallel implementation of this function;
-            # both versions should do the exact same thing;
-            # the non-parallel version is simpler (and so easier to understand),
-            # and also cannot have race conditions;
-            # it is generally slower,
-            # but is useful for debugging to ensure that the parallel version is correct
             if not self._parallel_build:
                 build_required0 = self.contexts['build_required']
                 for context in build_required0:
@@ -718,6 +718,12 @@ class Fac(Routable):
                 tasks = [limited(ctx) for ctx in self.contexts['build_required']]
                 await asyncio.gather(*tasks)
                 self.contexts['build_required'] = set()
+
+        if failures:
+            paths = [ctx.path for ctx, _ in failures]
+            logger.error(f'{len(failures)} build(s) failed: {paths}')
+            # Re-raise the first exception after all builds complete
+            raise failures[0][1]
 
     def process_all_dependencies(self):
         contexts = self.contexts['unresolved']

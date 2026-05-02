@@ -840,7 +840,7 @@ class BuildContext(BaseModel):
             facjson.save()
 
         # validate the file
-        validate_file(self.path, self.config.get('schema_file'))
+        validate_file(self.path, self.config.get('schema_file'), fix=True)
 
 
 class FilesystemSnapshot:
