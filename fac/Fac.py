@@ -661,7 +661,15 @@ class Fac(Routable):
                 logger.info({'context': context_dict}, submessage=True)
                 if self._print_prompt:
                     logger.info('prompt: |', submessage=True)
-                    logger.info(context.prompt['prompt'], submessage=True)
+                    # FIXME:
+                    # context.prompt can have different types :(
+                    # this is used to pass in options to image models,
+                    # but this feels very bug-prone;
+                    # we should make it always be the same
+                    try:
+                        logger.info(context.prompt['prompt'], submessage=True)
+                    except TypeError:
+                        logger.info(context.prompt, submessage=True)
             if context.mode == 'lock':
                 logger.info('lock', submessage=True)
             if context.mode == 'unlock':
