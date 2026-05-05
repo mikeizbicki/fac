@@ -49,12 +49,13 @@ def validate_file(path, schema_file=None, fix=False):
         except json.JSONDecodeError as e:
             logger.warning(f'JSONDecodeError: path={path} schema_file={schema_file}')
             if fix:
-                logger.info(f'fixing JSONDecodeError in path={path}')
+                logger.debug(f'fixing JSONDecodeError in path={path}')
                 with open(path, 'wt') as fout:
                     obj = json_repair.loads(text, skip_json_loads=True)
                     json.dump(obj, fout)
             else:
-                raise e
+                logger.error('JSONDecodeError: path={path}')
+                raise FACError(e)
 
         # verify that the JSON matches the schema
         if schema_file:
@@ -70,7 +71,7 @@ def validate_file(path, schema_file=None, fix=False):
 
         # reformat with pretty indentation
         if fix:
-            logger.info('fixing JSON indentation')
+            logger.debug('fixing JSON indentation')
             with open(path, 'r') as fin:
                 data = json.load(fin)
             with open(path, 'w', encoding='utf-8') as fout:

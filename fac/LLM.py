@@ -76,21 +76,31 @@ registered_models = {
     'fal-ai/nano-banana-pro':               {'image/out': 0.15},
     'fal-ai/nano-banana/edit':              {'image/out': 0.04},
     'fal-ai/nano-banana-pro/edit':          {'image/out': 0.15},
+    'fal-ai/nano-banana-2':                 {'image/out': 0.08},
+    'fal-ai/nano-banana-2/edit':            {'image/out': 0.08},
 
+    # image -> video
     # video prices are measured in seconds, not tokens
-    'openai/sora-2':                        {'video/out': 0.10},
-    'openai/sora-2-pro':                    {'video/out': 0.50},
-    'fal-ai/veo3.1/first-last-frame-to-video': {'video/out': 0.20},
-    'fal-ai/veo3.1/fast/first-last-frame-to-video': {'video/out': 0.10},
-    'fal-ai/kling-video/v2.5-turbo/standard/image-to-video': {'video/out': 0.042},
-    'fal-ai/kling-video/o1/image-to-video': {'video/out': 0.112},
-    'fal-ai/kling-video/o3/standard/image-to-video': {'video/out': 0.084},
-    'fal-ai/kling-video/o3/pro/image-to-video': {'video/out': 0.112},
-    'fal-ai/veed/fabric-1.0':               {'video/out': 0.08},
     'fal-ai/bytedance/omnihuman/v1.5':      {'video/out': 0.16},
     'fal-ai/creatify/aurora':               {'video/out': 0.14},
-    'fal-ai/kling-video/v1/standard/ai-avatar': {'video/out': 0.0562},
+    'fal-ai/kling-video/o1/image-to-video': {'video/out': 0.112},
+    'fal-ai/kling-video/o3/pro/image-to-video': {'video/out': 0.112},
+    'fal-ai/kling-video/o3/standard/image-to-video': {'video/out': 0.084},
+    'fal-ai/kling-video/v3/pro/image-to-video': {'video/out': 0.112},
+    'fal-ai/kling-video/v3/standard/image-to-video': {'video/out': 0.084},
+    'fal-ai/kling-video/v2.6/pro/image-to-video': {'video/out': 0.07},
+    'fal-ai/kling-video/v2.6/standard/image-to-video': {'video/out': 0.042},
+    'fal-ai/kling-video/v2.5-turbo/pro/image-to-video': {'video/out': 0.07},
+    'fal-ai/kling-video/v2.5-turbo/standard/image-to-video': {'video/out': 0.042},
+    'fal-ai/veed/fabric-1.0':               {'video/out': 0.08},
+    'fal-ai/veo3.1/fast/first-last-frame-to-video': {'video/out': 0.10},
+    'fal-ai/veo3.1/first-last-frame-to-video': {'video/out': 0.20},
+    'openai/sora-2':                        {'video/out': 0.10},
+    'openai/sora-2-pro':                    {'video/out': 0.50},
+
+    # avatar
     'fal-ai/kling-video/v1/pro/ai-avatar':  {'video/out': 0.115},
+    'fal-ai/kling-video/v1/standard/ai-avatar': {'video/out': 0.0562},
 
     # video -> audio
     'fal-ai/mmaudio-v2':                                {'video/out': 0.001},
@@ -292,7 +302,7 @@ class LLM():
 
         # openAI models:
         if provider == 'openai':
-            quality = data.get('quality', 'low')
+            quality = data.get('quality', 'high')
             size = '1536x1024'
             if data.get('orientation') == 'square':
                 size = '1024x1024'
@@ -327,19 +337,17 @@ class LLM():
 
         elif provider == 'fal-ai':
             #base64_urls = [binary_file_to_base64_url(path) for path in data['reference_images']]
-            elements = [path for path in data['reference_images']]
+            elements = [path for path in data.get('reference_images', [])]
             elements_urls = [self.fal_upload_file(element) for element in elements]
 
             # call the api and await result
-            handler = await fal_client.submit_async(
-                model,
-                arguments={
-                    "prompt": data['prompt'],
-                    "num_images": 1,
-                    "aspect_ratio": "16:9",
-                    "image_urls": elements_urls,
-                },
-            )
+            arguments={
+                "prompt": data['prompt'],
+                "num_images": 1,
+                "aspect_ratio": "16:9",
+                "image_urls": elements_urls,
+            }
+            handler = await fal_client.submit_async(model, arguments)
             try:
                 async for event in handler.iter_events(with_logs=True):
                     pass
@@ -363,6 +371,7 @@ class LLM():
                     submessage=True,
                     max_line_length=300,
                     )
+                raise LLMError
 
             # download the image
             response = requests.get(result['images'][0]['url'])
@@ -571,17 +580,16 @@ class LLM():
                 async for event in handler.iter_events(with_logs=True):
                     if isinstance(event, fal_client.InProgress):
                         for log in event.logs:
-                            logger.info(f'status "{path}": {log["message"]}')
+                            logger.debug(f'status "{path}": {log["message"]}')
                 result = await handler.get()
             except fal_client.client.FalClientHTTPError as e:
                 # in the documentation, e.message is always a dict;
                 # but sometimes it seems to be a str as well
                 # (I believe this is undocumented behavior);
                 # we have the if/else here to ensure good logs in either event
-                if isinstance(e.message, dict):
+                try:
                     logger.error(f"FalClientHTTPError: {e.message[0]['type']}: {e.message[0]['loc']}", submessage=True)
-                    logger.error(e.message[0]['msg'], submessage=True)
-                else:
+                except (TypeError, IndexError, KeyError):
                     logger.error(f"FalClientHTTPError: {e.message}", submessage=True)
                 logger.error({
                     'fal_client.submit_async() parameters': {

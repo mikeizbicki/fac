@@ -1,5 +1,6 @@
 class FACError(Exception):
-    pass
+    def __init__(self, src=None):
+        self.src = src
 
 class DirtyRepo(FACError):
     pass
