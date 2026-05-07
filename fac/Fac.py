@@ -8,7 +8,7 @@ import os
 import yaml
 
 # project imports
-from fac.BuildContext import BuildContext
+from fac.BuildContext import BuildContext, context_print
 from fac.Config import load_config
 from fac.Errors import DirtyRepo, FACError
 from fac.FileManager import PathRoutes
@@ -52,7 +52,7 @@ class Fac(Routable):
         # set default values for controlling runtime behavior
         self._max_workers = 20
         self._parallel_build = True
-        self._do_assert_invariants = False
+        self._do_assert_invariants = True
         self._print_prompt = print_prompt
         self._print_states_when_building = False
         self._shutdown = False
@@ -61,17 +61,24 @@ class Fac(Routable):
         self.targets_dict = load_config(config_file)
 
         # the states
+        #
+        # WARNING:
+        # the order of these states defines their semantic presedence
+        # when merging two states; this is probably more fragile
+        # than it should be
         self.contexts = {
             'unresolved': set(),
-            'buildable': set(),
             'waiting': set(),
+            'buildable': set(),
+            'build_required': set(),
             'building': set(),
             'built': set(),
             'notbuilt': set(),
-            'build_required': set(),
+            'phantom': set(),
         }
         self.path2context = {}
         self.path_routes = PathRoutes(self.targets_dict)
+        self._contexts_history = defaultdict(lambda: [])
 
         # every built context has a dependencies_built field that stores the paths
         # that were needed to build the context;
@@ -358,33 +365,44 @@ class Fac(Routable):
                 for state2 in self.contexts.keys():
                     if state1 != state2:
                         for context in self.contexts[state1]:
-                            assert context not in self.contexts[state2], f'state1={state1}, state2={state2}, context={context}'
+                            assert context not in self.contexts[state2], f'state1={state1}, state2={state2}, context.path_safe()={context.path_safe()}'
 
-            # ensure every path has a context and vice versa
+            # no path can be in more than one context
+            #
+            # FIXME:
+            # We can get two contexts with the same path if
+            # two different jobs submit the same path with different parameters
+            # (e.g. adding custom prompt, using mode='dryrun' vs 'build).
+            # Possible fixes here include:
+            # a. Enforcing the invariant at a per-job level.
+            # b. Removing old contexts when newer jobs would result in a conflict
+            path_states = defaultdict(lambda: [])
+            path_contexts = defaultdict(lambda: [])
+            for state in self.contexts:
+                for context in self.contexts[state]:
+                    if context.path_safe():
+                        path_states[context.path].append(state)
+                        path_contexts[context.path].append(context)
+            for path, states in sorted(path_states.items()):
+                if len(states) > 1:
+                    logger.warning(f'multi_state: path={path} states={states}')
+                    context0 = path_contexts[path][0]
+                    context1 = path_contexts[path][1]
+                    merge_context(context0, context1)
+                assert len(states) == 1, f'path={path} states={states}'
+
+            # self.path2context invariants
+            for path, context in self.path2context.items():
+                assert path == context.path
+
+                # every context is associated with some state
+                assert any([context in self.contexts[state] for state in self.contexts]), f"context.path_safe()={context.path_safe()}"
+
+            # every context with a path is in self.path2context
             for state in self.contexts:
                 for context in self.contexts[state]:
                     if context.path_safe():
                         assert context.path_safe() in self.path2context
-            '''
-                        assert self.path2context[context.path_safe()] == context
-            for context in self.path2context.values():
-                assert any([context in self.contexts[state] for state in self.contexts])
-
-            # no path can be in more than one context
-            for state1 in self.contexts.keys():
-                for context1 in self.contexts[state1]:
-                    if context1.path_safe():
-                        for state2 in self.contexts.keys():
-                            for context2 in self.contexts[state2]:
-                                if context2.path_safe():
-                                    if context1 != context2:
-                                        assert context1.path != context2.path
-            '''
-            # FIXME:
-            # the checks above seem intuitively good to me;
-            # but the break the recursive test cases for some reason,
-            # and that needs fixing
-
 
     ########################################
     # visualize state
@@ -451,12 +469,28 @@ class Fac(Routable):
         This helper function should be used when assigning a context to a state
         instead of directly running self.contexts[state].add()
         '''
+        # two contexts will be in conflict if they both resolve to the same path;
+        # if there are any conflicting conflicts,
+        # we merge these contexts and then add the merged context;
+        if context.path_safe() and context.path in self.path2context:
+            oldcontext = self.path2context[context.path]
+            for loop_state in self.contexts:
+                if oldcontext in self.contexts[loop_state]:
+                    self.contexts[loop_state].remove(oldcontext)
+                    context = merge_context(context, oldcontext)
+                    self.context_to_job[context] = self.context_to_job[oldcontext]
+                    self.context_to_job[context].register_context(context)
+                    contexts = list(self.contexts)
+                    state = max(loop_state, state, key=lambda x: contexts.index(x))
+
         self.contexts[state].add(context)
+        self._contexts_history[context].append(state)
+
         if context.path_safe():
             self.path2context[context.path] = context
             for dep in context.dependencies_built:
                 self.rdeps[dep['target']].add(context.path)
-                self.path_routes.register_context(context, state)
+            self.path_routes.register_context(context, state)
 
     def _add_context(
             self,
@@ -485,31 +519,21 @@ class Fac(Routable):
                   NOTE:
                   Set to True only when the context has been "temporarily removed" from a state for processing.
         '''
-        def maybe_add(state_name):
-            # helper function that tracks which contexts have been added;
-            # because contexts are immutable:
-            # if the same context has been added to the same state,
-            # and the actions of that state do not depend on IO,
-            # we know that the same result will happen,
-            # and so we do not need to recompute the context
-            #
-            # using maybe_add to prevent duplicates is not required for correctness;
-            # it is a memoization-like optimization that speeds up the build system
-            #
-            # for this optimization to be correct,
-            # we require that variable evaluation be idempotent and side-effect-free
-            if not hasattr(self, '_contexts_history'):
-                self._contexts_history = set()
-            if not force_add and (state_name, context) in self._contexts_history:
-                return
-            self._contexts_history.add((state_name, context))
-            self._set_context_state(context, state_name)
 
         if context != required_for:
             self.required_for[context].append(required_for)
 
         context_orig = context
-        for context in context.split():
+        context_splits = context.split()
+        if len(context_splits) == 0:
+            if context.path_safe():
+                logger.warning(f'phantom path: {context.path_safe()}')
+                self._set_context_state(context, 'phantom')
+            
+        for context in context_splits:
+            if context_orig.path_safe():
+                assert context_orig.path_safe() == context.path_safe()
+
             if context_orig != context:
                 self.required_for[context].append(context_orig)
 
@@ -529,22 +553,25 @@ class Fac(Routable):
             # if we haven't built the context,
             # then put it in the appropriate state
             if len(context.dependencies_building) > 0:
-                maybe_add('waiting')
+                state = 'waiting'
             else:
                 if (len(context.variables_unresolved) == 0 and
                    len(context.dependencies_unresolved) == 0):
-                    maybe_add('buildable')
+                    state = 'buildable'
                 else:
-                    maybe_add('unresolved')
+                    state = 'unresolved'
+            if force_add or state not in self._contexts_history[context]:
+                self._set_context_state(context, state)
 
     def process_all_waiting(self):
         logger.debug('process_all_waiting()')
         self.debug_short(submessage=True)
         waiting0 = self.contexts['waiting']
         self.contexts['waiting'] = set()
-        for context in waiting0:
+        for context in sorted(waiting0, key=lambda x: x.path_safe() or ''):
             self.process_waiting(context, waiting0)
         self.debug_short(submessage=True)
+        self.assert_invariants()
 
     @with_subtree(logger)
     def process_waiting(self, context, waiting0):
@@ -605,8 +632,8 @@ class Fac(Routable):
             'dependencies_built': dependencies_built1,
             'dependencies_building': dependencies_building1,
             })
-        self._add_context(context1, required_for=context, force_add=context1==context)
-        self.assert_invariants()
+        force_add = context1 == context
+        self._add_context(context1, required_for=context, force_add=force_add)
 
     def trace_required_for(self, context, denormalize_targets=False, collapse=True):
         ret = {}
@@ -634,7 +661,9 @@ class Fac(Routable):
     def process_all_buildable(self):
         logger.debug('process_all_buildable()')
 
-        for context in self.contexts['buildable']:
+        buildable = self.contexts['buildable']
+        self.contexts['buildable'] = set()
+        for context in buildable:
             # lock/unlock files
             if context.mode == 'lock':
                 status = ['lock']
@@ -685,7 +714,6 @@ class Fac(Routable):
                         self.add_target(postreq)
                 else:
                     self._set_context_state(context, 'notbuilt')
-        self.contexts['buildable'] = set()
 
     async def process_all_build_required(self):
         logger.debug('process_all_build_required()')
@@ -696,10 +724,10 @@ class Fac(Routable):
             try:
                 await context.build()
                 assert os.path.exists(context.path)
-                self._set_context_state(context, 'built')
                 logger.info(f'built {context.path}')
                 for postreq in context.config.get('postreqs', []):
                     self.add_target(postreq)
+                self._set_context_state(context, 'built')
             except Exception as e:
                 logger.error(f'failed to build {context.path}: {e}')
                 self._set_context_state(context, 'notbuilt')
@@ -712,20 +740,19 @@ class Fac(Routable):
             logger.info(f'building {num_contexts} contexts with max_workers={self._max_workers}')
 
         with logger.make_subtree():
+            build_required0 = self.contexts['build_required']
+            self.contexts['build_required'] = set()
             if not self._parallel_build:
-                build_required0 = self.contexts['build_required']
                 for context in build_required0:
                     await _build_context(context)
-                self.contexts['build_required'] = set()
 
             else:
                 sem = asyncio.Semaphore(self._max_workers)
                 async def limited(context):
                     async with sem:
                         return await _build_context(context)
-                tasks = [limited(ctx) for ctx in self.contexts['build_required']]
+                tasks = [limited(ctx) for ctx in build_required0]
                 await asyncio.gather(*tasks)
-                self.contexts['build_required'] = set()
 
         if failures:
             paths = [ctx.path for ctx, _ in failures]
@@ -916,3 +943,291 @@ class Fac(Routable):
                 required_for=context,
                 force_add=force_add,
                 )
+
+
+def safe_dict_union(dict1, dict2):
+    """
+    Returns the union of two dicts, raising an error if the same key
+    has different values in both dicts.
+
+    >>> safe_dict_union({'a': 1, 'b': 2}, {'b': 2, 'c': 3})
+    {'a': 1, 'b': 2, 'c': 3}
+
+    >>> safe_dict_union({'x': 10}, {'y': 20, 'z': 30})
+    {'x': 10, 'y': 20, 'z': 30}
+
+    >>> safe_dict_union({}, {'a': 1})
+    {'a': 1}
+
+    >>> safe_dict_union({'a': 1}, {})
+    {'a': 1}
+
+    >>> safe_dict_union({'a': 1, 'b': 2}, {'b': 3, 'c': 3})  # doctest: +ELLIPSIS
+    Traceback (most recent call last):
+        ...
+    AssertionError: Conflict: key 'b' has different values: 2 vs 3
+    """
+    result = dict(dict1)
+    for key, value in dict2.items():
+        if key in result:
+            assert result[key] == value, \
+                    f"Conflict: key '{key}' has different values: {result[key]} vs {value}"
+        else:
+            result[key] = value
+    return result
+
+
+def merge_context(context1, context2, slow_sanity_check=True):
+    '''
+    Occasionally we create a new BuildContext that "conflicts" with an existing
+    context in the sense that they both resolve to the same path.
+    This function merges them into a single context.
+
+    It performs a number of integrity checks to ensure that the two contexts
+    are compatible with each other and would eventually have resulted in
+    the same files(s) getting built after they were both fully resolved.
+    Some of these integrity checks are a bit jankier than I'd like them to be.
+    
+    WARNING:
+    The doctests below are AI-generated and not nearly exhaustive of the interesting edge cases.
+
+    Unresolved variables get resolved when the other context has the value:
+
+    >>> result = merge_context(
+    ...     BuildContext(
+    ...         normalized_target='example/$FOO/file.txt',
+    ...         config={'variables': {'FOO': 'echo foo', 'BAR': 'echo bar', 'BAZ': 'echo baz'}},
+    ...         variables_resolved={'FOO': 'test'},
+    ...         variables_unresolved={'BAR': 'echo bar', 'BAZ': 'echo baz'},
+    ...         dependencies_built=[],
+    ...         dependencies_building=[],
+    ...         dependencies_unresolved=[],
+    ...         mode='build',
+    ...     ),
+    ...     BuildContext(
+    ...         normalized_target='example/$FOO/file.txt',
+    ...         config={'variables': {'FOO': 'echo foo', 'BAR': 'echo bar', 'BAZ': 'echo baz'}},
+    ...         variables_resolved={'FOO': 'test', 'BAR': 'bar'},
+    ...         variables_unresolved={'BAZ': 'echo baz'},
+    ...         dependencies_built=[],
+    ...         dependencies_building=[],
+    ...         dependencies_unresolved=[],
+    ...         mode='build',
+    ...     ),
+    ... )
+    >>> dict(result.variables_resolved)
+    {'FOO': 'test', 'BAR': 'bar'}
+    >>> dict(result.variables_unresolved)
+    {'BAZ': 'echo baz'}
+
+    Merging contexts removes unresolved dependencies when they appear in built:
+
+    >>> result = merge_context(
+    ...     BuildContext(
+    ...         normalized_target='example/$FOO/file.txt',
+    ...         config={'variables': {'FOO': 'echo foo'}, 'dependencies': [{'target': '/tmp/fac_test/dep1.txt'}]},
+    ...         variables_resolved={'FOO': 'test'},
+    ...         variables_unresolved={},
+    ...         dependencies_built=[],
+    ...         dependencies_building=[],
+    ...         dependencies_unresolved=[{'target': '/tmp/fac_test/dep1.txt'}],
+    ...         mode='build',
+    ...     ),
+    ...     BuildContext(
+    ...         normalized_target='example/$FOO/file.txt',
+    ...         config={'variables': {'FOO': 'echo foo'}, 'dependencies': [{'target': '/tmp/fac_test/dep1.txt'}]},
+    ...         variables_resolved={'FOO': 'test'},
+    ...         variables_unresolved={},
+    ...         dependencies_built=[{'target': '/tmp/fac_test/dep1.txt'}],
+    ...         dependencies_building=[],
+    ...         dependencies_unresolved=[],
+    ...         mode='build',
+    ...     ),
+    ... )
+    >>> sorted([d['target'] for d in result.dependencies_built])
+    ['/tmp/fac_test/dep1.txt']
+    >>> list(result.dependencies_unresolved)
+    []
+
+    Merging contexts where one has built dependencies and the other has building dependencies:
+
+    >>> result = merge_context(
+    ...     BuildContext(
+    ...         normalized_target='example/$FOO/file.txt',
+    ...         config={'variables': {'FOO': 'echo foo'}, 'dependencies': [{'target': '/tmp/fac_test/dep1.txt'}, {'target': '/tmp/fac_test/dep2.txt'}]},
+    ...         variables_resolved={'FOO': 'test'},
+    ...         variables_unresolved={},
+    ...         dependencies_built=[{'target': '/tmp/fac_test/dep1.txt'}],
+    ...         dependencies_building=[{'target': '/tmp/fac_test/dep2.txt'}],
+    ...         dependencies_unresolved=[],
+    ...         mode='build',
+    ...     ),
+    ...     BuildContext(
+    ...         normalized_target='example/$FOO/file.txt',
+    ...         config={'variables': {'FOO': 'echo foo'}, 'dependencies': [{'target': '/tmp/fac_test/dep1.txt'}, {'target': '/tmp/fac_test/dep2.txt'}]},
+    ...         variables_resolved={'FOO': 'test'},
+    ...         variables_unresolved={},
+    ...         dependencies_built=[{'target': '/tmp/fac_test/dep2.txt'}],
+    ...         dependencies_building=[{'target': '/tmp/fac_test/dep1.txt'}],
+    ...         dependencies_unresolved=[],
+    ...         mode='build',
+    ...     ),
+    ... )
+    >>> sorted([d['target'] for d in result.dependencies_built])
+    ['/tmp/fac_test/dep1.txt', '/tmp/fac_test/dep2.txt']
+    >>> list(result.dependencies_building)
+    []
+
+    Merging contexts removes building dependencies when they appear in built:
+
+    >>> result = merge_context(
+    ...     BuildContext(
+    ...         normalized_target='example/$FOO/file.txt',
+    ...         config={'variables': {'FOO': 'echo foo'}, 'dependencies': [{'target': '/tmp/fac_test/dep1.txt'}]},
+    ...         variables_resolved={'FOO': 'test'},
+    ...         variables_unresolved={},
+    ...         dependencies_built=[],
+    ...         dependencies_building=[{'target': '/tmp/fac_test/dep1.txt'}],
+    ...         dependencies_unresolved=[],
+    ...         mode='build',
+    ...     ),
+    ...     BuildContext(
+    ...         normalized_target='example/$FOO/file.txt',
+    ...         config={'variables': {'FOO': 'echo foo'}, 'dependencies': [{'target': '/tmp/fac_test/dep1.txt'}]},
+    ...         variables_resolved={'FOO': 'test'},
+    ...         variables_unresolved={},
+    ...         dependencies_built=[{'target': '/tmp/fac_test/dep1.txt'}],
+    ...         dependencies_building=[],
+    ...         dependencies_unresolved=[],
+    ...         mode='build',
+    ...     ),
+    ... )
+    >>> sorted([d['target'] for d in result.dependencies_built])
+    ['/tmp/fac_test/dep1.txt']
+    >>> list(result.dependencies_building)
+    []
+
+    Merging contexts removes unresolved dependencies when they appear in building:
+
+    >>> result = merge_context(
+    ...     BuildContext(
+    ...         normalized_target='example/$FOO/file.txt',
+    ...         config={'variables': {'FOO': 'echo foo'}, 'dependencies': [{'target': '/tmp/fac_test/dep1.txt'}]},
+    ...         variables_resolved={'FOO': 'test'},
+    ...         variables_unresolved={},
+    ...         dependencies_built=[],
+    ...         dependencies_building=[],
+    ...         dependencies_unresolved=[{'target': '/tmp/fac_test/dep1.txt'}],
+    ...         mode='build',
+    ...     ),
+    ...     BuildContext(
+    ...         normalized_target='example/$FOO/file.txt',
+    ...         config={'variables': {'FOO': 'echo foo'}, 'dependencies': [{'target': '/tmp/fac_test/dep1.txt'}]},
+    ...         variables_resolved={'FOO': 'test'},
+    ...         variables_unresolved={},
+    ...         dependencies_built=[],
+    ...         dependencies_building=[{'target': '/tmp/fac_test/dep1.txt'}],
+    ...         dependencies_unresolved=[],
+    ...         mode='build',
+    ...     ),
+    ... )
+    >>> list(result.dependencies_building)
+    [frozendict.frozendict({'target': '/tmp/fac_test/dep1.txt'})]
+    >>> list(result.dependencies_unresolved)
+    []
+    '''
+
+    # all of the following properties must be identical to merge
+    assert context1.normalized_target == context2.normalized_target
+    assert context1.config == context2.config
+    assert context1.include_prompt == context2.include_prompt
+    assert context1.include_old == context2.include_old
+    assert context1.include_paths == context2.include_paths
+    assert context1.mode == context2.mode
+
+    # we keep all resolved variables from both contexts;
+    # we only keep unresolved variables if they are not resolved in the other context
+    variables_resolved = safe_dict_union(
+            context1.variables_resolved,
+            context2.variables_resolved,
+            )
+    variables_unresolved = safe_dict_union(
+            context1.variables_unresolved,
+            context2.variables_unresolved,
+            )
+    for var, expr in list(variables_unresolved.items()):
+        if var in variables_resolved:
+            if slow_sanity_check:
+                # the check enforces that any unresolved variables
+                # will resolve to the same value in both contexts;
+                # normally it is not safe to evaluate arbitrary variables,
+                # and we need a complex set of checks to ensure that
+                # appropriate dependencies have already been defined;
+                # in this case, however, we know that the variable
+                # has already been evaluated once by the other context;
+                # so any needed dependencies (i.e. files) should already
+                # have been created
+                value = eval_var(expr, variables_resolved)
+                assert value == variables_resolved[var]
+            del variables_unresolved[var]
+
+    # we keep all built dependencies from both contexts
+    dependencies_built = context1.dependencies_built | context2.dependencies_built
+    built_paths = set([dep['target'] for dep in dependencies_built])
+
+    # processing the other dependencies is rather complicated for two reasons:
+    # they are stored in a different format (normalized instead of paths),
+    # we only keep building dependencies if they have not already been built
+    dependencies_building = set(
+            context1.dependencies_building |
+            context2.dependencies_building
+            )
+    for dep in list(dependencies_building):
+        denormalized_targets = substitute_variables(
+                dep['target'],
+                variables_resolved,
+                )
+        denormalized_targets = substitute_variables(
+                dep['target'],
+                variables_resolved,
+                )
+        if len(denormalized_targets) == 0:
+            dependencies_building.remove(dep)
+        else:
+            # either all targets should be built or no targets should be built
+            if all([target in built_paths for target in denormalized_targets]):
+                dependencies_building.remove(dep)
+            else:
+                assert all([target not in built_paths for target in denormalized_targets])
+
+    dependencies_unresolved = set(
+            context1.dependencies_unresolved |
+            context2.dependencies_unresolved
+            )
+    for dep in list(dependencies_unresolved):
+        # if dep has already advanced from unresolved -> building,
+        # remove it from unresolved
+        if dep in dependencies_building:
+            dependencies_unresolved.remove(dep)
+
+        # if dep has already been built,
+        # remove it from unresolved
+        denormalized_targets = substitute_variables(
+                dep['target'],
+                variables_resolved,
+                )
+        if len(denormalized_targets) == 0:
+            dependencies_unresolved.remove(dep)
+        else:
+            if all([target in built_paths for target in denormalized_targets]):
+                dependencies_unresolved.remove(dep)
+            else:
+                assert all([target not in built_paths for target in denormalized_targets])
+
+    return context1.model_copy(update={
+        'variables_resolved': variables_resolved,
+        'variables_unresolved': variables_unresolved,
+        'dependencies_built': dependencies_built,
+        'dependencies_building': dependencies_building,
+        'dependencies_unresolved': dependencies_unresolved,
+        })
