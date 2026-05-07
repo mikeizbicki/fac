@@ -28,6 +28,17 @@ from fac.util.targets import match_pattern_starstar, substitute_variables, extra
 from fac.util.templates import process_template
 
 
+def context_print(x):
+    '''
+    A pretty printer for debugging the BuildContext class.
+    The ability to handle lists is so that this function can be used in .split() doctests.
+    '''
+    if type(x) is BuildContext:
+        print(yaml.dump(x.to_dict()))
+    if type(x) is list:
+        print(yaml.dump([context.to_dict() for context in x], default_flow_style=False))
+
+
 class BuildContext(BaseModel):
     '''
     The BuildContext is the fundamental building block of the build system.
@@ -109,18 +120,10 @@ class BuildContext(BaseModel):
         r'''
         This function creates a list of BuildContext instances by splitting all non-target variables on newlines.
 
-        ---
-
-        The helper function below converts the input to yaml and prints it.
-        It makes visualization of the split BuildContext instances easier.
-
-        >>> doctest_vis = lambda contexts: print(yaml.dump([context.to_dict() for context in contexts], default_flow_style=False))
-
-        Actual test cases below.
         Observe that splitting happens only in variables contained in normalized_target,
         and all other variables are preserved as-is.
 
-        >>> doctest_vis(BuildContext(
+        >>> context_print(BuildContext(
         ...     normalized_target='example/$FOO/$BAR/outline.json',
         ...     config={'variables': {'TEST': ''}},
         ...     variables_resolved={'TEST': 'a\bb\nc', 'FOO': '1\n2\n3', 'BAR': 'x\ny'},
