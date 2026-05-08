@@ -240,9 +240,9 @@ class Fac(Routable):
                     state1 = state0
                     state0 = state_hash()
 
-                    await self.process_all_build_required()
-                    debug_print(f'iter={len(state_hashes)} -- build_required')
-                    self.assert_invariants()
+                await self.process_all_build_required()
+                debug_print(f'iter={len(state_hashes)} -- build_required')
+                self.assert_invariants()
 
                 # now that we have built some contexts,
                 # we should allow any jobs
