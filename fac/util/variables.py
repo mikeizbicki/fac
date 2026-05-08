@@ -8,6 +8,8 @@ import glob
 import json
 import os
 
+import jq as jqlib
+
 from fac.Errors import FACError
 from fac.Logging import logger
 from fac.util.targets import match_pattern_starstar, substitute_variables
@@ -294,7 +296,7 @@ def _ls_shortcut(args):
 
 def _jq_shortcut(args):
     r'''
-    Execute jq command in Python.
+    Execute jq command in Python using the jq library.
     Supports: jq [-r] jq_expr path
 
     Returns stdout as a string, or None if format not supported.
@@ -390,14 +392,14 @@ def _jq_shortcut(args):
         ...
     FileNotFoundError: ...
 
-    Unsupported expression returns None:
+    Complex expressions work with the jq library:
 
     >>> import tempfile, os
     >>> with tempfile.TemporaryDirectory() as d:
     ...     p = os.path.join(d, 'test.json')
-    ...     _ = open(p, 'w').write('{}')
-    ...     _jq_shortcut(['select(.x > 1)', p]) is None
-    True
+    ...     _ = open(p, 'w').write('[{"x": 5}, {"x": 1}, {"x": 10}]')
+    ...     _jq_shortcut(['-r', '[.[] | select(.x > 2)] | length', p])
+    '2'
 
     Handles null values:
 
@@ -444,8 +446,12 @@ def _jq_shortcut(args):
     with open(path, 'r') as f:
         data = json.load(f)
 
-    results = _eval_jq_expr(expr, data)
-    if results is None:
+    # Use the jq library to evaluate the expression
+    try:
+        compiled = jqlib.compile(expr)
+        results = list(compiled.input(data).all())
+    except Exception:
+        # If jq compilation or execution fails, return None to fall back to subprocess
         return None
 
     output_lines = []
@@ -456,124 +462,3 @@ def _jq_shortcut(args):
             output_lines.append(json.dumps(result))
 
     return '\n'.join(output_lines)
-
-
-def _eval_jq_expr(expr, data):
-    '''
-    Evaluate a simple jq expression on data.
-    Returns a list of results, or None if expression is not supported.
-
-    Supports:
-    - . (identity)
-    - .field, .field1.field2 (field access)
-    - .[] (array/object iteration)
-    - .[n] (array index)
-    - keys, keys[] (object keys)
-    - Combinations like .[].field, .field[]
-    '''
-    expr = expr.strip()
-
-    # Handle keys and keys[]
-    if expr == 'keys':
-        if isinstance(data, dict):
-            return [sorted(data.keys())]
-        return None
-    if expr == 'keys[]':
-        if isinstance(data, dict):
-            return sorted(data.keys())
-        return None
-
-    # Must start with .
-    if not expr.startswith('.'):
-        return None
-
-    # Check for unsupported syntax
-    unsupported = ['|', 'select', 'map', 'if', 'then', 'else', 'as', '@', '$', '+', '-', '*', '/', '==', '!=', '<', '>', 'and', 'or', 'not']
-    for u in unsupported:
-        if u in expr:
-            return None
-
-    return _eval_jq_path(expr[1:], [data])
-
-
-def _eval_jq_path(path, values):
-    '''
-    Evaluate a jq path expression on a list of values.
-    Returns a list of results.
-    '''
-    if not path:
-        return values
-
-    results = []
-    for value in values:
-        partial = _eval_jq_single_step(path, value)
-        if partial is None:
-            return None
-        new_values, remaining_path = partial
-        sub_results = _eval_jq_path(remaining_path, new_values)
-        if sub_results is None:
-            return None
-        results.extend(sub_results)
-
-    return results
-
-
-def _eval_jq_single_step(path, value):
-    '''
-    Evaluate a single step of a jq path.
-    Returns (list_of_values, remaining_path) or None if not supported.
-    '''
-    if not path:
-        return ([value], '')
-
-    # Handle .[] (iterate)
-    if path.startswith('[]'):
-        remaining = path[2:]
-        if remaining.startswith('.'):
-            remaining = remaining[1:]
-        elif remaining and not remaining.startswith('['):
-            return None
-
-        if isinstance(value, list):
-            return (value, remaining)
-        elif isinstance(value, dict):
-            return (list(value.values()), remaining)
-        else:
-            return None
-
-    # Handle .[n] (array index)
-    if path.startswith('['):
-        end = path.find(']')
-        if end == -1:
-            return None
-        index_str = path[1:end]
-        remaining = path[end + 1:]
-        if remaining.startswith('.'):
-            remaining = remaining[1:]
-
-        try:
-            index = int(index_str)
-            if isinstance(value, list) and -len(value) <= index < len(value):
-                return ([value[index]], remaining)
-            return None
-        except ValueError:
-            return None
-
-    # Handle .field
-    # Find end of field name
-    end = 0
-    while end < len(path) and path[end] not in '.[]':
-        end += 1
-
-    field = path[:end]
-    remaining = path[end:]
-    if remaining.startswith('.'):
-        remaining = remaining[1:]
-
-    if isinstance(value, dict) and field in value:
-        return ([value[field]], remaining)
-    elif isinstance(value, dict):
-        # Field doesn't exist - return null like jq does
-        return ([None], remaining)
-    else:
-        return None
