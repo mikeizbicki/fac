@@ -105,15 +105,17 @@ class BuildContext(BaseModel):
     # methods
     ##############################
 
-    def __init__(self, **data):
+    def __init__(self, assert_invariants=True, **data):
         # we call freeze on all input data to convert dict to frozendict
         # and iterables to frozenset
         super().__init__(**{k: freeze(v) for k, v in data.items()})
-        self.assert_invariants()
+        if assert_invariants:
+            self.assert_invariants()
 
-    def model_copy(self, update):
+    def model_copy(self, update, assert_invariants=True):
         new = super().model_copy(update=freeze(update))
-        new.assert_invariants()
+        if assert_invariants:
+            new.assert_invariants()
         return new
 
     def split(self):
