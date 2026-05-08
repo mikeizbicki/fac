@@ -61,3 +61,7 @@ jobs:
         run: |
           cd tests/fac_test6_recursive_dependencies
           ./run_test.sh
+      - name: fac_test7_locks_and_symlinks
+        run: |
+          cd tests/fac_test7_locks_and_symlinks
+          ./run_test.sh

@@ -19,3 +19,6 @@
 [submodule "tests/fac-video"]
 	path = tests/video
 	url = https://github.com/mikeizbicki/fac-video
+[submodule "tests/fac_test7_locks_and_symlinks"]
+	path = tests/fac_test7_locks_and_symlinks
+	url = https://github.com/mikeizbicki/fac_test7_locks_and_symlinks

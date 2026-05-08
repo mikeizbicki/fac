@@ -240,9 +240,9 @@ class Fac(Routable):
                     state1 = state0
                     state0 = state_hash()
 
-                await self.process_all_build_required()
-                debug_print(f'iter={len(state_hashes)} -- build_required')
-                self.assert_invariants()
+                    await self.process_all_build_required()
+                    debug_print(f'iter={len(state_hashes)} -- build_required')
+                    self.assert_invariants()
 
                 # now that we have built some contexts,
                 # we should allow any jobs
@@ -729,7 +729,13 @@ class Fac(Routable):
                     self.add_target(postreq)
                 self._set_context_state(context, 'built')
             except Exception as e:
-                logger.error(f'failed to build {context.path}: {e}')
+                # if context.build() throws FACError,
+                # that means the error was already printed/handled internally;
+                # we just register the context as failed;
+                # for all other Exceptions,
+                # something unexpected happened and we want to see the exception
+                if not isinstance (e, FACError):
+                    logger.error(f'failed to build {context.path}: {e}')
                 self._set_context_state(context, 'notbuilt')
                 failures.append((context, e))
 

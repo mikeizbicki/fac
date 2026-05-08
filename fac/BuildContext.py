@@ -19,7 +19,7 @@ import jsonschema
 import yaml
 
 # project imports
-from fac.Errors import CommandExecutionError
+from fac.Errors import CommandExecutionError, FACError
 from fac.LLM import LLM
 from fac.Logging import logger
 from fac.io_utils import FacJSON, validate_file, binary_file_to_base64_url
@@ -771,7 +771,13 @@ class BuildContext(BaseModel):
                     'FAC_PATH': self.path,
                     }),
                 )
-            #logger.info('building with cmd...', submessage=True)
+
+            # FIXME:
+            # we print the script output as it appears;
+            # this is useful for long-running scripts but results in slightly
+            # out-of-order log messages;
+            # when multiple scripts are running in parallel,
+            # this causes their output to be interwoven here
             try:
                 first_line = True
                 while True:
@@ -779,20 +785,33 @@ class BuildContext(BaseModel):
                     if not line:
                         break
                     if first_line:
-                        logger.warning('build command output:', submessage=True)
+                        logger.warning(f'build command output for path {self.path}:')
                         first_line = False
                     logger.warning(line.decode().rstrip(), submessage=True)
             except UnicodeDecodeError:
                 logger.warning('cannot decode stdout: UnicodeDecodeError')
             await process.wait()
 
+            # detect all the failure modes and print error messages
             if process.returncode != 0:
                 stdout = await process.stdout.read()
-                logger.error("error running the following build script:", submessage=True)
+                logger.error(f"error building path '{self.path}': cmd failed with exit code {process.returncode}")
+                logger.error('script contents:', submessage=True)
                 for i, line in enumerate(self.config['cmd'].split('\n')):
                     logger.error(f"line {i+1}: {line}", submessage=True)
-                logger.error(stdout.decode('ascii'), submessage=True)
                 raise CommandExecutionError(process.returncode, stdout)
+
+            elif os.path.lexists(self.path) and not os.path.exists(self.path):
+                logger.error(f"error building path '{self.path}': invalid symlink")
+                logger.error(f"HINT: this is a bug in the 'cmd' field for target '{self.normalized_target}", submessage=True)
+                logger.error(f"HINT: recall that symlink targets must be specified relative to the link location and not PWD", submessage=True)
+                raise FACError()
+
+            elif not os.path.exists(self.path):
+                logger.error(f"error building path '{self.path}': path not created")
+                logger.error(f"HINT: the 'cmd' field for target '{self.normalized_target} has a bug that is causing the path to not be created", submessage=True)
+                logger.error(f'HINT: you can use the "$FAC_PATH" variable within the cmd field to specify the correct path', submessage=True)
+                raise FACError()
 
         # build with llm
         else:
