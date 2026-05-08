@@ -377,9 +377,8 @@ def _jq_shortcut(args):
     >>> with tempfile.TemporaryDirectory() as d:
     ...     p = os.path.join(d, 'test.json')
     ...     _ = open(p, 'w').write('{"b": 1, "a": 2}')
-    ...     result = _jq_shortcut(['-r', 'keys[]', p])
-    ...     sorted(result.split('\\n'))
-    ['a', 'b']
+    ...     _jq_shortcut(['-r', 'keys[]', p])
+    'a\nb'
 
     Chained operations with array iteration:
 
