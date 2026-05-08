@@ -299,7 +299,7 @@ def _ls_shortcut(args):
     return '\n'.join(all_entries)
 
 
-def _jq_shortcut(args):
+def _jq_shortcut(args, data=None):
     r'''
     Execute jq command in Python using the jq library.
     Supports: jq [-r] jq_expr path
@@ -307,86 +307,54 @@ def _jq_shortcut(args):
     Returns stdout as a string, or None if format not supported.
     Raises an exception if file doesn't exist or JSON is invalid.
 
+    The data parameter is for testing only: when provided, it should be the
+    raw JSON string and the file path argument is ignored.
+
     Basic field access:
 
-    >>> import tempfile, os, json
-    >>> with tempfile.TemporaryDirectory() as d:
-    ...     p = os.path.join(d, 'test.json')
-    ...     _ = open(p, 'w').write('{"name": "alice", "age": 30}')
-    ...     _jq_shortcut(['.name', p])
+    >>> _jq_shortcut(['.name', '_'], data='{"name": "alice", "age": 30}')
     '"alice"'
 
     With -r flag (raw output):
 
-    >>> import tempfile, os, json
-    >>> with tempfile.TemporaryDirectory() as d:
-    ...     p = os.path.join(d, 'test.json')
-    ...     _ = open(p, 'w').write('{"name": "alice"}')
-    ...     _jq_shortcut(['-r', '.name', p])
+    >>> _jq_shortcut(['-r', '.name', '_'], data='{"name": "alice"}')
     'alice'
 
     -r flag can appear after expression:
 
-    >>> import tempfile, os, json
-    >>> with tempfile.TemporaryDirectory() as d:
-    ...     p = os.path.join(d, 'test.json')
-    ...     _ = open(p, 'w').write('{"name": "bob"}')
-    ...     _jq_shortcut(['.name', '-r', p])
+    >>> _jq_shortcut(['.name', '-r', '_'], data='{"name": "bob"}')
     'bob'
 
     Array iteration with .[]:
 
-    >>> import tempfile, os, json
-    >>> with tempfile.TemporaryDirectory() as d:
-    ...     p = os.path.join(d, 'test.json')
-    ...     _ = open(p, 'w').write('[1, 2, 3]')
-    ...     _jq_shortcut(['.[]', p])
+    >>> _jq_shortcut(['.[]', '_'], data='[1, 2, 3]')
     '1\n2\n3'
 
     Nested field access:
 
-    >>> import tempfile, os, json
-    >>> with tempfile.TemporaryDirectory() as d:
-    ...     p = os.path.join(d, 'test.json')
-    ...     _ = open(p, 'w').write('{"user": {"name": "charlie"}}')
-    ...     _jq_shortcut(['-r', '.user.name', p])
+    >>> _jq_shortcut(['-r', '.user.name', '_'], data='{"user": {"name": "charlie"}}')
     'charlie'
 
     Array index access:
 
-    >>> import tempfile, os, json
-    >>> with tempfile.TemporaryDirectory() as d:
-    ...     p = os.path.join(d, 'test.json')
-    ...     _ = open(p, 'w').write('["a", "b", "c"]')
-    ...     _jq_shortcut(['-r', '.[1]', p])
+    >>> _jq_shortcut(['-r', '.[1]', '_'], data='["a", "b", "c"]')
     'b'
 
     Identity expression:
 
-    >>> import tempfile, os, json
-    >>> with tempfile.TemporaryDirectory() as d:
-    ...     p = os.path.join(d, 'test.json')
-    ...     _ = open(p, 'w').write('{"x": 1}')
-    ...     result = _jq_shortcut(['.', p])
-    ...     json.loads(result) == {"x": 1}
+    >>> import json
+    >>> result = _jq_shortcut(['.', '_'], data='{"x": 1}')
+    >>> json.loads(result) == {"x": 1}
     True
 
     Keys expression:
 
-    >>> import tempfile, os, json
-    >>> with tempfile.TemporaryDirectory() as d:
-    ...     p = os.path.join(d, 'test.json')
-    ...     _ = open(p, 'w').write('{"b": 1, "a": 2}')
-    ...     _jq_shortcut(['-r', 'keys[]', p])
+    >>> _jq_shortcut(['-r', 'keys[]', '_'], data='{"b": 1, "a": 2}')
     'a\nb'
 
     Chained operations with array iteration:
 
-    >>> import tempfile, os, json
-    >>> with tempfile.TemporaryDirectory() as d:
-    ...     p = os.path.join(d, 'test.json')
-    ...     _ = open(p, 'w').write('[{"name": "x"}, {"name": "y"}]')
-    ...     _jq_shortcut(['-r', '.[].name', p])
+    >>> _jq_shortcut(['-r', '.[].name', '_'], data='[{"name": "x"}, {"name": "y"}]')
     'x\ny'
 
     File not found raises error:
@@ -398,29 +366,17 @@ def _jq_shortcut(args):
 
     Complex expressions work with the jq library:
 
-    >>> import tempfile, os
-    >>> with tempfile.TemporaryDirectory() as d:
-    ...     p = os.path.join(d, 'test.json')
-    ...     _ = open(p, 'w').write('[{"x": 5}, {"x": 1}, {"x": 10}]')
-    ...     _jq_shortcut(['-r', '[.[] | select(.x > 2)] | length', p])
+    >>> _jq_shortcut(['-r', '[.[] | select(.x > 2)] | length', '_'], data='[{"x": 5}, {"x": 1}, {"x": 10}]')
     '2'
 
     Handles null values:
 
-    >>> import tempfile, os, json
-    >>> with tempfile.TemporaryDirectory() as d:
-    ...     p = os.path.join(d, 'test.json')
-    ...     _ = open(p, 'w').write('{"name": null}')
-    ...     _jq_shortcut(['.name', p])
+    >>> _jq_shortcut(['.name', '_'], data='{"name": null}')
     'null'
 
     Handles boolean values:
 
-    >>> import tempfile, os, json
-    >>> with tempfile.TemporaryDirectory() as d:
-    ...     p = os.path.join(d, 'test.json')
-    ...     _ = open(p, 'w').write('{"flag": true}')
-    ...     _jq_shortcut(['.flag', p])
+    >>> _jq_shortcut(['.flag', '_'], data='{"flag": true}')
     'true'
     '''
     raw_output = False
@@ -444,11 +400,15 @@ def _jq_shortcut(args):
     if expr is None or path is None:
         return None
 
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"File not found: {path}")
+    # If data is provided (for testing), use it directly
+    if data is not None:
+        data = json.loads(data)
+    else:
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"File not found: {path}")
 
-    with open(path, 'r') as f:
-        data = json.load(f)
+        with open(path, 'r') as f:
+            data = json.load(f)
 
     # Use the jq library to evaluate the expression
     try:
