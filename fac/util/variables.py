@@ -174,7 +174,12 @@ def _try_shortcut(expr):
     Returns the stdout string if successful, None if the command format is not supported.
     Raises an exception if the command fails (e.g., file not found).
     '''
-    parts = expr.split()
+    # Use shlex to properly parse shell arguments (handles quotes)
+    import shlex
+    try:
+        parts = shlex.split(expr)
+    except ValueError:
+        return None
     if not parts:
         return None
 
@@ -240,7 +245,7 @@ def _ls_shortcut(args):
 
     File not found raises error:
 
-    >>> _ls_shortcut(['/nonexistent/path/xyz'])
+    >>> _ls_shortcut(['/nonexistent/path/xyz'])  # doctest: +ELLIPSIS
     Traceback (most recent call last):
         ...
     FileNotFoundError: ...
@@ -387,7 +392,7 @@ def _jq_shortcut(args):
 
     File not found raises error:
 
-    >>> _jq_shortcut(['.', '/nonexistent/file.json'])
+    >>> _jq_shortcut(['.', '/nonexistent/file.json'])  # doctest: +ELLIPSIS
     Traceback (most recent call last):
         ...
     FileNotFoundError: ...
