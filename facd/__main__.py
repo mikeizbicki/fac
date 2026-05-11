@@ -147,6 +147,40 @@ def list_targets():
     '''
     return app.state.targets_dict
 
+
+class AddTargetRequest(BaseModel):
+    target: str
+    required_for: Optional[Any] = None
+    include_prompt: Optional[str] = None
+    include_old: bool = False
+    include_paths: Optional[Any] = None
+    tasks: Set[str] = {'build'}
+
+
+@app.post('/add_target')
+def add_target_endpoint(request: AddTargetRequest):
+    '''
+    Registers a target with the build system.
+
+    Arguments:
+    - target (str): the target to be built; all variables must be specified; supports globstar (**)-style pattern matching
+    - include_prompt (str): allows specifying additional build instructions for the target
+    - include_old (bool): should the old file be included if rebuilding?
+    - tasks [str]:
+        - "build": (default) build the file only if needed
+        - "overwrite": always build the file, overwriting existing contents
+        - "dryrun": register the file with the build system, but do not build
+    '''
+    app.state.add_target(
+        target=request.target,
+        required_for=request.required_for,
+        include_prompt=request.include_prompt,
+        include_old=request.include_old,
+        include_paths=request.include_paths,
+        tasks=request.tasks,
+    )
+    return {"status": "success"}
+
 ################################################################################
 # run the server
 ################################################################################

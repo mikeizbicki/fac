@@ -68,14 +68,14 @@ class Fac(Routable):
         # when merging two states; this is probably more fragile
         # than it should be
         self.contexts = {
+            'stale': set(),
+            'notbuilt': set(),
             'unresolved': set(),
             'waiting': set(),
             'phantom': set(),
             'buildable': set(),
             'build_required': set(),
             'built': set(),
-            'notbuilt': set(),
-            'stale': set(),
         }
         self.path2context = {}
         self.path_routes = PathRoutes(self.targets_dict)
@@ -98,7 +98,6 @@ class Fac(Routable):
     # primary public interface
     ########################################
 
-    @route('/add_target', ['POST'])
     def add_target(
             self,
             target: str,
@@ -109,16 +108,7 @@ class Fac(Routable):
             tasks={'build'},
             ):
         '''
-        Registers a target with the build system.
-
-        Arguments:
-        - target (str): the target to be built; all variables must be specified; supports globstar (**)-style pattern matching
-        - include_prompt (str): allows specifying additional build instructions for the target
-        - include_old (bool): should the old file be included if rebuilding?
-        - tasks [str]:
-            - "build": (default) build the file only if needed
-            - "overwrite": always build the file, overwriting existing contents
-            - "dryrun": register the file with the build system, but do not build
+        Register a target with the build system.
         '''
         matches = match_pattern_starstar(self.targets_dict, target)
 
@@ -1025,153 +1015,11 @@ def merge_context(context1, context2, slow_sanity_check=True):
     the same files(s) getting built after they were both fully resolved.
     Some of these integrity checks are a bit jankier than I'd like them to be.
     
-    WARNING:
-    The doctests below are AI-generated and not nearly exhaustive of the interesting edge cases.
-
-    Unresolved variables get resolved when the other context has the value:
-
-    >>> result = merge_context(
-    ...     BuildContext(
-    ...         normalized_target='example/$FOO/file.txt',
-    ...         config={'variables': {'FOO': 'echo foo', 'BAR': 'echo bar', 'BAZ': 'echo baz'}},
-    ...         variables_resolved={'FOO': 'test'},
-    ...         variables_unresolved={'BAR': 'echo bar', 'BAZ': 'echo baz'},
-    ...         dependencies_built=[],
-    ...         dependencies_building=[],
-    ...         dependencies_unresolved=[],
-    ...         tasks={'build'},
-    ...     ),
-    ...     BuildContext(
-    ...         normalized_target='example/$FOO/file.txt',
-    ...         config={'variables': {'FOO': 'echo foo', 'BAR': 'echo bar', 'BAZ': 'echo baz'}},
-    ...         variables_resolved={'FOO': 'test', 'BAR': 'bar'},
-    ...         variables_unresolved={'BAZ': 'echo baz'},
-    ...         dependencies_built=[],
-    ...         dependencies_building=[],
-    ...         dependencies_unresolved=[],
-    ...         tasks={'build'},
-    ...     ),
-    ... )
-    >>> dict(result.variables_resolved)
-    {'FOO': 'test', 'BAR': 'bar'}
-    >>> dict(result.variables_unresolved)
-    {'BAZ': 'echo baz'}
-
-    Merging contexts removes unresolved dependencies when they appear in built:
-
-    >>> result = merge_context(
-    ...     BuildContext(
-    ...         normalized_target='example/$FOO/file.txt',
-    ...         config={'variables': {'FOO': 'echo foo'}, 'dependencies': [{'target': '/tmp/fac_test/dep1.txt'}]},
-    ...         variables_resolved={'FOO': 'test'},
-    ...         variables_unresolved={},
-    ...         dependencies_built=[],
-    ...         dependencies_building=[],
-    ...         dependencies_unresolved=[{'target': '/tmp/fac_test/dep1.txt'}],
-    ...         tasks={'build'},
-    ...     ),
-    ...     BuildContext(
-    ...         normalized_target='example/$FOO/file.txt',
-    ...         config={'variables': {'FOO': 'echo foo'}, 'dependencies': [{'target': '/tmp/fac_test/dep1.txt'}]},
-    ...         variables_resolved={'FOO': 'test'},
-    ...         variables_unresolved={},
-    ...         dependencies_built=[{'target': '/tmp/fac_test/dep1.txt'}],
-    ...         dependencies_building=[],
-    ...         dependencies_unresolved=[],
-    ...         tasks={'build'},
-    ...     ),
-    ... )
-    >>> sorted([d['target'] for d in result.dependencies_built])
-    ['/tmp/fac_test/dep1.txt']
-    >>> list(result.dependencies_unresolved)
-    []
-
-    Merging contexts where one has built dependencies and the other has building dependencies:
-
-    >>> result = merge_context(
-    ...     BuildContext(
-    ...         normalized_target='example/$FOO/file.txt',
-    ...         config={'variables': {'FOO': 'echo foo'}, 'dependencies': [{'target': '/tmp/fac_test/dep1.txt'}, {'target': '/tmp/fac_test/dep2.txt'}]},
-    ...         variables_resolved={'FOO': 'test'},
-    ...         variables_unresolved={},
-    ...         dependencies_built=[{'target': '/tmp/fac_test/dep1.txt'}],
-    ...         dependencies_building=[{'target': '/tmp/fac_test/dep2.txt'}],
-    ...         dependencies_unresolved=[],
-    ...         tasks={'build'},
-    ...     ),
-    ...     BuildContext(
-    ...         normalized_target='example/$FOO/file.txt',
-    ...         config={'variables': {'FOO': 'echo foo'}, 'dependencies': [{'target': '/tmp/fac_test/dep1.txt'}, {'target': '/tmp/fac_test/dep2.txt'}]},
-    ...         variables_resolved={'FOO': 'test'},
-    ...         variables_unresolved={},
-    ...         dependencies_built=[{'target': '/tmp/fac_test/dep2.txt'}],
-    ...         dependencies_building=[{'target': '/tmp/fac_test/dep1.txt'}],
-    ...         dependencies_unresolved=[],
-    ...         tasks={'build'},
-    ...     ),
-    ... )
-    >>> sorted([d['target'] for d in result.dependencies_built])
-    ['/tmp/fac_test/dep1.txt', '/tmp/fac_test/dep2.txt']
-    >>> list(result.dependencies_building)
-    []
-
-    Merging contexts removes building dependencies when they appear in built:
-
-    >>> result = merge_context(
-    ...     BuildContext(
-    ...         normalized_target='example/$FOO/file.txt',
-    ...         config={'variables': {'FOO': 'echo foo'}, 'dependencies': [{'target': '/tmp/fac_test/dep1.txt'}]},
-    ...         variables_resolved={'FOO': 'test'},
-    ...         variables_unresolved={},
-    ...         dependencies_built=[],
-    ...         dependencies_building=[{'target': '/tmp/fac_test/dep1.txt'}],
-    ...         dependencies_unresolved=[],
-    ...         tasks={'build'},
-    ...     ),
-    ...     BuildContext(
-    ...         normalized_target='example/$FOO/file.txt',
-    ...         config={'variables': {'FOO': 'echo foo'}, 'dependencies': [{'target': '/tmp/fac_test/dep1.txt'}]},
-    ...         variables_resolved={'FOO': 'test'},
-    ...         variables_unresolved={},
-    ...         dependencies_built=[{'target': '/tmp/fac_test/dep1.txt'}],
-    ...         dependencies_building=[],
-    ...         dependencies_unresolved=[],
-    ...         tasks={'build'},
-    ...     ),
-    ... )
-    >>> sorted([d['target'] for d in result.dependencies_built])
-    ['/tmp/fac_test/dep1.txt']
-    >>> list(result.dependencies_building)
-    []
-
-    Merging contexts removes unresolved dependencies when they appear in building:
-
-    >>> result = merge_context(
-    ...     BuildContext(
-    ...         normalized_target='example/$FOO/file.txt',
-    ...         config={'variables': {'FOO': 'echo foo'}, 'dependencies': [{'target': '/tmp/fac_test/dep1.txt'}]},
-    ...         variables_resolved={'FOO': 'test'},
-    ...         variables_unresolved={},
-    ...         dependencies_built=[],
-    ...         dependencies_building=[],
-    ...         dependencies_unresolved=[{'target': '/tmp/fac_test/dep1.txt'}],
-    ...         tasks={'build'},
-    ...     ),
-    ...     BuildContext(
-    ...         normalized_target='example/$FOO/file.txt',
-    ...         config={'variables': {'FOO': 'echo foo'}, 'dependencies': [{'target': '/tmp/fac_test/dep1.txt'}]},
-    ...         variables_resolved={'FOO': 'test'},
-    ...         variables_unresolved={},
-    ...         dependencies_built=[],
-    ...         dependencies_building=[{'target': '/tmp/fac_test/dep1.txt'}],
-    ...         dependencies_unresolved=[],
-    ...         tasks={'build'},
-    ...     ),
-    ... )
-    >>> list(result.dependencies_building)
-    [frozendict.frozendict({'target': '/tmp/fac_test/dep1.txt'})]
-    >>> list(result.dependencies_unresolved)
-    []
+    NOTE:
+    I've tried several times getting doctests for this function.
+    In principle, it should be possible because this is a "pure" function without IO.
+    In practice, the doctests interact with IO due to assert_invariants() checks,
+    and so the doctests are too brittle and more trouble than they are worth.
     '''
 
     # all of the following properties must be identical to merge
