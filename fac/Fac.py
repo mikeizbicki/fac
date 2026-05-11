@@ -53,7 +53,7 @@ class Fac(Routable):
         self._max_workers = 20
         self._parallel_build = True
         self._do_assert_invariants = True
-        self._do_merge_contexts = False
+        self._do_merge_contexts = True
         self._print_prompt = print_prompt
         self._print_states_when_building = False
         self._shutdown = False
@@ -289,6 +289,15 @@ class Fac(Routable):
         self.path_to_job = {}
         self.jobs_callbacks = []
 
+    @route('/job_states', ['GET'])
+    def job_states(self, format='len'):
+        if format == 'full':
+            return self.jobs
+        elif format == 'len':
+            return {state: len(self.jobs[state]) for state in self.jobs}
+        else:
+            raise ValueError('invalid format')
+
     def assert_invariants_jobs(self):
         # job can be in more than one state
         for job in self.jobs['running']:
@@ -418,8 +427,8 @@ class Fac(Routable):
     # visualize state
     ########################################
 
-    @route('/get_states', ['GET'])
-    def get_states(self, format='simple'):
+    @route('/context_states', ['GET'])
+    def context_states(self, format='simple'):
         '''
         Returns the internal state of the build system.
         '''
@@ -496,14 +505,15 @@ class Fac(Routable):
         if self._do_merge_contexts:
             if context.path_safe() and context.path in self.path2context:
                 oldcontext = self.path2context[context.path]
-                for loop_state in self.contexts:
-                    if oldcontext in self.contexts[loop_state]:
-                        self.contexts[loop_state].remove(oldcontext)
-                        context = merge_context(context, oldcontext)
-                        self.context_to_job[context] = self.context_to_job[oldcontext]
-                        self.context_to_job[context].register_context(context)
-                        contexts = list(self.contexts)
-                        state = max(loop_state, state, key=lambda x: contexts.index(x))
+                if context.mode == oldcontext.mode:
+                    for loop_state in self.contexts:
+                        if oldcontext in self.contexts[loop_state]:
+                            self.contexts[loop_state].remove(oldcontext)
+                            context = merge_context(context, oldcontext)
+                            self.context_to_job[context] = self.context_to_job[oldcontext]
+                            self.context_to_job[context].register_context(context)
+                            contexts = list(self.contexts)
+                            state = max(loop_state, state, key=lambda x: contexts.index(x))
 
         self.contexts[state].add(context)
         self._contexts_history[context].append(state)

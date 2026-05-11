@@ -8,9 +8,6 @@ import sys
 import threading
 import time
 
-from fac.Errors import *
-from fac.Fac import Fac
-from fac.Logging import *
 import fac.Errors
 
 import git
@@ -36,7 +33,6 @@ async def lifespan(app: FastAPI):
     daemon_task = asyncio.create_task(app.state.build_daemon())
 
     yield
-    logger.warning('shutting down (within lifespan)')
 
     # cleanup code here
     app.state.path_routes.shutdown()
@@ -99,10 +95,10 @@ class BroadcastHandler(logging.Handler):
 
 # Attach handler to your build system logger
 #logger = logging.getLogger("fac")  # adjust to match your logger name
-handler = BroadcastHandler()
+#handler = BroadcastHandler()
 #handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-handler.setFormatter(logging.Formatter('%(message)s'))
-logger.addHandler(handler)
+#handler.setFormatter(logging.Formatter('%(message)s'))
+#logger.addHandler(handler)
 
 async def log_generator():
     queue = asyncio.Queue(maxsize=100)
@@ -155,15 +151,31 @@ def list_targets():
 # run the server
 ################################################################################
 
+def str2bool(v):
+    '''
+    For use with argparse and creating boolean parameters.
+    '''
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
 def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--allow_dirty', action='store_true')
+    parser.add_argument('--auto_commit', default=True, type=str2bool)
     args = parser.parse_args()
 
     # register state routes
+    from fac.Fac import Fac
     state = Fac(
         allow_dirty=args.allow_dirty,
+        auto_commit=args.auto_commit,
         )
     app.state = state
     #state.path_manager.start()
