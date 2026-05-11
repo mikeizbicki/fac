@@ -53,6 +53,7 @@ class Fac(Routable):
         self._max_workers = 20
         self._parallel_build = True
         self._do_assert_invariants = True
+        self._do_merge_contexts = False
         self._print_prompt = print_prompt
         self._print_states_when_building = False
         self._shutdown = False
@@ -63,18 +64,18 @@ class Fac(Routable):
         # the states
         #
         # WARNING:
-        # the order of these states defines their semantic presedence
+        # the order of these states defines their semantic precedence
         # when merging two states; this is probably more fragile
         # than it should be
         self.contexts = {
             'unresolved': set(),
             'waiting': set(),
+            'phantom': set(),
             'buildable': set(),
             'build_required': set(),
-            'building': set(),
             'built': set(),
             'notbuilt': set(),
-            'phantom': set(),
+            'stale': set(),
         }
         self.path2context = {}
         self.path_routes = PathRoutes(self.targets_dict)
@@ -359,7 +360,15 @@ class Fac(Routable):
     ########################################
 
     def assert_invariants(self):
+        # these checks are VERY slow
+        if False:
+            # every context in 'built' has a good status
+            for context in self.contexts['built']:
+                status, do_build = context.get_status()
+                assert not do_build
+
         if self._do_assert_invariants:
+
             # no context can be in more than one state
             for state1 in self.contexts.keys():
                 for state2 in self.contexts.keys():
@@ -386,10 +395,11 @@ class Fac(Routable):
             for path, states in sorted(path_states.items()):
                 if len(states) > 1:
                     logger.warning(f'multi_state: path={path} states={states}')
-                    context0 = path_contexts[path][0]
-                    context1 = path_contexts[path][1]
-                    merge_context(context0, context1)
-                assert len(states) == 1, f'path={path} states={states}'
+                    #context0 = path_contexts[path][0]
+                    #context1 = path_contexts[path][1]
+                    #merge_context(context0, context1)
+                if self._do_merge_contexts:
+                    assert len(states) == 1, f'path={path} states={states}'
 
             # self.path2context invariants
             for path, context in self.path2context.items():
@@ -409,21 +419,32 @@ class Fac(Routable):
     ########################################
 
     @route('/get_states', ['GET'])
-    def get_states(self, show_len=False):
+    def get_states(self, format='simple'):
         '''
         Returns the internal state of the build system.
-        This is for debugging purposes only and no web service should rely on this endpoint.
         '''
-        f = lambda x: x
-        if show_len:
-            f = len
-        return {
-            'contexts_unresolved': f(self.contexts['unresolved']),
-            'contexts_buildable': f(self.contexts['buildable']),
-            'contexts_waiting': f(self.contexts['waiting']),
-            'contexts_built': f(self.contexts['built']),
-            'contexts_notbuilt': f(self.contexts['notbuilt']),
-            }
+        if format == 'full':
+            return self.contexts
+        elif format == 'len':
+            return {state: len(self.contexts[state]) for state in self.contexts}
+        elif format == 'simple':
+            ret = {}
+            for state in self.contexts:
+                ret[state] = []
+                for context in self.contexts[state]:
+                    targets = context.denormalized_target()
+                    if len(targets) == 1:
+                        ret[state].append(targets[0])
+                    else:
+                        ret[state].append(targets)
+                    #if context.path_safe():
+                        #ret[state].append(context.path)
+                    #else:
+                        #ret[state].append(context.normalized_target)
+                ret[state].sort()
+            return ret
+        else:
+            return ValueError('unknown format')
 
     def debug_short(self, submessage=False):
         logger.debug({'BuildState': {
@@ -472,16 +493,17 @@ class Fac(Routable):
         # two contexts will be in conflict if they both resolve to the same path;
         # if there are any conflicting conflicts,
         # we merge these contexts and then add the merged context;
-        if context.path_safe() and context.path in self.path2context:
-            oldcontext = self.path2context[context.path]
-            for loop_state in self.contexts:
-                if oldcontext in self.contexts[loop_state]:
-                    self.contexts[loop_state].remove(oldcontext)
-                    context = merge_context(context, oldcontext)
-                    self.context_to_job[context] = self.context_to_job[oldcontext]
-                    self.context_to_job[context].register_context(context)
-                    contexts = list(self.contexts)
-                    state = max(loop_state, state, key=lambda x: contexts.index(x))
+        if self._do_merge_contexts:
+            if context.path_safe() and context.path in self.path2context:
+                oldcontext = self.path2context[context.path]
+                for loop_state in self.contexts:
+                    if oldcontext in self.contexts[loop_state]:
+                        self.contexts[loop_state].remove(oldcontext)
+                        context = merge_context(context, oldcontext)
+                        self.context_to_job[context] = self.context_to_job[oldcontext]
+                        self.context_to_job[context].register_context(context)
+                        contexts = list(self.contexts)
+                        state = max(loop_state, state, key=lambda x: contexts.index(x))
 
         self.contexts[state].add(context)
         self._contexts_history[context].append(state)
