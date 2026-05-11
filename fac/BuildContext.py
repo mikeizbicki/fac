@@ -95,11 +95,7 @@ class BuildContext(BaseModel):
     include_old: bool = False
     include_paths: list[str] | None = None
 
-    # possible values:
-    # - dryrun (never builds; used for checking what paths exist for a target)
-    # - build (builds only when needed; this is the typical case)
-    # - overwrite (always builds)
-    mode: Literal['dryrun', 'build', 'overwrite', 'lock', 'unlock']
+    tasks: frozenset[Literal['build', 'overwrite', 'lock', 'unlock']]
 
     ##############################
     # methods
@@ -133,7 +129,7 @@ class BuildContext(BaseModel):
         ...     dependencies_built=[],
         ...     dependencies_building=[],
         ...     dependencies_unresolved=[],
-        ...     mode='build',
+        ...     tasks={'build'},
         ...     ).split())
         - normalized_target: example/$FOO/$BAR/outline.json
           variables_resolved:
@@ -175,7 +171,7 @@ class BuildContext(BaseModel):
         ...     dependencies_built=[],
         ...     dependencies_building=[],
         ...     dependencies_unresolved=[],
-        ...     mode='build',
+        ...     tasks={'build'},
         ...     ).split()
         []
 
@@ -192,7 +188,7 @@ class BuildContext(BaseModel):
         ... include_prompt=None,
         ... include_old=False,
         ... include_paths=None,
-        ... mode='build',
+        ... tasks={'build'},
         ... ).split()) == 1
         True
         '''
@@ -216,12 +212,15 @@ class BuildContext(BaseModel):
             contexts1.append(context1)
         return contexts1
 
-    def dependencies_mode(self):
-        if self.mode in ['overwrite', 'build']:
-            return 'build'
-        elif self.mode in ['dryrun', 'lock', 'unlock']:
-            return 'dryrun'
-        assert False
+    def dependency_tasks(self):
+        '''
+        The function determines the tasks of any dependency contexts.
+        If we are building/overwriting, then we must build any dependencies;
+        if we are doing anything else, then we perform a dryrun (no tasks).
+        '''
+        if self.tasks & {'overwrite', 'build'}:
+            return {'build'}
+        return set()
 
     def assert_invariants(self):
         '''
@@ -726,13 +725,13 @@ class BuildContext(BaseModel):
             file_status.append('locked')
             do_build = False
 
-        # overwrite do_build based on mode
-        if self.mode == 'overwrite':
+        # overwrite do_build based on tasks
+        if 'overwrite' in self.tasks:
             file_status.append('overwrite')
             do_build = True
 
-        if do_build and self.mode in ['dryrun', 'lock', 'unlock']:
-            if self.mode == 'dryrun':
+        if do_build and not (self.tasks & {'overwrite', 'build'}):
+            if len(self.tasks) == 0:
                 file_status.append('dryrun')
             do_build = False
 

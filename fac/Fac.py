@@ -106,7 +106,7 @@ class Fac(Routable):
             include_prompt=None,
             include_old=False,
             include_paths=None,
-            mode='build',
+            tasks={'build'},
             ):
         '''
         Registers a target with the build system.
@@ -115,7 +115,7 @@ class Fac(Routable):
         - target (str): the target to be built; all variables must be specified; supports globstar (**)-style pattern matching
         - include_prompt (str): allows specifying additional build instructions for the target
         - include_old (bool): should the old file be included if rebuilding?
-        - mode (str):
+        - tasks [str]:
             - "build": (default) build the file only if needed
             - "overwrite": always build the file, overwriting existing contents
             - "dryrun": register the file with the build system, but do not build
@@ -129,9 +129,9 @@ class Fac(Routable):
         # get job info
         if required_for is None:
             str_mode = ''
-            if mode == 'overwrite':
+            if 'overwrite' in tasks:
                 str_mode = ' --overwrite'
-            if mode == 'dryrun':
+            if len(tasks) == 0:
                 str_mode = ' --dryrun'
             str_include_prompt = ''
             if include_prompt:
@@ -170,7 +170,7 @@ class Fac(Routable):
                     include_prompt=include_prompt,
                     include_old=include_old,
                     include_paths=include_paths,
-                    mode=mode,
+                    tasks=tasks,
                     )
             self._add_context(context, required_for=required_for, force_add=False, job=job)
 
@@ -257,7 +257,7 @@ class Fac(Routable):
                             self.contexts['waiting'],
                             self.contexts['unresolved'],
                             ):
-                        if context.mode != 'dryrun':
+                        if len(context.tasks) > 0:
                             all_dryrun = False
                     if not all_dryrun:
                         logger.error('duplicate state detected --- this is a bug in fac')
@@ -353,7 +353,7 @@ class Fac(Routable):
                     done = False
                 if context in self.contexts['buildable']:
                     done = False
-                if context in self.contexts['waiting'] and context.mode != 'dryrun':
+                if context in self.contexts['waiting'] and len(context.tasks) > 0:
                     done = False
             if done:
                 logger.info(f'finalizing job {job.job_id}')
@@ -505,15 +505,14 @@ class Fac(Routable):
         if self._do_merge_contexts:
             if context.path_safe() and context.path in self.path2context:
                 oldcontext = self.path2context[context.path]
-                if context.mode == oldcontext.mode:
-                    for loop_state in self.contexts:
-                        if oldcontext in self.contexts[loop_state]:
-                            self.contexts[loop_state].remove(oldcontext)
-                            context = merge_context(context, oldcontext)
-                            self.context_to_job[context] = self.context_to_job[oldcontext]
-                            self.context_to_job[context].register_context(context)
-                            contexts = list(self.contexts)
-                            state = max(loop_state, state, key=lambda x: contexts.index(x))
+                for loop_state in self.contexts:
+                    if oldcontext in self.contexts[loop_state]:
+                        self.contexts[loop_state].remove(oldcontext)
+                        context = merge_context(context, oldcontext)
+                        self.context_to_job[context] = self.context_to_job[oldcontext]
+                        self.context_to_job[context].register_context(context)
+                        contexts = list(self.contexts)
+                        state = max(loop_state, state, key=lambda x: contexts.index(x))
 
         self.contexts[state].add(context)
         self._contexts_history[context].append(state)
@@ -697,13 +696,13 @@ class Fac(Routable):
         self.contexts['buildable'] = set()
         for context in buildable:
             # lock/unlock files
-            if context.mode == 'lock':
+            if 'lock' in context.tasks:
                 status = ['lock']
                 do_build = False
                 facjson = FacJSON(context.path)
                 facjson.set('locked', True)
                 facjson.save()
-            elif context.mode == 'unlock':
+            elif 'unlock' in context.tasks:
                 status = ['unlock']
                 do_build = False
                 facjson = FacJSON(context.path)
@@ -731,9 +730,9 @@ class Fac(Routable):
                         logger.info(context.prompt['prompt'], submessage=True)
                     except TypeError:
                         logger.info(context.prompt, submessage=True)
-            if context.mode == 'lock':
+            if 'lock' in context.tasks:
                 logger.info('lock', submessage=True)
-            if context.mode == 'unlock':
+            if 'unlock' in context.tasks:
                 logger.info('unlock', submessage=True)
 
             # assign context to new state
@@ -884,7 +883,7 @@ class Fac(Routable):
                                     dependencies_built=[],
                                     dependencies_building=[],
                                     dependencies_unresolved=dependencies_unresolved,
-                                    mode=context.dependencies_mode(),
+                                    tasks=context.dependency_tasks(),
                                     )
                             self._add_context(context1, required_for=context, force_add=context1==context)
 
@@ -1040,7 +1039,7 @@ def merge_context(context1, context2, slow_sanity_check=True):
     ...         dependencies_built=[],
     ...         dependencies_building=[],
     ...         dependencies_unresolved=[],
-    ...         mode='build',
+    ...         tasks={'build'},
     ...     ),
     ...     BuildContext(
     ...         normalized_target='example/$FOO/file.txt',
@@ -1050,7 +1049,7 @@ def merge_context(context1, context2, slow_sanity_check=True):
     ...         dependencies_built=[],
     ...         dependencies_building=[],
     ...         dependencies_unresolved=[],
-    ...         mode='build',
+    ...         tasks={'build'},
     ...     ),
     ... )
     >>> dict(result.variables_resolved)
@@ -1069,7 +1068,7 @@ def merge_context(context1, context2, slow_sanity_check=True):
     ...         dependencies_built=[],
     ...         dependencies_building=[],
     ...         dependencies_unresolved=[{'target': '/tmp/fac_test/dep1.txt'}],
-    ...         mode='build',
+    ...         tasks={'build'},
     ...     ),
     ...     BuildContext(
     ...         normalized_target='example/$FOO/file.txt',
@@ -1079,7 +1078,7 @@ def merge_context(context1, context2, slow_sanity_check=True):
     ...         dependencies_built=[{'target': '/tmp/fac_test/dep1.txt'}],
     ...         dependencies_building=[],
     ...         dependencies_unresolved=[],
-    ...         mode='build',
+    ...         tasks={'build'},
     ...     ),
     ... )
     >>> sorted([d['target'] for d in result.dependencies_built])
@@ -1098,7 +1097,7 @@ def merge_context(context1, context2, slow_sanity_check=True):
     ...         dependencies_built=[{'target': '/tmp/fac_test/dep1.txt'}],
     ...         dependencies_building=[{'target': '/tmp/fac_test/dep2.txt'}],
     ...         dependencies_unresolved=[],
-    ...         mode='build',
+    ...         tasks={'build'},
     ...     ),
     ...     BuildContext(
     ...         normalized_target='example/$FOO/file.txt',
@@ -1108,7 +1107,7 @@ def merge_context(context1, context2, slow_sanity_check=True):
     ...         dependencies_built=[{'target': '/tmp/fac_test/dep2.txt'}],
     ...         dependencies_building=[{'target': '/tmp/fac_test/dep1.txt'}],
     ...         dependencies_unresolved=[],
-    ...         mode='build',
+    ...         tasks={'build'},
     ...     ),
     ... )
     >>> sorted([d['target'] for d in result.dependencies_built])
@@ -1127,7 +1126,7 @@ def merge_context(context1, context2, slow_sanity_check=True):
     ...         dependencies_built=[],
     ...         dependencies_building=[{'target': '/tmp/fac_test/dep1.txt'}],
     ...         dependencies_unresolved=[],
-    ...         mode='build',
+    ...         tasks={'build'},
     ...     ),
     ...     BuildContext(
     ...         normalized_target='example/$FOO/file.txt',
@@ -1137,7 +1136,7 @@ def merge_context(context1, context2, slow_sanity_check=True):
     ...         dependencies_built=[{'target': '/tmp/fac_test/dep1.txt'}],
     ...         dependencies_building=[],
     ...         dependencies_unresolved=[],
-    ...         mode='build',
+    ...         tasks={'build'},
     ...     ),
     ... )
     >>> sorted([d['target'] for d in result.dependencies_built])
@@ -1156,7 +1155,7 @@ def merge_context(context1, context2, slow_sanity_check=True):
     ...         dependencies_built=[],
     ...         dependencies_building=[],
     ...         dependencies_unresolved=[{'target': '/tmp/fac_test/dep1.txt'}],
-    ...         mode='build',
+    ...         tasks={'build'},
     ...     ),
     ...     BuildContext(
     ...         normalized_target='example/$FOO/file.txt',
@@ -1166,7 +1165,7 @@ def merge_context(context1, context2, slow_sanity_check=True):
     ...         dependencies_built=[],
     ...         dependencies_building=[{'target': '/tmp/fac_test/dep1.txt'}],
     ...         dependencies_unresolved=[],
-    ...         mode='build',
+    ...         tasks={'build'},
     ...     ),
     ... )
     >>> list(result.dependencies_building)
@@ -1181,7 +1180,6 @@ def merge_context(context1, context2, slow_sanity_check=True):
     assert context1.include_prompt == context2.include_prompt
     assert context1.include_old == context2.include_old
     assert context1.include_paths == context2.include_paths
-    assert context1.mode == context2.mode
 
     # we keep all resolved variables from both contexts;
     # we only keep unresolved variables if they are not resolved in the other context
@@ -1263,6 +1261,7 @@ def merge_context(context1, context2, slow_sanity_check=True):
                 assert all([target not in built_paths for target in denormalized_targets])
 
     return context1.model_copy(update={
+        'tasks': context1.tasks | context2.tasks,
         'variables_resolved': variables_resolved,
         'variables_unresolved': variables_unresolved,
         'dependencies_built': dependencies_built,

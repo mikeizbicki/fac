@@ -54,10 +54,10 @@ class BuildSystem:
         # actually build the targets
         for target in targets:
             mode = 'build'
-            if self.overwrite:
-                mode = 'overwrite'
             if self.dryrun:
                 mode = 'dryrun'
+            if self.overwrite:
+                mode = 'overwrite'
             if self.lock:
                 mode = 'lock'
             if self.unlock:
@@ -67,7 +67,7 @@ class BuildSystem:
                     include_prompt=self.include_prompt,
                     include_old=self.include_old,
                     include_paths=self.include_paths,
-                    mode=mode,
+                    tasks=frozenset({mode}),
                     )
         self.build_state.build_all()
 

@@ -181,9 +181,7 @@ def main():
     #state.path_manager.start()
 
     # perform a dryrun to register all files with facd;
-    # build_all=False allows facd startup to continue,
-    # and the build_daemon will run the build concurrently
-    state.add_target('**', mode='dryrun')
+    state.add_target('**', tasks=set())
 
     # register routes
     app.include_router(state.router)
