@@ -11,7 +11,6 @@ from fac.Logging import logger
 from fastapi import Request, HTTPException
 from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
-from watchfiles import awatch, Change
 
 
 class EditFileRequest(BaseModel):
@@ -213,21 +212,3 @@ class PathRoutes(Routable):
             os.remove(path)
 
         return {"status": "ok", "path": path}
-
-
-class PathMonitor:
-    def start(self):
-        self._watch_task = asyncio.create_task(self._watch_files())
-
-    async def _watch_files(self):
-        async for changes in awatch(".", stop_event=self._stop_event):
-            for change_type, abs_path in changes:
-                path = os.path.relpath(abs_path)
-                targets = match_pattern_starstar(self.targets_dict, path)
-                path_matches_target = len(targets) > 0
-                if path not in self.path2status and not path_matches_target:
-                    continue
-                if change_type == Change.deleted:
-                    self._set_status(path, 'deleted')
-                else:
-                    self._set_status(path, 'fresh')

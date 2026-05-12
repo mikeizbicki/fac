@@ -6,12 +6,13 @@ import os
 
 # external imports
 import yaml
+from watchfiles import awatch, Change
 
 # project imports
 from fac.BuildContext import BuildContext, context_print
 from fac.Config import load_config
 from fac.Errors import DirtyRepo, FACError
-from fac.FileManager import PathRoutes
+from fac.PathRoutes import PathRoutes
 from fac.Job import Job, assert_git_sane
 from fac.io_utils import FacJSON
 from fac.util.FastAPI import Routable, route
@@ -166,6 +167,7 @@ class Fac(Routable):
 
     async def build_daemon(self):
         loop = asyncio.get_event_loop()
+        watch_task = loop.create_task(self._watch_files())
         try:
             while True:
                 # Run sync build_all in executor so it doesn't block the event loop
@@ -174,6 +176,12 @@ class Fac(Routable):
         except asyncio.CancelledError:
             self._shutdown = True
             logger.warning('build_daemon cancelled')
+        finally:
+            watch_task.cancel()
+            try:
+                await watch_task
+            except asyncio.CancelledError:
+                pass
 
     def build_all(self):
         # FIXME:
@@ -367,7 +375,6 @@ class Fac(Routable):
                 assert not do_build
 
         if self._do_assert_invariants:
-
             # no context can be in more than one state
             for state1 in self.contexts.keys():
                 for state2 in self.contexts.keys():
@@ -412,6 +419,47 @@ class Fac(Routable):
                 for context in self.contexts[state]:
                     if context.path_safe():
                         assert context.path_safe() in self.path2context
+
+    ########################################
+    # file monitoring
+    ########################################
+
+    @route('/rdeps', ['GET'])
+    def get_rdeps(self, path, recursive=True):
+        if not recursive:
+            return sorted(self.rdeps[path])
+
+        else:
+            result = set()
+            stack = [path]
+            while stack:
+                p = stack.pop()
+                for dep in self.rdeps[p]:
+                    if dep not in result:
+                        result.add(dep)
+                        stack.append(dep)
+            return sorted(result)
+
+
+    def update_rdeps_state(self, path):
+        for rdep in itertools.chain([path], self.get_rdeps(path)):
+            rdep_context = self.path2context[rdep]
+            status, do_build = rdep_context.get_status()
+            if not os.path.exists(rdep):
+                self._set_context_state(rdep_context, 'notbuilt')
+            if do_build:
+                for state in self.contexts:
+                    self.contexts[state].discard(rdep_context)
+                if os.path.exists(rdep):
+                    self._set_context_state(rdep_context, 'stale')
+
+    async def _watch_files(self):
+        async for changes in awatch("."):
+            for change_type, abs_path in changes:
+                path = os.path.relpath(abs_path)
+                if path in self.path2context:
+                    logger.warning(f"change_detected ({change_type}): path={path}")
+                    self.update_rdeps_state(path)
 
     ########################################
     # visualize state
