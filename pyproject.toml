@@ -15,7 +15,7 @@ pinge = "fac.pinge:main"
 include = ["fac", "fac.*", "facd"]
 
 [tool.setuptools.package-data]
-fac = ["templates/*", "static/*"]
+facd = ["templates/**", "static/**"]
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
