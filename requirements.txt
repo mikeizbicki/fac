@@ -12,6 +12,7 @@ ffmpeg-python==0.2.0
 json_repair >= 0.46.2
 jq >= 1.8.0
 pydantic>=2.11.5
+pydantic_settings>=2.14.1
 frozendict>=2.4.7
 deepdiff==8.6.1
 argcomplete>=3.6.3

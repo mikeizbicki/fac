@@ -306,7 +306,11 @@ class BuildContext(BaseModel):
         '''
         paths = self.denormalized_target()
         assert len(paths) == 1
-        assert '$' not in paths[0], paths
+        #if '$' not in paths[0]:
+            #logger.error(self.to_dict())
+            #asd
+            #assert False, f'$ in paths[0]; paths={paths}'
+        assert '$' not in paths[0], f'paths={paths}'
         return paths[0]
 
     def path_safe(self):

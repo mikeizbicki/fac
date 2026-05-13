@@ -36,7 +36,11 @@ jobs:
           # hardcoded version number needed to fix a race condition in the automatic version numbering
           SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0"
         run: |
-          pip3 install .
+          pip3 install -e .
+      - name: facd_test1_rm
+        run: |
+          cd tests/facd_test1_rm
+          ./run_test.sh
       - name: fac_test1_basicproject
         run: |
           cd tests/fac_test1_basicproject
@@ -65,8 +69,4 @@ jobs:
       - name: fac_test7_locks_and_symlinks
         run: |
           cd tests/fac_test7_locks_and_symlinks
-          ./run_test.sh
-      - name: facd_test1_rm
-        run: |
-          cd tests/facd_test1_rm
           ./run_test.sh

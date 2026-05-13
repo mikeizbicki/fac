@@ -59,11 +59,11 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="fac build server", lifespan=lifespan)
 
 # prepare /static mount point
-static_path = str(files("facd") / "static")
+static_path = files("facd") / "static"
 app.mount("/static", StaticFiles(directory=static_path), name="static")
 
 # prepare templates
-templates_path = str(files("facd") / "static")
+templates_path = files("facd") / "static"
 templates = Jinja2Templates(directory=str(templates_path))
 
 
@@ -204,6 +204,7 @@ def main():
     parser.add_argument('--allow_dirty', action='store_true')
     parser.add_argument('--auto_commit', default=True, type=str2bool)
     args = parser.parse_args()
+
 
     # register state routes
     from fac.Fac import Fac
