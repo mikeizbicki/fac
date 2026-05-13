@@ -3,6 +3,7 @@ from collections import defaultdict
 import asyncio
 import itertools
 import os
+import signal
 
 # external imports
 import yaml
@@ -52,6 +53,7 @@ class Fac(Routable):
 
         # set default values for controlling runtime behavior
         self._max_workers = 20
+        self._clean_stalled_dryrun = True
         self._parallel_build = True
         self._do_assert_invariants = True
         self._do_merge_contexts = True
@@ -163,19 +165,36 @@ class Fac(Routable):
                     include_paths=include_paths,
                     tasks=tasks,
                     )
-            self._add_context(context, required_for=required_for, force_add=False, job=job)
+            self._add_context(context, required_for=required_for, force_add=True, job=job)
 
     async def build_daemon(self):
+        '''
+        This is the primary interface for how facd interacts with the Fac class.
+        '''
         loop = asyncio.get_event_loop()
         watch_task = loop.create_task(self._watch_files())
         try:
             while True:
-                # Run sync build_all in executor so it doesn't block the event loop
+                # the code below will raise an exception if self._watch_files
+                # generated an exception
+                if watch_task.done():
+                    logger.error(f"error in _watch_files")
+                    watch_task.result()
+                # run build_all in executor so it doesn't block the event loop
                 await loop.run_in_executor(None, self.build_all)
                 await asyncio.sleep(1)
         except asyncio.CancelledError:
             self._shutdown = True
             logger.warning('build_daemon cancelled')
+
+        # if there are any unknown errors in the build_all function,
+        # we log them here and end the program;
+        # we call os.kill twice to ensure that the uvicorn server actually ends
+        except Exception as e:
+            logger.error(f"build_daemon crashed: {e}", exc_info=e)
+            os.kill(os.getpid(), signal.SIGTERM)
+            os.kill(os.getpid(), signal.SIGTERM)
+
         finally:
             watch_task.cancel()
             try:
@@ -260,12 +279,36 @@ class Fac(Routable):
                     if not all_dryrun:
                         logger.error('duplicate state detected --- this is a bug in fac')
                     else:
-                        pass
-                        # FIXME:
-                        # it would be nice to log this event,
-                        # but it currently happens too often;
-                        # we need to make it happen only once
-                        #logger.info('evaluated as far as dryrun will allow')
+                        # NOTE:
+                        # There is no theoretical need to clean up these contexts.
+                        # The main motivation for removing them right now is to
+                        # make tracking jobs easier inside of test cases.
+                        # If we did not remove these stalled contexts, then:
+                        # 1. The initial job in facd (a dryrun of '**')
+                        #    would never terminate (or the job would terminate,
+                        #    but the contexts related to the job would remain,
+                        #    which is ugly)
+                        # 2. The main benefit would be that targets would get
+                        #    automatically added to the 'notbuilt' state as the
+                        #    corresponding variables become resolvable,
+                        #    and this is a mildly nice feature to see what
+                        #    files could in principle be built by fac
+                        #    that haven't already been built.
+                        if self._clean_stalled_dryrun:
+                            logger.warning('evaluated as far as dryrun will allow; removing dryrun contexts')
+                            for context in itertools.chain(
+                                    self.contexts['buildable'],
+                                    self.contexts['waiting'],
+                                    self.contexts['unresolved'],
+                                    ):
+                                if context.path_safe():
+                                    if os.path.exists(context.path):
+                                        self._set_context_state(context, 'stale')
+                                    else:
+                                        self._set_context_state(context, 'notbuilt')
+                            self.contexts['buildable'] = set()
+                            self.contexts['waiting'] = set()
+                            self.contexts['unresolved'] = set()
                     break
                 state_hashes.add(state0)
             self._finalize_jobs()
@@ -382,6 +425,23 @@ class Fac(Routable):
                         for context in self.contexts[state1]:
                             assert context not in self.contexts[state2], f'state1={state1}, state2={state2}, context.path_safe()={context.path_safe()}'
 
+            # if a path is in context.dependencies_built,
+            # then there must be a corresponding context in the 'built' state
+            for state in self.contexts:
+                for context in self.contexts[state]:
+                    for dep in context.dependencies_built:
+                        assert any([context2.path == dep['target'] for context2 in self.contexts['built']]), f"context.dependencies_built contains a target not found in built state; context.path={context.path} state={state} dep['target']={dep['target']}"
+
+            # every path in self.rdeps must have a corresponding context
+            for path in self.rdeps:
+                for rdep in self.rdeps:
+                    has_context = False
+                    for state in self.contexts:
+                        for context in self.contexts[state]:
+                            if context.path_safe() == rdep:
+                                has_context = True
+                    assert has_context, f'self.rdeps inconsistent; for path={path} rdep={rdep} has no corresponding context'
+
             # no path can be in more than one context
             #
             # FIXME:
@@ -412,7 +472,17 @@ class Fac(Routable):
                 assert path == context.path
 
                 # every context is associated with some state
-                assert any([context in self.contexts[state] for state in self.contexts]), f"context.path_safe()={context.path_safe()}"
+                contexts_with_path = set()
+                for state in self.contexts:
+                    for loop_context in self.contexts[state]:
+                        if loop_context.path_safe == path:
+                            if loop_context != context:
+                                logger.error('context in path2context different from context in state')
+                                logger.error({
+                                    'context': context.to_dict(),
+                                    'loop_context': loop_context.to_dict()
+                                    }, submessage=True)
+                            assert loop_context == context
 
             # every context with a path is in self.path2context
             for state in self.contexts:
@@ -426,6 +496,12 @@ class Fac(Routable):
 
     @route('/rdeps', ['GET'])
     def get_rdeps(self, path, recursive=True):
+        '''
+        Get "reverse dependencies" for a path.
+        That is, get all paths that depend on the input path.
+        If recursive==False: return only paths that directly rely on the input path.
+        If recursive==True: return all paths that will need rebuilding if path is deleted.
+        '''
         if not recursive:
             return sorted(self.rdeps[path])
 
@@ -440,26 +516,117 @@ class Fac(Routable):
                         stack.append(dep)
             return sorted(result)
 
-
-    def update_rdeps_state(self, path):
-        for rdep in itertools.chain([path], self.get_rdeps(path)):
-            rdep_context = self.path2context[rdep]
-            status, do_build = rdep_context.get_status()
-            if not os.path.exists(rdep):
-                self._set_context_state(rdep_context, 'notbuilt')
-            if do_build:
-                for state in self.contexts:
-                    self.contexts[state].discard(rdep_context)
-                if os.path.exists(rdep):
-                    self._set_context_state(rdep_context, 'stale')
-
     async def _watch_files(self):
+        '''
+        This is the code responsible for handling edited/deleted files
+        and marking paths as 'stale'.
+        It will only be run when Fac is used as a daemon.
+        '''
         async for changes in awatch("."):
             for change_type, abs_path in changes:
                 path = os.path.relpath(abs_path)
                 if path in self.path2context:
-                    logger.warning(f"change_detected ({change_type}): path={path}")
-                    self.update_rdeps_state(path)
+                    if change_type == Change.added:
+                        change_str = 'added'
+                        continue
+                    elif change_type == Change.modified:
+                        change_str = 'modified'
+                    elif change_type == Change.deleted:
+                        change_str = 'deleted'
+                        assert not os.path.exists(path)
+                        assert not os.path.exists(abs_path)
+                    else:
+                        assert False, 'unknown change_type'
+                    logger.warning(f"change_detected ({change_str}): path={path}")
+                    self._update_rdeps_state(path)
+
+    def _update_rdeps_state(self, path):
+        '''
+        Helper function that should only be used inside of _watch_files.
+        '''
+        rdeps = set(self.get_rdeps(path)) | set([path])
+
+        # BuildContext internally stores all the deps that have been built;
+        # if a path has been deleted, then these deps are no longer built,
+        # and the BuildContext assert_invariants will fail;
+        # we fix this by moving all dependencies_built to dependencies_unresolved
+        path_rm = not os.path.lexists(path)
+        if path_rm:
+            for state in self.contexts:
+                for context in list(self.contexts[state]):
+                    rdep_uses_path = False
+                    dependencies_unresolved1 = set(context.dependencies_unresolved)
+                    dependencies_built1 = set()
+                    for dep in context.dependencies_built:
+                        if dep['target'] in rdeps:
+                            rdep_uses_path = True
+                            dependencies_unresolved1.add(dep)
+                        else:
+                            dependencies_built1.add(dep)
+                    if rdep_uses_path:
+                        context1 = context.model_copy(update={
+                            'dependencies_built': dependencies_built1,
+                            'dependencies_unresolved': dependencies_unresolved1,
+                            'tasks': set(),
+                            })
+                        self.contexts[state].remove(context)
+                        self._add_context(context1, required_for=context)
+
+        # FIXME:
+        # the code above processes rdeps at a context level,
+        # whereas the code below processes rdeps at a path level;
+        # processing at a context level is currently inefficient because
+        # self.rdeps only goes from path -> path and we don't have
+        # an equivalent for path -> context
+
+        # FIXME:
+        # the _add_context function internally relies on _contexts_history
+        # to prevent infinite loops;
+        # this is need for the standard-case where there are no edits/deletes;
+        # but after a context has been edited/deleted,
+        # we may need to rebuild the context;
+        # resetting the _contexts_history here allows the contexts to be rebuilt;
+        # this is super hacky;
+        # we should find a way to modify the _add_context function so that we
+        # don't need to reset the entire history here
+        self._contexts_history = defaultdict(lambda: [])
+
+        # set the state of any rdep to stale/notbuilt
+        for rdep in rdeps:
+            rdep_context = self.path2context[rdep]
+            if path_rm:
+                do_build = True
+                status = 'none'
+            else:
+                status, do_build = rdep_context.get_status()
+            if do_build:
+                for state in self.contexts:
+                    self.contexts[state].discard(rdep_context)
+                self._contexts_history[rdep_context] = []
+                if os.path.lexists(rdep):
+                    self._set_context_state(rdep_context, 'stale')
+                else:
+                    self._set_context_state(rdep_context, 'notbuilt')
+
+        self.assert_invariants()
+        self.assert_invariants_io()
+
+    def assert_invariants_io(self):
+        '''
+        The standard assert_invariants does not do any IO.
+        This is partially for speed reasons,
+        but primarily for correctness because we allow 3rd parties
+        to perform arbitrary rm/edits.
+
+        We only enforce the IO constraints after processing these
+        3rd party changes to avoid race conditions.
+        '''
+        for context in self.contexts['built']:
+            assert os.path.exists(context.path)
+        for context in self.contexts['stale']:
+            assert os.path.exists(context.path)
+        for context in self.contexts['notbuilt']:
+            assert not os.path.exists(context.path)
 
     ########################################
     # visualize state
@@ -588,7 +755,6 @@ class Fac(Routable):
                   NOTE:
                   Set to True only when the context has been "temporarily removed" from a state for processing.
         '''
-
         if context != required_for:
             self.required_for[context].append(required_for)
 
@@ -617,6 +783,7 @@ class Fac(Routable):
             # if we've already built the context,
             # do not add it anywhere
             if context in self.contexts['built']:
+                logger.warning("context in self.contexts['built']; context.path={context.path}")
                 return
 
             # if we haven't built the context,

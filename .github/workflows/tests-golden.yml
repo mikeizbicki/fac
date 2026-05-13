@@ -22,6 +22,7 @@ jobs:
       - name: Initialize specific submodules
         run: |
           git submodule update --init --recursive tests/fac_test*
+          git submodule update --init --recursive tests/facd_test*
       - name: Set up Python ${{matrix.python}}
         uses: actions/setup-python@v2
         with:
@@ -64,4 +65,8 @@ jobs:
       - name: fac_test7_locks_and_symlinks
         run: |
           cd tests/fac_test7_locks_and_symlinks
+          ./run_test.sh
+      - name: facd_test1_rm
+        run: |
+          cd tests/facd_test1_rm
           ./run_test.sh

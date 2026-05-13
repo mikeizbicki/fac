@@ -235,6 +235,10 @@ class BuildContext(BaseModel):
                     ):
                 assert var in self.target_variables or var in self.config['variables']
 
+            # all variables in dependencies_built have been resolved
+            for dep in self.dependencies_built:
+                assert '$' not in dep['target']
+
             # ensure variable values are well behaved
             for var, value in self.variables_resolved.items():
                 # NOTE:
@@ -250,11 +254,6 @@ class BuildContext(BaseModel):
                 assert var not in self.variables_unresolved
             for var in self.variables_unresolved:
                 assert var not in self.variables_resolved
-
-            # if a dependency is built, the file must exist
-            for dep in self.dependencies_built:
-                assert '$' not in dep['target']
-                assert os.path.exists(dep['target'])
 
             # a dependency cannot be both building and unresolved
             for dep in self.dependencies_building:
@@ -374,6 +373,17 @@ class BuildContext(BaseModel):
         '''
         # ensure normalized_target will resolve to exactly one path
         self.path
+
+        # if a dependency is built, the file must exist
+        # NOTE:
+        # Conceptually, this invariant should always hold
+        # (not just when buildable).
+        # But we need to move the check here in order to avoid
+        # weird multithreading race conditions.
+        # It would probably be theoretically best to not do io-based asserts,
+        # but they do in practice prevent errors.
+        for dep in self.dependencies_built:
+            assert os.path.exists(dep['target'])
 
         # empty configs represent files not in fac.yaml;
         # this means they can't be built
