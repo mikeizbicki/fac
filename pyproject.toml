@@ -11,6 +11,9 @@ fac = "fac.__main__:main"
 facd = "facd.__main__:main"
 pinge = "fac.pinge:main"
 
+[tool.setuptools]
+include-package-data = true
+
 [tool.setuptools.packages.find]
 include = ["fac", "fac.*", "facd"]
 
