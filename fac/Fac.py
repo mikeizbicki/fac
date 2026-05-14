@@ -641,13 +641,18 @@ class Fac(Routable):
 
         for context in self.contexts['stale']:
             assert os.path.exists(context.path)
-            status, do_build = context.get_status()
-            assert do_build
+            # NOTE:
+            # I previously had the idea of the following assert.
+            # This isn't correct, however, because context.get_status()
+            # is only well-defined when all dependencies are built,
+            # and we moved the rmed dependency to undefined.
+            #status, do_build = context.get_status()
+            #assert do_build, f'stale do_build: context.path={context.path}'
 
         for context in self.contexts['notbuilt']:
             assert not os.path.exists(context.path)
-            status, do_build = context.get_status()
-            assert do_build
+            #status, do_build = context.get_status()
+            #assert do_build
 
     ########################################
     # visualize state
