@@ -12,9 +12,6 @@ jobs:
       matrix:
         python: [3.12]
     runs-on: ubuntu-latest
-    env:
-      # we set PYTHONPATH here so that `python3 -m fac` can find the module
-      PYTHONPATH: ${{ github.workspace }}
     steps:
       - uses: actions/checkout@v4
         with:
