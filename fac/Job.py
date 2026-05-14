@@ -62,7 +62,7 @@ class Job:
 
         # ensure that all contexts have corresponding built paths
         for context in self.contexts:
-            if context.path_safe() and context.mode != 'dryrun':
+            if context.path_safe() and context.tasks & {'build', 'overwrite'}:
                 assert context.path_safe() in self.paths
 
     def finalize(self):

@@ -12,9 +12,6 @@ jobs:
       matrix:
         python: [3.12]
     runs-on: ubuntu-latest
-    env:
-      # we set PYTHONPATH here so that `python3 -m fac` can find the module
-      PYTHONPATH: ${{ github.workspace }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -22,6 +19,7 @@ jobs:
       - name: Initialize specific submodules
         run: |
           git submodule update --init --recursive tests/fac_test*
+          git submodule update --init --recursive tests/facd_test*
       - name: Set up Python ${{matrix.python}}
         uses: actions/setup-python@v2
         with:
@@ -35,7 +33,11 @@ jobs:
           # hardcoded version number needed to fix a race condition in the automatic version numbering
           SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0"
         run: |
-          pip3 install .
+          pip3 install -e .
+      - name: facd_test1_rm
+        run: |
+          cd tests/facd_test1_rm
+          ./run_test.sh
       - name: fac_test1_basicproject
         run: |
           cd tests/fac_test1_basicproject

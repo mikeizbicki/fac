@@ -8,9 +8,6 @@ import sys
 import threading
 import time
 
-from fac.Errors import *
-from fac.Fac import Fac
-from fac.Logging import *
 import fac.Errors
 
 import git
@@ -36,7 +33,6 @@ async def lifespan(app: FastAPI):
     daemon_task = asyncio.create_task(app.state.build_daemon())
 
     yield
-    logger.warning('shutting down (within lifespan)')
 
     # cleanup code here
     app.state.path_routes.shutdown()
@@ -99,10 +95,10 @@ class BroadcastHandler(logging.Handler):
 
 # Attach handler to your build system logger
 #logger = logging.getLogger("fac")  # adjust to match your logger name
-handler = BroadcastHandler()
+#handler = BroadcastHandler()
 #handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-handler.setFormatter(logging.Formatter('%(message)s'))
-logger.addHandler(handler)
+#handler.setFormatter(logging.Formatter('%(message)s'))
+#logger.addHandler(handler)
 
 async def log_generator():
     queue = asyncio.Queue(maxsize=100)
@@ -151,27 +147,76 @@ def list_targets():
     '''
     return app.state.targets_dict
 
+
+class AddTargetRequest(BaseModel):
+    target: str
+    required_for: Optional[Any] = None
+    include_prompt: Optional[str] = None
+    include_old: bool = False
+    include_paths: Optional[Any] = None
+    tasks: Set[str] = {'build'}
+
+
+@app.post('/add_target')
+def add_target_endpoint(request: AddTargetRequest):
+    '''
+    Registers a target with the build system.
+
+    Arguments:
+    - target (str): the target to be built; all variables must be specified; supports globstar (**)-style pattern matching
+    - include_prompt (str): allows specifying additional build instructions for the target
+    - include_old (bool): should the old file be included if rebuilding?
+    - tasks [str]:
+        - "build": (default) build the file only if needed
+        - "overwrite": always build the file, overwriting existing contents
+        - "dryrun": register the file with the build system, but do not build
+    '''
+    app.state.add_target(
+        target=request.target,
+        required_for=request.required_for,
+        include_prompt=request.include_prompt,
+        include_old=request.include_old,
+        include_paths=request.include_paths,
+        tasks=request.tasks,
+    )
+    return {"status": "success"}
+
 ################################################################################
 # run the server
 ################################################################################
+
+def str2bool(v):
+    '''
+    For use with argparse and creating boolean parameters.
+    '''
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
 
 def main():
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--allow_dirty', action='store_true')
+    parser.add_argument('--auto_commit', default=True, type=str2bool)
     args = parser.parse_args()
 
+
     # register state routes
+    from fac.Fac import Fac
     state = Fac(
         allow_dirty=args.allow_dirty,
+        auto_commit=args.auto_commit,
         )
     app.state = state
     #state.path_manager.start()
 
     # perform a dryrun to register all files with facd;
-    # build_all=False allows facd startup to continue,
-    # and the build_daemon will run the build concurrently
-    state.add_target('**', mode='dryrun')
+    state.add_target('**', tasks=set())
 
     # register routes
     app.include_router(state.router)

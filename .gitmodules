@@ -8,7 +8,7 @@
 	path = tests/fac_test3_postreqs
 	url = https://github.com/mikeizbicki/fac_test_project3
 [submodule "tests/fac_test_greek"]
-	path = tests/greek
+	path = tests/old/greek
 	url = https://github.com/mikeizbicki/fac_test_greek
 [submodule "fac_test_depvars"]
 	path = tests/fac_test4_dependency_only_variables
@@ -17,8 +17,11 @@
 	path = tests/fac_test6_recursive_dependencies
 	url = https://github.com/mikeizbicki/fac_test6_recursive_dependencies
 [submodule "tests/fac-video"]
-	path = tests/video
+	path = tests/old/video
 	url = https://github.com/mikeizbicki/fac-video
 [submodule "tests/fac_test7_locks_and_symlinks"]
 	path = tests/fac_test7_locks_and_symlinks
 	url = https://github.com/mikeizbicki/fac_test7_locks_and_symlinks
+[submodule "tests/facd_test_rm"]
+	path = tests/facd_test1_rm
+	url = https://github.com/mikeizbicki/facd_test_rm

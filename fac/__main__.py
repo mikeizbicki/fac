@@ -53,21 +53,21 @@ class BuildSystem:
     def build_targets(self, targets):
         # actually build the targets
         for target in targets:
-            mode = 'build'
-            if self.overwrite:
-                mode = 'overwrite'
+            tasks = {'build'}
             if self.dryrun:
-                mode = 'dryrun'
+                tasks = {}
+            if self.overwrite:
+                tasks = {'overwrite'}
             if self.lock:
-                mode = 'lock'
+                tasks = {'lock'}
             if self.unlock:
-                mode = 'unlock'
+                tasks = {'unlock'}
             self.build_state.add_target(
                     target,
                     include_prompt=self.include_prompt,
                     include_old=self.include_old,
                     include_paths=self.include_paths,
-                    mode=mode,
+                    tasks=frozenset(tasks),
                     )
         self.build_state.build_all()
 

@@ -1,0 +1,2 @@
+recursive-include facd/static *
+recursive-include facd/templates *

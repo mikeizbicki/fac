@@ -95,11 +95,7 @@ class BuildContext(BaseModel):
     include_old: bool = False
     include_paths: list[str] | None = None
 
-    # possible values:
-    # - dryrun (never builds; used for checking what paths exist for a target)
-    # - build (builds only when needed; this is the typical case)
-    # - overwrite (always builds)
-    mode: Literal['dryrun', 'build', 'overwrite', 'lock', 'unlock']
+    tasks: frozenset[Literal['build', 'overwrite', 'lock', 'unlock']]
 
     ##############################
     # methods
@@ -133,7 +129,7 @@ class BuildContext(BaseModel):
         ...     dependencies_built=[],
         ...     dependencies_building=[],
         ...     dependencies_unresolved=[],
-        ...     mode='build',
+        ...     tasks={'build'},
         ...     ).split())
         - normalized_target: example/$FOO/$BAR/outline.json
           variables_resolved:
@@ -175,7 +171,7 @@ class BuildContext(BaseModel):
         ...     dependencies_built=[],
         ...     dependencies_building=[],
         ...     dependencies_unresolved=[],
-        ...     mode='build',
+        ...     tasks={'build'},
         ...     ).split()
         []
 
@@ -192,7 +188,7 @@ class BuildContext(BaseModel):
         ... include_prompt=None,
         ... include_old=False,
         ... include_paths=None,
-        ... mode='build',
+        ... tasks={'build'},
         ... ).split()) == 1
         True
         '''
@@ -216,12 +212,15 @@ class BuildContext(BaseModel):
             contexts1.append(context1)
         return contexts1
 
-    def dependencies_mode(self):
-        if self.mode in ['overwrite', 'build']:
-            return 'build'
-        elif self.mode in ['dryrun', 'lock', 'unlock']:
-            return 'dryrun'
-        assert False
+    def dependency_tasks(self):
+        '''
+        The function determines the tasks of any dependency contexts.
+        If we are building/overwriting, then we must build any dependencies;
+        if we are doing anything else, then we perform a dryrun (no tasks).
+        '''
+        if self.tasks & {'overwrite', 'build'}:
+            return {'build'}
+        return set()
 
     def assert_invariants(self):
         '''
@@ -235,6 +234,10 @@ class BuildContext(BaseModel):
                     self.variables_resolved,
                     ):
                 assert var in self.target_variables or var in self.config['variables']
+
+            # all variables in dependencies_built have been resolved
+            for dep in self.dependencies_built:
+                assert '$' not in dep['target']
 
             # ensure variable values are well behaved
             for var, value in self.variables_resolved.items():
@@ -251,11 +254,6 @@ class BuildContext(BaseModel):
                 assert var not in self.variables_unresolved
             for var in self.variables_unresolved:
                 assert var not in self.variables_resolved
-
-            # if a dependency is built, the file must exist
-            for dep in self.dependencies_built:
-                assert '$' not in dep['target']
-                assert os.path.exists(dep['target'])
 
             # a dependency cannot be both building and unresolved
             for dep in self.dependencies_building:
@@ -308,7 +306,11 @@ class BuildContext(BaseModel):
         '''
         paths = self.denormalized_target()
         assert len(paths) == 1
-        assert '$' not in paths[0], paths
+        #if '$' not in paths[0]:
+            #logger.error(self.to_dict())
+            #asd
+            #assert False, f'$ in paths[0]; paths={paths}'
+        assert '$' not in paths[0], f'paths={paths}'
         return paths[0]
 
     def path_safe(self):
@@ -375,6 +377,17 @@ class BuildContext(BaseModel):
         '''
         # ensure normalized_target will resolve to exactly one path
         self.path
+
+        # if a dependency is built, the file must exist
+        # NOTE:
+        # Conceptually, this invariant should always hold
+        # (not just when buildable).
+        # But we need to move the check here in order to avoid
+        # weird multithreading race conditions.
+        # It would probably be theoretically best to not do io-based asserts,
+        # but they do in practice prevent errors.
+        for dep in self.dependencies_built:
+            assert os.path.exists(dep['target'])
 
         # empty configs represent files not in fac.yaml;
         # this means they can't be built
@@ -726,13 +739,13 @@ class BuildContext(BaseModel):
             file_status.append('locked')
             do_build = False
 
-        # overwrite do_build based on mode
-        if self.mode == 'overwrite':
+        # overwrite do_build based on tasks
+        if 'overwrite' in self.tasks:
             file_status.append('overwrite')
             do_build = True
 
-        if do_build and self.mode in ['dryrun', 'lock', 'unlock']:
-            if self.mode == 'dryrun':
+        if do_build and not (self.tasks & {'overwrite', 'build'}):
+            if len(self.tasks) == 0:
                 file_status.append('dryrun')
             do_build = False
 
