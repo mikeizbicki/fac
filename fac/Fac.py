@@ -689,7 +689,7 @@ class Fac(Routable):
                     nodes.append({
                         'id': context.path,
                         'type': 'path',
-                        'parent': context.normalized_target,
+                        'target': context.normalized_target,
                         'data': {
                             'state': state,
                             'mime-type': context.config.get('mime-type'),

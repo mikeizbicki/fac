@@ -118,8 +118,8 @@
                 state: (node.data && node.data.state) || null,
                 mime: (node.data && node.data['mime-type']) || null,
             };
-            if (node.parent && targetIds.has(node.parent)) {
-                data.parent = cyId('target', node.parent);
+            if (node.target && targetIds.has(node.target)) {
+                data.parent = cyId('target', node.target);
             }
             elements.push({
                 group: 'nodes',
