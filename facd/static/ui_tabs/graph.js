@@ -3,23 +3,30 @@
 // Renders the build system dependency graph in a tab.
 //
 // Fetches the graph from the /dep_graph endpoint and renders it using
-// Cytoscape.js. Unlike a generic dagre layout, this view manually
-// computes positions so that:
+// Cytoscape.js. Layout is computed manually (no auto-layout, no
+// cytoscape compound parents) so that positions are a deterministic
+// function of the "expanded set" of nodes. The layout:
+//
 //   - The "target-level" DAG (target nodes connected by target-target
-//     edges) is laid out via dagre to get a stable top-level layout.
-//   - Path nodes belonging to a target are grouped hierarchically
-//     by the values of their resolved variables (left to right),
-//     mirroring the tree structure used in targets.js. The grouping
-//     hierarchy is: target -> VAR1=val -> VAR2=val -> ... -> path.
-//   - Target nodes and group ("internal") nodes are independently
-//     expandable/collapsable. On every expand/collapse toggle the
-//     whole layout is recomputed from scratch from the saved
-//     "expanded set" so that the final layout depends *only* on
-//     which nodes are expanded -- never on the order of operations.
-//   - target->target edges use taxi-style routing and are always
-//     drawn. path->path (dependencies_built) edges are hidden by
-//     default and revealed only when the user hovers over a path
-//     node that is the *source* of those edges.
+//     edges) is laid out via a hidden dagre instance to get stable
+//     top-level positions for every target.
+//   - For each *expanded* target or group node, child nodes
+//     (sub-groups and path leaves) are placed at fixed positions
+//     inside the parent's rectangle using a wrapping grid.
+//   - Targets are then iteratively pushed apart so their (resized)
+//     bounding boxes do not overlap.
+//
+// Because every node is a regular (non-compound) cytoscape node and
+// every node's position is set explicitly from the layout function,
+// the rendered layout depends only on the set of expanded ids -- not
+// on the order of expand/collapse operations.
+//
+// - target->target edges use taxi-style routing and are always drawn.
+// - path->path (dependencies_built) edges are hidden by default; they
+//   appear only when the cursor is over a path node that is the
+//   *source* of those edges.
+// - Node dragging is disabled (grabify is turned off on all nodes).
+// - The toolbar provides Refresh, Fit, Zoom In, Zoom Out, Reset.
 //
 // Cytoscape is loaded from a CDN on demand so we do not vendor it.
 
@@ -29,14 +36,16 @@
     const CYTOSCAPE_DAGRE_URL = 'https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js';
 
     // Layout tuning constants.
-    const NODE_W = 160;            // standard width for path / group / target nodes
-    const NODE_H = 32;             // standard height
-    const PAD_X = 24;              // horizontal padding inside a compound
-    const PAD_Y = 28;              // vertical padding inside a compound (extra on top for label)
-    const SIBLING_GAP_X = 16;      // gap between siblings in a row
-    const SIBLING_GAP_Y = 14;      // gap between rows of siblings
-    const TARGET_NODE_SEP = 60;    // dagre nodeSep for the top-level target DAG
-    const TARGET_RANK_SEP = 100;   // dagre rankSep for the top-level target DAG
+    const LEAF_W = 160;          // width of path leaf / collapsed placeholder
+    const LEAF_H = 32;           // height of same
+    const PAD_X = 18;            // horizontal padding inside a container
+    const PAD_TOP = 26;          // top padding (leaves room for label)
+    const PAD_BOTTOM = 16;       // bottom padding
+    const SIBLING_GAP_X = 14;    // gap between siblings in a row
+    const SIBLING_GAP_Y = 12;    // gap between rows of siblings
+    const TARGET_MARGIN = 40;    // min separation between target containers
+    const TARGET_NODE_SEP = 80;  // dagre nodeSep for the top-level target DAG
+    const TARGET_RANK_SEP = 120; // dagre rankSep for the top-level target DAG
 
     let cyInstance = null;
     let containerEl = null;
@@ -44,18 +53,18 @@
 
     // The set of node ids (cytoscape ids) that are currently "expanded".
     // A target or internal-group node not in this set is collapsed
-    // (rendered as a single small placeholder; its descendants are not
-    // present in the graph at all). This is the single source of truth
-    // for the rendered layout.
+    // (rendered as a single small leaf placeholder; its descendants are
+    // not present in the graph at all).
     let expandedIds = new Set();
 
-    // The last fetched graph response, kept so we can re-render on
-    // expand/collapse without re-fetching.
     let lastGraph = null;
-
-    // Built once per fetched graph: the hierarchy of target -> group ->
-    // ... -> path nodes. See buildHierarchy() for shape.
     let hierarchy = null;
+
+    // parentMap is used to resolve edges whose endpoint is inside a
+    // collapsed container to the nearest visible ancestor.
+    let parentMap = new Map();          // cyId -> parent cyId (or null)
+    let knownTargetIds = new Set();
+    let knownPathIds = new Set();
 
     function loadScript(src) {
         return new Promise((resolve, reject) => {
@@ -95,15 +104,10 @@
     }
 
     // ---------- ID helpers ----------
-    //
-    // Target and path nodes share id strings, so we namespace them.
-    // Group nodes have synthetic ids derived from the target id plus
-    // the chain of resolved (variable, value) pairs.
 
     function targetCyId(id) { return `target::${id}`; }
     function pathCyId(id)   { return `path::${id}`; }
     function groupCyId(targetId, chain) {
-        // chain is an array of [varName, value] pairs
         const tail = chain.map(([k, v]) => `${k}=${v}`).join('|');
         return `group::${targetId}::${tail}`;
     }
@@ -121,36 +125,6 @@
     }
 
     // ---------- Hierarchy construction ----------
-    //
-    // hierarchy = {
-    //     targets: ordered array of target nodes, each:
-    //         {
-    //             id: <target id>,
-    //             cyId: <namespaced id>,
-    //             data: original node.data,
-    //             varNames: [...] left-to-right variables in target pattern,
-    //             root: <group node>     // root group; if target has no
-    //                                    // variables this still exists
-    //                                    // and directly holds path leaves
-    //         }
-    // }
-    //
-    // group node = {
-    //     cyId,
-    //     label,           // "" for the root group; "VAR=value" for inner groups
-    //     isRoot,          // true iff this is the top-level group under a target
-    //     children: [],    // array of group nodes (next-level variable buckets)
-    //     paths: [],       // array of path leaves directly in this group (only
-    //                      // populated at the deepest level or for var-less targets)
-    //     parentCyId,      // cytoscape id of containing compound (target or group)
-    // }
-    //
-    // path leaf = {
-    //     cyId,
-    //     id,
-    //     data,
-    //     parentCyId,
-    // }
 
     function buildHierarchy(graph) {
         const targetsById = {};
@@ -165,7 +139,7 @@
                         cyId: targetCyId(node.id),
                         data: node.data || {},
                         varNames: extractVariableNames(node.id),
-                        root: null, // filled in below
+                        root: null,
                     };
                     targetOrder.push(node.id);
                 }
@@ -174,7 +148,6 @@
             }
         }
 
-        // Make sure every target has a root group.
         for (const tId of targetOrder) {
             const t = targetsById[tId];
             t.root = {
@@ -183,7 +156,6 @@
                 isRoot: true,
                 children: [],
                 paths: [],
-                parentCyId: t.cyId,
                 varNames: t.varNames,
                 targetId: t.id,
                 chain: [],
@@ -191,13 +163,8 @@
         }
 
         for (const pNode of pathNodes) {
-            const targetId = pNode.target;
-            const t = targetsById[targetId];
-            if (!t) {
-                // Orphan path; skip (or it could be attached as a root-level node,
-                // but the example data always has a corresponding target).
-                continue;
-            }
+            const t = targetsById[pNode.target];
+            if (!t) continue;
             const resolved = (pNode.data && pNode.data.variables_resolved) || {};
             const chain = [];
             let group = t.root;
@@ -205,7 +172,6 @@
                 const val = resolved[varName];
                 if (val === undefined || val === null) break;
                 chain.push([varName, val]);
-                // Find or create child group at this level.
                 let child = group.children.find(c =>
                     c.label === `${varName}=${val}`);
                 if (!child) {
@@ -215,7 +181,6 @@
                         isRoot: false,
                         children: [],
                         paths: [],
-                        parentCyId: group.cyId,
                         varNames: t.varNames,
                         targetId: t.id,
                         chain: chain.slice(),
@@ -228,383 +193,16 @@
                 cyId: pathCyId(pNode.id),
                 id: pNode.id,
                 data: pNode.data || {},
-                parentCyId: group.cyId,
             });
         }
 
         return { targets: targetOrder.map(id => targetsById[id]) };
     }
 
-    // ---------- Layout ----------
-    //
-    // We compute the bounding box (width, height) of each compound
-    // depending on whether it is expanded. Then we lay out children in
-    // a wrapped grid. Coordinates returned for each leaf/group/target
-    // are absolute "center" positions for cytoscape.
-
-    // Returns layout info for a group node:
-    //   { width, height, place(cx, cy) -> { positions: Map<cyId, {x,y}> } }
-    // If the group's parent is collapsed (caller decides), the caller
-    // simply won't include it in the layout at all.
-    //
-    // For a group that is itself *collapsed*, we render it as a single
-    // small placeholder node (cyId of the group) with no children.
-    function layoutGroup(group) {
-        const expanded = expandedIds.has(group.cyId);
-        if (!expanded) {
-            // Collapsed group placeholder.
-            return {
-                width: NODE_W,
-                height: NODE_H,
-                place(cx, cy) {
-                    const positions = new Map();
-                    positions.set(group.cyId, { x: cx, y: cy });
-                    return { positions };
-                },
-                isPlaceholder: true,
-            };
-        }
-
-        // Expanded: gather child layouts.
-        // Children are either nested groups or path leaves.
-        const childLayouts = [];
-
-        for (const sub of group.children) {
-            childLayouts.push({
-                kind: 'group',
-                ref: sub,
-                layout: layoutGroup(sub),
-            });
-        }
-        for (const p of group.paths) {
-            childLayouts.push({
-                kind: 'path',
-                ref: p,
-                layout: {
-                    width: NODE_W,
-                    height: NODE_H,
-                    place(cx, cy) {
-                        const positions = new Map();
-                        positions.set(p.cyId, { x: cx, y: cy });
-                        return { positions };
-                    },
-                    isPlaceholder: true,
-                },
-            });
-        }
-
-        if (childLayouts.length === 0) {
-            // Expanded but empty group (rare). Render as a small box.
-            return {
-                width: NODE_W,
-                height: NODE_H,
-                place(cx, cy) {
-                    const positions = new Map();
-                    positions.set(group.cyId, { x: cx, y: cy });
-                    return { positions };
-                },
-            };
-        }
-
-        // Arrange children in a wrapping grid. We choose a column count
-        // roughly proportional to sqrt(N) so the cluster looks square-ish.
-        const n = childLayouts.length;
-        const cols = Math.max(1, Math.ceil(Math.sqrt(n)));
-
-        // Compute row metrics.
-        const rows = [];
-        for (let i = 0; i < n; i += cols) {
-            rows.push(childLayouts.slice(i, i + cols));
-        }
-        const rowHeights = rows.map(row =>
-            row.reduce((m, c) => Math.max(m, c.layout.height), 0));
-        const colWidths = [];
-        for (let c = 0; c < cols; c++) {
-            let w = 0;
-            for (const row of rows) {
-                if (row[c]) w = Math.max(w, row[c].layout.width);
-            }
-            colWidths.push(w);
-        }
-        const innerW = colWidths.reduce((a, b) => a + b, 0)
-            + SIBLING_GAP_X * (cols - 1);
-        const innerH = rowHeights.reduce((a, b) => a + b, 0)
-            + SIBLING_GAP_Y * (rows.length - 1);
-
-        const width = innerW + 2 * PAD_X;
-        const height = innerH + 2 * PAD_Y;
-
-        return {
-            width,
-            height,
-            place(cx, cy) {
-                const positions = new Map();
-                // The group node itself is a compound and cytoscape will
-                // position it automatically based on its children, but we
-                // still record a position for it in case it has no
-                // children (handled above).
-                const left = cx - width / 2 + PAD_X;
-                const top = cy - height / 2 + PAD_Y;
-                let yCursor = top;
-                for (let r = 0; r < rows.length; r++) {
-                    let xCursor = left;
-                    const rowH = rowHeights[r];
-                    for (let c = 0; c < rows[r].length; c++) {
-                        const child = rows[r][c];
-                        const colW = colWidths[c];
-                        const childCx = xCursor + colW / 2;
-                        const childCy = yCursor + rowH / 2;
-                        const sub = child.layout.place(childCx, childCy);
-                        for (const [k, v] of sub.positions) {
-                            positions.set(k, v);
-                        }
-                        xCursor += colW + SIBLING_GAP_X;
-                    }
-                    yCursor += rowH + SIBLING_GAP_Y;
-                }
-                return { positions };
-            },
-        };
-    }
-
-    // Returns layout info for a target node (the target is a compound
-    // containing its root group, unless the target itself is collapsed).
-    function layoutTarget(t) {
-        const expanded = expandedIds.has(t.cyId);
-        if (!expanded) {
-            return {
-                width: NODE_W,
-                height: NODE_H,
-                place(cx, cy) {
-                    const positions = new Map();
-                    positions.set(t.cyId, { x: cx, y: cy });
-                    return { positions };
-                },
-                isPlaceholder: true,
-            };
-        }
-        // Expanded: layout its root group as the sole "child" inside.
-        const inner = layoutGroup(t.root);
-        const width = inner.width + 2 * PAD_X;
-        const height = inner.height + 2 * PAD_Y;
-        return {
-            width,
-            height,
-            place(cx, cy) {
-                // Inner group is centered horizontally; placed below the
-                // target's top label area.
-                const positions = new Map();
-                const innerCy = cy + (PAD_Y / 2); // slight downward bias for label
-                const sub = inner.place(cx, innerCy);
-                for (const [k, v] of sub.positions) {
-                    positions.set(k, v);
-                }
-                return { positions };
-            },
-        };
-    }
-
-    // ---------- Element construction (cytoscape JSON) ----------
-
-    function buildVisibleElements() {
-        const elements = [];
-        const visibleNodeIds = new Set();
-
-        for (const t of hierarchy.targets) {
-            const tExpanded = expandedIds.has(t.cyId);
-
-            // Always include the target node itself.
-            elements.push({
-                group: 'nodes',
-                data: {
-                    id: t.cyId,
-                    label: t.id,
-                    nodeType: 'target',
-                    origId: t.id,
-                    collapsed: !tExpanded,
-                    expandable: true,
-                },
-                classes: 'node-target' + (tExpanded ? ' expanded' : ' collapsed'),
-            });
-            visibleNodeIds.add(t.cyId);
-
-            if (!tExpanded) continue;
-
-            // Recurse into groups.
-            addGroupElements(t.root, t.cyId, elements, visibleNodeIds);
-        }
-
-        // Edges: only include those whose endpoints are both visible
-        // (i.e. not hidden inside a collapsed compound). For collapsed
-        // targets / groups, redirect endpoints to the nearest visible
-        // ancestor placeholder.
-        const ancestorCache = new Map(); // origCyId -> visible cyId
-        const resolveVisible = (cyId) => {
-            if (visibleNodeIds.has(cyId)) return cyId;
-            if (ancestorCache.has(cyId)) return ancestorCache.get(cyId);
-            // Walk up the hierarchy via parentMap.
-            let cur = cyId;
-            while (cur && !visibleNodeIds.has(cur)) {
-                cur = parentMap.get(cur) || null;
-            }
-            ancestorCache.set(cyId, cur);
-            return cur;
-        };
-
-        for (const edge of lastGraph.edges || []) {
-            const kind = edge.kind || '';
-            const isPathPath = (kind === 'dependencies_built');
-            // Determine source / target cyIds. We disambiguate using
-            // node existence.
-            const [srcType, tgtType] = endpointTypesForEdge(edge);
-            const srcCyOrig = srcType === 'target'
-                ? targetCyId(edge.source) : pathCyId(edge.source);
-            const tgtCyOrig = tgtType === 'target'
-                ? targetCyId(edge.target) : pathCyId(edge.target);
-            const srcCy = resolveVisible(srcCyOrig);
-            const tgtCy = resolveVisible(tgtCyOrig);
-            if (!srcCy || !tgtCy) continue;
-            if (srcCy === tgtCy) continue; // collapsed into same node
-
-            elements.push({
-                group: 'edges',
-                data: {
-                    source: srcCy,
-                    target: tgtCy,
-                    kind: kind,
-                    origSource: edge.source,
-                    origTarget: edge.target,
-                    isPathPath: isPathPath,
-                },
-                classes: `edge-${kind}` + (isPathPath ? ' edge-path-path-hidden' : ''),
-            });
-        }
-
-        return elements;
-    }
-
-    // parentMap and endpointTypesForEdge depend on the current hierarchy
-    // and known node existence. We build them per render.
-    let parentMap = new Map();          // cyId -> parent cyId (or null)
-    let knownTargetIds = new Set();
-    let knownPathIds = new Set();
-
-    function addGroupElements(group, parentCyId, elements, visibleNodeIds) {
-        const gExpanded = expandedIds.has(group.cyId);
-        const hasChildren = group.children.length > 0 || group.paths.length > 0;
-
-        // The root group of a target is "invisible structurally": instead
-        // of a wrapping compound for it, we attach its children directly
-        // to the target. This keeps the target's label as the visible
-        // group label and avoids an extra nesting level.
-        if (group.isRoot) {
-            if (!hasChildren) return;
-            // Even root groups can have nested variable buckets. Always
-            // expand into the target (the target's own collapsed state
-            // already gates this).
-            for (const sub of group.children) {
-                addGroupElements(sub, parentCyId, elements, visibleNodeIds);
-            }
-            for (const p of group.paths) {
-                elements.push({
-                    group: 'nodes',
-                    data: {
-                        id: p.cyId,
-                        label: p.id,
-                        nodeType: 'path',
-                        origId: p.id,
-                        state: (p.data && p.data.state) || null,
-                        parent: parentCyId,
-                    },
-                    classes: 'node-path'
-                        + (p.data && p.data.state ? ` state-${p.data.state}` : ''),
-                });
-                visibleNodeIds.add(p.cyId);
-            }
-            return;
-        }
-
-        // Non-root group: this is a "VAR=value" cluster node.
-        if (!gExpanded || !hasChildren) {
-            // Render as a simple placeholder node (no compound).
-            elements.push({
-                group: 'nodes',
-                data: {
-                    id: group.cyId,
-                    label: group.label,
-                    nodeType: 'group',
-                    parent: parentCyId,
-                    collapsed: true,
-                    expandable: hasChildren,
-                },
-                classes: 'node-group collapsed'
-                    + (hasChildren ? ' expandable' : ' leaf'),
-            });
-            visibleNodeIds.add(group.cyId);
-            return;
-        }
-
-        // Expanded group: render as a compound containing children.
-        elements.push({
-            group: 'nodes',
-            data: {
-                id: group.cyId,
-                label: group.label,
-                nodeType: 'group',
-                parent: parentCyId,
-                collapsed: false,
-                expandable: true,
-            },
-            classes: 'node-group expanded expandable',
-        });
-        visibleNodeIds.add(group.cyId);
-
-        for (const sub of group.children) {
-            addGroupElements(sub, group.cyId, elements, visibleNodeIds);
-        }
-        for (const p of group.paths) {
-            elements.push({
-                group: 'nodes',
-                data: {
-                    id: p.cyId,
-                    label: p.id,
-                    nodeType: 'path',
-                    origId: p.id,
-                    state: (p.data && p.data.state) || null,
-                    parent: group.cyId,
-                },
-                classes: 'node-path'
-                    + (p.data && p.data.state ? ` state-${p.data.state}` : ''),
-            });
-            visibleNodeIds.add(p.cyId);
-        }
-    }
-
-    function endpointTypesForEdge(edge) {
-        // Decide whether each endpoint refers to a target or a path node.
-        const sInT = knownTargetIds.has(edge.source);
-        const sInP = knownPathIds.has(edge.source);
-        const tInT = knownTargetIds.has(edge.target);
-        const tInP = knownPathIds.has(edge.target);
-        const kind = edge.kind || '';
-        const preferPath = (kind === 'dependencies_built');
-
-        function pick(inT, inP) {
-            if (inT && inP) return preferPath ? 'path' : 'target';
-            if (inT) return 'target';
-            if (inP) return 'path';
-            return preferPath ? 'path' : 'target';
-        }
-        return [pick(sInT, sInP), pick(tInT, tInP)];
-    }
-
-    // Build the parentMap for the full hierarchy (so we can resolve
-    // collapsed-into-ancestor for edges).
     function buildParentMap() {
         parentMap = new Map();
         for (const t of hierarchy.targets) {
             parentMap.set(t.cyId, null);
-            // Root group's children attach to the target.
             walkGroup(t.root, t.cyId);
         }
         function walkGroup(g, parentCyId) {
@@ -626,50 +224,496 @@
         }
     }
 
+    // ---------- Layout ----------
+    //
+    // The layout functions return a plan object:
+    //   {
+    //     width, height,                              // bounding box size
+    //     place(cx, cy, out, depth)                   // emits placements
+    //   }
+    // where `out` is an array of placement records:
+    //   { cyId, x, y, w, h, kind, label, depth, data }
+    // kind in {'target', 'group', 'path'}.
+    //
+    // The container (target / group) itself is always emitted at its own
+    // center; descendants are emitted at their own centers.
+
+    function layoutPathLeaf(p, depth) {
+        return {
+            width: LEAF_W,
+            height: LEAF_H,
+            place(cx, cy, out) {
+                out.push({
+                    cyId: p.cyId,
+                    x: cx, y: cy,
+                    w: LEAF_W, h: LEAF_H,
+                    kind: 'path',
+                    label: p.id,
+                    state: (p.data && p.data.state) || null,
+                    depth,
+                });
+            },
+        };
+    }
+
+    function layoutGroup(group, depth) {
+        const expanded = expandedIds.has(group.cyId);
+        const hasChildren = group.children.length > 0 || group.paths.length > 0;
+
+        if (!expanded || !hasChildren) {
+            // Collapsed (or empty) group: small leaf placeholder.
+            return {
+                width: LEAF_W,
+                height: LEAF_H,
+                place(cx, cy, out) {
+                    out.push({
+                        cyId: group.cyId,
+                        x: cx, y: cy,
+                        w: LEAF_W, h: LEAF_H,
+                        kind: 'group',
+                        label: group.label,
+                        depth,
+                        collapsed: true,
+                        expandable: hasChildren,
+                    });
+                },
+            };
+        }
+
+        // Expanded: gather child layouts (sub-groups first, then paths).
+        const childPlans = [];
+        for (const sub of group.children) {
+            childPlans.push({ kind: 'group', plan: layoutGroup(sub, depth + 1) });
+        }
+        for (const p of group.paths) {
+            childPlans.push({ kind: 'path', plan: layoutPathLeaf(p, depth + 1) });
+        }
+
+        const grid = computeGrid(childPlans);
+        const width = grid.innerW + 2 * PAD_X;
+        const height = grid.innerH + PAD_TOP + PAD_BOTTOM;
+
+        return {
+            width,
+            height,
+            place(cx, cy, out) {
+                // Emit this container.
+                out.push({
+                    cyId: group.cyId,
+                    x: cx, y: cy,
+                    w: width, h: height,
+                    kind: 'group',
+                    label: group.label,
+                    depth,
+                    collapsed: false,
+                    expandable: true,
+                });
+                // Lay out children inside.
+                placeGrid(grid, cx, cy, width, height, out);
+            },
+        };
+    }
+
+    function layoutTarget(t) {
+        const expanded = expandedIds.has(t.cyId);
+        const rootHasChildren =
+            t.root.children.length > 0 || t.root.paths.length > 0;
+
+        if (!expanded || !rootHasChildren) {
+            return {
+                width: LEAF_W,
+                height: LEAF_H,
+                place(cx, cy, out) {
+                    out.push({
+                        cyId: t.cyId,
+                        x: cx, y: cy,
+                        w: LEAF_W, h: LEAF_H,
+                        kind: 'target',
+                        label: t.id,
+                        depth: 0,
+                        collapsed: true,
+                        expandable: rootHasChildren,
+                    });
+                },
+            };
+        }
+
+        // Expanded target: the root group's children attach directly to
+        // the target container (we skip drawing the root group as its
+        // own rectangle to avoid an extra nesting level).
+        const childPlans = [];
+        for (const sub of t.root.children) {
+            childPlans.push({ kind: 'group', plan: layoutGroup(sub, 1) });
+        }
+        for (const p of t.root.paths) {
+            childPlans.push({ kind: 'path', plan: layoutPathLeaf(p, 1) });
+        }
+        const grid = computeGrid(childPlans);
+        const width = grid.innerW + 2 * PAD_X;
+        const height = grid.innerH + PAD_TOP + PAD_BOTTOM;
+
+        return {
+            width,
+            height,
+            place(cx, cy, out) {
+                out.push({
+                    cyId: t.cyId,
+                    x: cx, y: cy,
+                    w: width, h: height,
+                    kind: 'target',
+                    label: t.id,
+                    depth: 0,
+                    collapsed: false,
+                    expandable: true,
+                });
+                placeGrid(grid, cx, cy, width, height, out);
+            },
+        };
+    }
+
+    function computeGrid(childPlans) {
+        const n = childPlans.length;
+        if (n === 0) {
+            return { rows: [], rowHeights: [], colWidths: [],
+                     innerW: 0, innerH: 0 };
+        }
+        const cols = Math.max(1, Math.ceil(Math.sqrt(n)));
+        const rows = [];
+        for (let i = 0; i < n; i += cols) {
+            rows.push(childPlans.slice(i, i + cols));
+        }
+        const rowHeights = rows.map(row =>
+            row.reduce((m, c) => Math.max(m, c.plan.height), 0));
+        const colWidths = [];
+        for (let c = 0; c < cols; c++) {
+            let w = 0;
+            for (const row of rows) {
+                if (row[c]) w = Math.max(w, row[c].plan.width);
+            }
+            colWidths.push(w);
+        }
+        const innerW = colWidths.reduce((a, b) => a + b, 0)
+            + SIBLING_GAP_X * (colWidths.length - 1);
+        const innerH = rowHeights.reduce((a, b) => a + b, 0)
+            + SIBLING_GAP_Y * (rows.length - 1);
+        return { rows, rowHeights, colWidths, innerW, innerH };
+    }
+
+    function placeGrid(grid, cx, cy, width, height, out) {
+        // Inner area is offset from container center: leaves PAD_TOP at
+        // the top for the label, PAD_BOTTOM at the bottom, PAD_X on each
+        // side.
+        const left = cx - width / 2 + PAD_X;
+        const top = cy - height / 2 + PAD_TOP;
+        let yCursor = top;
+        for (let r = 0; r < grid.rows.length; r++) {
+            let xCursor = left;
+            const rowH = grid.rowHeights[r];
+            for (let c = 0; c < grid.rows[r].length; c++) {
+                const child = grid.rows[r][c];
+                const colW = grid.colWidths[c];
+                const childCx = xCursor + colW / 2;
+                const childCy = yCursor + rowH / 2;
+                child.plan.place(childCx, childCy, out);
+                xCursor += colW + SIBLING_GAP_X;
+            }
+            yCursor += rowH + SIBLING_GAP_Y;
+        }
+    }
+
+    // ---------- Target-level layout (dagre on targets only) ----------
+
+    function computeTargetCenters() {
+        const targetEls = [];
+        for (const t of hierarchy.targets) {
+            targetEls.push({ group: 'nodes', data: { id: t.cyId } });
+        }
+        for (const edge of lastGraph.edges || []) {
+            if (edge.kind !== 'target-target') continue;
+            const sId = targetCyId(edge.source);
+            const tId = targetCyId(edge.target);
+            if (!knownTargetIds.has(edge.source)
+                || !knownTargetIds.has(edge.target)) continue;
+            targetEls.push({
+                group: 'edges',
+                data: { id: `${sId}->${tId}`, source: sId, target: tId },
+            });
+        }
+
+        const tmpDiv = document.createElement('div');
+        tmpDiv.style.position = 'absolute';
+        tmpDiv.style.width = '1000px';
+        tmpDiv.style.height = '1000px';
+        tmpDiv.style.left = '-10000px';
+        tmpDiv.style.top = '-10000px';
+        document.body.appendChild(tmpDiv);
+
+        const centers = new Map();
+        try {
+            const tmpCy = window.cytoscape({
+                container: tmpDiv,
+                elements: targetEls,
+                style: [],
+            });
+            const layout = tmpCy.layout({
+                name: 'dagre',
+                rankDir: 'TB',
+                nodeSep: TARGET_NODE_SEP,
+                rankSep: TARGET_RANK_SEP,
+            });
+            layout.run();
+            tmpCy.nodes().forEach(n => {
+                const pos = n.position();
+                centers.set(n.id(), { x: pos.x, y: pos.y });
+            });
+            tmpCy.destroy();
+        } finally {
+            tmpDiv.remove();
+        }
+        return centers;
+    }
+
+    // Iteratively push apart any two target bounding boxes that overlap.
+    // Result depends only on (centers, boxes), so the final layout is a
+    // pure function of the expanded set.
+    function separateBoxes(centers, boxes) {
+        const ids = Array.from(centers.keys());
+        const MAX_PASSES = 400;
+        for (let pass = 0; pass < MAX_PASSES; pass++) {
+            let moved = false;
+            for (let i = 0; i < ids.length; i++) {
+                for (let j = i + 1; j < ids.length; j++) {
+                    const a = ids[i], b = ids[j];
+                    const ca = centers.get(a), cb = centers.get(b);
+                    const ba = boxes.get(a), bb = boxes.get(b);
+                    const halfWA = ba.width / 2, halfHA = ba.height / 2;
+                    const halfWB = bb.width / 2, halfHB = bb.height / 2;
+                    const dx = cb.x - ca.x;
+                    const dy = cb.y - ca.y;
+                    const overlapX = (halfWA + halfWB + TARGET_MARGIN)
+                                    - Math.abs(dx);
+                    const overlapY = (halfHA + halfHB + TARGET_MARGIN)
+                                    - Math.abs(dy);
+                    if (overlapX > 0 && overlapY > 0) {
+                        if (overlapX < overlapY) {
+                            const shift = overlapX / 2 + 0.5;
+                            const sign = dx >= 0 ? 1 : -1;
+                            centers.set(b, { x: cb.x + sign * shift, y: cb.y });
+                            centers.set(a, { x: ca.x - sign * shift, y: ca.y });
+                        } else {
+                            const shift = overlapY / 2 + 0.5;
+                            const sign = dy >= 0 ? 1 : -1;
+                            centers.set(b, { x: cb.x, y: cb.y + sign * shift });
+                            centers.set(a, { x: ca.x, y: ca.y - sign * shift });
+                        }
+                        moved = true;
+                    }
+                }
+            }
+            if (!moved) break;
+        }
+    }
+
+    // ---------- Element construction & application ----------
+
+    function endpointTypeFor(id, kind, role) {
+        // role is 'source' or 'target'
+        const inT = knownTargetIds.has(id);
+        const inP = knownPathIds.has(id);
+        const preferPath = (kind === 'dependencies_built');
+        if (inT && inP) return preferPath ? 'path' : 'target';
+        if (inT) return 'target';
+        if (inP) return 'path';
+        return preferPath ? 'path' : 'target';
+    }
+
+    function buildElementsAndPositions() {
+        // 1) Compute target-level centers (pure function of lastGraph).
+        const baseCenters = computeTargetCenters();
+
+        // 2) Compute each target's plan and bounding box.
+        const targetPlans = new Map();
+        const targetBoxes = new Map();
+        for (const t of hierarchy.targets) {
+            const plan = layoutTarget(t);
+            targetPlans.set(t.cyId, plan);
+            targetBoxes.set(t.cyId, { width: plan.width, height: plan.height });
+        }
+
+        // 3) Separate overlapping target boxes.
+        const centers = new Map(baseCenters);
+        // Ensure every target has a center (in case dagre missed one).
+        for (const t of hierarchy.targets) {
+            if (!centers.has(t.cyId)) {
+                centers.set(t.cyId, { x: 0, y: 0 });
+            }
+        }
+        separateBoxes(centers, targetBoxes);
+
+        // 4) Emit placements for every visible node.
+        const placements = [];
+        for (const t of hierarchy.targets) {
+            const c = centers.get(t.cyId);
+            targetPlans.get(t.cyId).place(c.x, c.y, placements);
+        }
+
+        // Build a quick lookup of visible cyIds.
+        const visibleIds = new Set(placements.map(p => p.cyId));
+
+        // 5) Build cytoscape elements. Containers first (so they render
+        // below leaves), then leaves on top. Elements added to cytoscape
+        // in this order get lower z-index by default; we also set
+        // explicit z-index based on depth.
+        const sorted = placements.slice().sort((a, b) => {
+            // Containers (kind == target/group with !collapsed) before
+            // leaves. Among containers, shallower depth first.
+            const aContainer = (a.kind === 'target' || a.kind === 'group')
+                             && !a.collapsed;
+            const bContainer = (b.kind === 'target' || b.kind === 'group')
+                             && !b.collapsed;
+            if (aContainer !== bContainer) return aContainer ? -1 : 1;
+            return a.depth - b.depth;
+        });
+
+        const elements = [];
+        for (const p of sorted) {
+            const cls = nodeClasses(p);
+            elements.push({
+                group: 'nodes',
+                data: {
+                    id: p.cyId,
+                    label: p.label,
+                    nodeType: p.kind,
+                    width: p.w,
+                    height: p.h,
+                    collapsed: !!p.collapsed,
+                    expandable: !!p.expandable,
+                    state: p.state || null,
+                    depth: p.depth,
+                    zIndexValue:
+                        p.kind === 'path' ? 1000
+                        : (p.collapsed ? 800 : 100 + p.depth * 10),
+                },
+                position: { x: p.x, y: p.y },
+                classes: cls,
+                grabbable: false,
+                selectable: true,
+            });
+        }
+
+        // 6) Edges. Redirect endpoints inside collapsed containers to
+        // the nearest visible ancestor.
+        const ancestorCache = new Map();
+        const resolveVisible = (cyId) => {
+            if (visibleIds.has(cyId)) return cyId;
+            if (ancestorCache.has(cyId)) return ancestorCache.get(cyId);
+            let cur = cyId;
+            while (cur && !visibleIds.has(cur)) {
+                cur = parentMap.get(cur) || null;
+            }
+            ancestorCache.set(cyId, cur);
+            return cur;
+        };
+
+        const seenEdgeKeys = new Set();
+        for (const edge of lastGraph.edges || []) {
+            const kind = edge.kind || '';
+            const sType = endpointTypeFor(edge.source, kind, 'source');
+            const tType = endpointTypeFor(edge.target, kind, 'target');
+            const sOrig = sType === 'target'
+                ? targetCyId(edge.source) : pathCyId(edge.source);
+            const tOrig = tType === 'target'
+                ? targetCyId(edge.target) : pathCyId(edge.target);
+            const sCy = resolveVisible(sOrig);
+            const tCy = resolveVisible(tOrig);
+            if (!sCy || !tCy) continue;
+            if (sCy === tCy) continue;
+
+            // Deduplicate -- after retargeting, many path->path edges
+            // can collapse to the same target->target endpoints.
+            const key = `${kind}|${sCy}|${tCy}`;
+            if (seenEdgeKeys.has(key)) continue;
+            seenEdgeKeys.add(key);
+
+            elements.push({
+                group: 'edges',
+                data: {
+                    id: `e::${key}`,
+                    source: sCy,
+                    target: tCy,
+                    kind: kind,
+                    origSource: edge.source,
+                    origTarget: edge.target,
+                },
+                classes: `edge-${kind}`,
+            });
+        }
+
+        return { elements, placements };
+    }
+
+    function nodeClasses(p) {
+        const parts = [];
+        if (p.kind === 'target') {
+            parts.push('node-target');
+            parts.push(p.collapsed ? 'collapsed' : 'expanded');
+        } else if (p.kind === 'group') {
+            parts.push('node-group');
+            parts.push(p.collapsed ? 'collapsed' : 'expanded');
+            if (p.expandable) parts.push('expandable');
+        } else if (p.kind === 'path') {
+            parts.push('node-path');
+            if (p.state) parts.push(`state-${p.state}`);
+        }
+        return parts.join(' ');
+    }
+
     // ---------- Cytoscape style ----------
 
     function getStyle() {
         return [
-            // Target compound nodes.
+            // Target container.
             {
                 selector: 'node.node-target',
                 style: {
                     'shape': 'round-rectangle',
+                    'width': 'data(width)',
+                    'height': 'data(height)',
                     'background-color': '#f5f7fb',
-                    'background-opacity': 0.55,
+                    'background-opacity': 0.6,
                     'border-color': '#5a7fb8',
                     'border-width': 2,
                     'border-style': 'dashed',
                     'label': 'data(label)',
                     'text-valign': 'top',
                     'text-halign': 'center',
-                    'text-margin-y': -4,
+                    'text-margin-y': 4,
                     'font-size': 11,
                     'font-weight': 'bold',
                     'color': '#2c3e64',
-                    'padding': '14px',
-                    'compound-sizing-wrt-labels': 'include',
+                    'z-index': 'data(zIndexValue)',
+                    'z-compound-depth': 'bottom',
                 },
             },
             {
                 selector: 'node.node-target.collapsed',
                 style: {
-                    'shape': 'round-rectangle',
                     'background-color': '#e8eefb',
                     'background-opacity': 1,
                     'border-style': 'solid',
-                    'width': NODE_W,
-                    'height': NODE_H,
                     'text-valign': 'center',
                     'text-margin-y': 0,
-                    'padding': '6px',
+                    'text-wrap': 'ellipsis',
+                    'text-max-width': LEAF_W - 12,
                 },
             },
-            // Group (internal) nodes.
+            // Group container.
             {
                 selector: 'node.node-group',
                 style: {
                     'shape': 'round-rectangle',
+                    'width': 'data(width)',
+                    'height': 'data(height)',
                     'background-color': '#fbf6ea',
                     'background-opacity': 0.7,
                     'border-color': '#b08a00',
@@ -678,10 +722,10 @@
                     'label': 'data(label)',
                     'text-valign': 'top',
                     'text-halign': 'center',
-                    'text-margin-y': -4,
+                    'text-margin-y': 4,
                     'font-size': 10,
                     'color': '#6b5400',
-                    'padding': '10px',
+                    'z-index': 'data(zIndexValue)',
                 },
             },
             {
@@ -690,18 +734,19 @@
                     'background-color': '#fff4cc',
                     'background-opacity': 1,
                     'border-style': 'solid',
-                    'width': NODE_W,
-                    'height': NODE_H,
                     'text-valign': 'center',
                     'text-margin-y': 0,
-                    'padding': '4px',
+                    'text-wrap': 'ellipsis',
+                    'text-max-width': LEAF_W - 12,
                 },
             },
-            // Path leaf nodes.
+            // Path leaf.
             {
                 selector: 'node.node-path',
                 style: {
                     'shape': 'round-rectangle',
+                    'width': 'data(width)',
+                    'height': 'data(height)',
                     'background-color': '#ffffff',
                     'border-color': '#888',
                     'border-width': 1,
@@ -710,11 +755,9 @@
                     'text-halign': 'center',
                     'font-size': 10,
                     'color': '#222',
-                    'width': NODE_W,
-                    'height': NODE_H,
-                    'padding': '4px',
                     'text-wrap': 'ellipsis',
-                    'text-max-width': NODE_W - 12,
+                    'text-max-width': LEAF_W - 12,
+                    'z-index': 'data(zIndexValue)',
                 },
             },
             {
@@ -743,13 +786,14 @@
                 style: {
                     'curve-style': 'taxi',
                     'taxi-direction': 'auto',
-                    'taxi-turn': 24,
+                    'taxi-turn': 28,
                     'taxi-turn-min-distance': 8,
                     'target-arrow-shape': 'triangle',
                     'width': 1.5,
                     'line-color': '#888',
                     'target-arrow-color': '#888',
                     'arrow-scale': 0.9,
+                    'z-index': 50,
                 },
             },
             {
@@ -759,6 +803,7 @@
                     'line-color': '#5a7fb8',
                     'target-arrow-color': '#5a7fb8',
                     'width': 2,
+                    'z-index': 60,
                 },
             },
             {
@@ -779,6 +824,7 @@
                     'line-style': 'dotted',
                     'width': 1,
                     'display': 'none',
+                    'z-index': 70,
                 },
             },
             {
@@ -798,172 +844,17 @@
         return response.json();
     }
 
-    function computeAndApplyLayout() {
-        // Step 1: lay out target-level DAG with dagre on a temporary
-        // graph that only contains target nodes and target-target edges.
-        // This determines each target's center position.
-        const targetEls = [];
-        for (const t of hierarchy.targets) {
-            targetEls.push({
-                group: 'nodes',
-                data: { id: t.cyId },
-            });
-        }
-        for (const edge of lastGraph.edges || []) {
-            if (edge.kind !== 'target-target') continue;
-            const sId = targetCyId(edge.source);
-            const tId = targetCyId(edge.target);
-            targetEls.push({
-                group: 'edges',
-                data: { id: `${sId}->${tId}`, source: sId, target: tId },
-            });
-        }
-
-        // Use a hidden cytoscape instance just to run dagre. This avoids
-        // having to manage layout on the live instance with compounds.
-        const tmpDiv = document.createElement('div');
-        tmpDiv.style.position = 'absolute';
-        tmpDiv.style.width = '1000px';
-        tmpDiv.style.height = '1000px';
-        tmpDiv.style.left = '-10000px';
-        tmpDiv.style.top = '-10000px';
-        document.body.appendChild(tmpDiv);
-
-        const targetCenters = new Map();
-        try {
-            const tmpCy = window.cytoscape({
-                container: tmpDiv,
-                elements: targetEls,
-                style: [],
-                headless: false,
-            });
-            const layout = tmpCy.layout({
-                name: 'dagre',
-                rankDir: 'TB',
-                nodeSep: TARGET_NODE_SEP,
-                rankSep: TARGET_RANK_SEP,
-            });
-            layout.run();
-            tmpCy.nodes().forEach(n => {
-                const pos = n.position();
-                targetCenters.set(n.id(), { x: pos.x, y: pos.y });
-            });
-            tmpCy.destroy();
-        } finally {
-            tmpDiv.remove();
-        }
-
-        // Step 2: compute each target's required bounding box (based on
-        // expansion state) and shift target positions outward so that no
-        // two target boxes overlap. We do this by performing a simple
-        // iterative separation along x and y axes.
-        const targetBoxes = new Map(); // tCyId -> { w, h, layout }
-        for (const t of hierarchy.targets) {
-            const tl = layoutTarget(t);
-            targetBoxes.set(t.cyId, tl);
-        }
-
-        // Separate overlapping target boxes by translating them.
-        const centers = new Map(targetCenters);
-        separateBoxes(centers, targetBoxes);
-
-        // Step 3: compute final positions for every visible leaf node by
-        // calling each target's layout.place() at its center.
-        const allPositions = new Map();
-        for (const t of hierarchy.targets) {
-            const center = centers.get(t.cyId);
-            if (!center) continue;
-            const box = targetBoxes.get(t.cyId);
-            if (box.isPlaceholder) {
-                allPositions.set(t.cyId, { x: center.x, y: center.y });
-            } else {
-                const placed = box.place(center.x, center.y);
-                for (const [k, v] of placed.positions) {
-                    allPositions.set(k, v);
-                }
-            }
-        }
-
-        // Apply positions to cytoscape. Only leaf nodes need explicit
-        // positions; compound nodes auto-fit to their children.
-        cyInstance.batch(() => {
-            cyInstance.nodes().forEach(n => {
-                const pos = allPositions.get(n.id());
-                if (pos && n.isChildless()) {
-                    n.position(pos);
-                } else if (pos && !n.isParent()) {
-                    // collapsed compound rendered as placeholder
-                    n.position(pos);
-                }
-            });
-        });
-    }
-
-    // Iteratively push apart any two target bounding boxes that overlap.
-    // We keep doing passes until no overlaps remain (or a pass cap is
-    // hit). For each overlapping pair, we shift them apart along the
-    // axis with the smaller required separation. Because we ALWAYS
-    // recompute the layout from scratch from the dagre output + the
-    // expandedIds set, the result depends only on those inputs.
-    function separateBoxes(centers, boxes) {
-        const MARGIN = 30;
-        const ids = Array.from(centers.keys());
-        // Iterate a bounded number of times; for typical graphs this
-        // converges quickly.
-        const MAX_PASSES = 200;
-        for (let pass = 0; pass < MAX_PASSES; pass++) {
-            let moved = false;
-            for (let i = 0; i < ids.length; i++) {
-                for (let j = i + 1; j < ids.length; j++) {
-                    const a = ids[i], b = ids[j];
-                    const ca = centers.get(a), cb = centers.get(b);
-                    const ba = boxes.get(a), bb = boxes.get(b);
-                    const halfWA = ba.width / 2, halfHA = ba.height / 2;
-                    const halfWB = bb.width / 2, halfHB = bb.height / 2;
-                    const dx = cb.x - ca.x;
-                    const dy = cb.y - ca.y;
-                    const overlapX = (halfWA + halfWB + MARGIN) - Math.abs(dx);
-                    const overlapY = (halfHA + halfHB + MARGIN) - Math.abs(dy);
-                    if (overlapX > 0 && overlapY > 0) {
-                        // Push apart along the smaller-overlap axis.
-                        if (overlapX < overlapY) {
-                            const shift = overlapX / 2 + 0.5;
-                            if (dx >= 0) {
-                                centers.set(b, { x: cb.x + shift, y: cb.y });
-                                centers.set(a, { x: ca.x - shift, y: ca.y });
-                            } else {
-                                centers.set(b, { x: cb.x - shift, y: cb.y });
-                                centers.set(a, { x: ca.x + shift, y: ca.y });
-                            }
-                        } else {
-                            const shift = overlapY / 2 + 0.5;
-                            if (dy >= 0) {
-                                centers.set(b, { x: cb.x, y: cb.y + shift });
-                                centers.set(a, { x: ca.x, y: ca.y - shift });
-                            } else {
-                                centers.set(b, { x: cb.x, y: cb.y - shift });
-                                centers.set(a, { x: ca.x, y: ca.y + shift });
-                            }
-                        }
-                        moved = true;
-                    }
-                }
-            }
-            if (!moved) break;
-        }
-    }
-
     function rebuildAndRender() {
         if (!cyInstance) return;
-        const elements = buildVisibleElements();
+        const { elements } = buildElementsAndPositions();
         cyInstance.elements().remove();
         cyInstance.add(elements);
+        // Make sure positions stick (cytoscape can recompute things
+        // after add; we re-apply explicitly from the placements).
         wireInteractionHandlers();
-        computeAndApplyLayout();
     }
 
     function wireInteractionHandlers() {
-        // Click handler for expand/collapse on target and group nodes.
         cyInstance.off('tap', 'node');
         cyInstance.on('tap', 'node', evt => {
             const node = evt.target;
@@ -975,8 +866,6 @@
             }
         });
 
-        // Path hover: reveal outgoing dependencies_built edges (only
-        // edges where source = this path).
         cyInstance.off('mouseover', 'node.node-path');
         cyInstance.off('mouseout', 'node.node-path');
         cyInstance.on('mouseover', 'node.node-path', evt => {
@@ -985,7 +874,7 @@
                 if (e.data('source') === id) e.addClass('reveal');
             });
         });
-        cyInstance.on('mouseout', 'node.node-path', evt => {
+        cyInstance.on('mouseout', 'node.node-path', () => {
             cyInstance.edges('.edge-dependencies_built.reveal')
                 .removeClass('reveal');
         });
@@ -993,8 +882,6 @@
 
     function toggleExpand(cyId) {
         if (expandedIds.has(cyId)) {
-            // Collapse: also collapse all descendants so that re-expanding
-            // just this node behaves deterministically.
             collapseRecursive(cyId);
         } else {
             expandedIds.add(cyId);
@@ -1003,10 +890,7 @@
     }
 
     function collapseRecursive(cyId) {
-        // Remove this id and any descendant ids from expandedIds. We
-        // walk the hierarchy to find descendants.
         expandedIds.delete(cyId);
-        // Find the corresponding hierarchy node.
         for (const t of hierarchy.targets) {
             if (t.cyId === cyId) {
                 collapseGroupDescendants(t.root);
@@ -1038,7 +922,6 @@
 
     async function renderGraph() {
         if (!containerEl) return;
-
         const graphRoot = containerEl.querySelector('.graph-canvas');
         const statusEl = containerEl.querySelector('.graph-status');
 
@@ -1052,8 +935,6 @@
             buildKnownIdSets(data);
             hierarchy = buildHierarchy(data);
             buildParentMap();
-
-            // Default: everything collapsed.
             expandedIds = new Set();
 
             if (cyInstance) {
@@ -1066,8 +947,11 @@
                 elements: [],
                 style: getStyle(),
                 wheelSensitivity: 0.2,
-                // We do our own layout, so don't auto-layout.
                 layout: { name: 'preset' },
+                // Disable node dragging globally.
+                autoungrabify: true,
+                // Allow box-selection? Not needed here.
+                boxSelectionEnabled: false,
             });
 
             rebuildAndRender();
@@ -1127,7 +1011,6 @@
         const cy = (ext.y1 + ext.y2) / 2;
         const pan = cyInstance.pan();
         const z = cyInstance.zoom();
-        // Render position of viewport center:
         const rx = cx * z + pan.x;
         const ry = cy * z + pan.y;
         cyInstance.zoom({
