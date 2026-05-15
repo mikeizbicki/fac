@@ -664,17 +664,24 @@ class Fac(Routable):
         nodes = []
         edges = []
         for target in self.targets_dict:
-            nodes.append({
-                'id': target,
-                'type': 'target',
-                'data': {},
-                })
             for dep in self.targets_dict[target]['dependencies']:
+                if dep['target'] not in self.targets_dict:
+                    node = {
+                        'id': dep['target'],
+                        'type': 'target',
+                        }
+                    if node not in nodes:
+                        nodes.append(node)
                 edges.append({
                     'source': target,
                     'target': dep['target'],
                     'kind': 'target-target',
                     })
+            nodes.append({
+                'id': target,
+                'type': 'target',
+                'data': {},
+                })
 
         for state in self.contexts:
             for context in self.contexts[state]:
