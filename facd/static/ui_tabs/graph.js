@@ -63,13 +63,49 @@
         return `${type}::${id}`;
     }
 
+    // Resolve an edge endpoint id to an actual existing node type.
+    // The /dep_graph endpoint's edge "kind" is not always a reliable
+    // indicator of the endpoint types (e.g. "dependencies_built" edges
+    // can connect path nodes even though "kind" does not say so).
+    // We therefore disambiguate based on which nodes actually exist,
+    // using the edge kind only as a hint when both forms exist.
+    function resolveEndpoint(id, preferredType, targetIds, pathIds) {
+        const inTargets = targetIds.has(id);
+        const inPaths = pathIds.has(id);
+        if (inTargets && inPaths) {
+            return preferredType === 'path' ? 'path' : 'target';
+        }
+        if (inTargets) return 'target';
+        if (inPaths) return 'path';
+        // Fallback - return the preferred type so cytoscape will throw
+        // a clear error if the data is genuinely inconsistent.
+        return preferredType;
+    }
+
+    function preferredTypesForKind(kind) {
+        // Returns [sourcePref, targetPref]. "dependencies_built" edges
+        // describe path-level build state so prefer path nodes when
+        // both exist.
+        switch (kind) {
+            case 'path-path': return ['path', 'path'];
+            case 'path-target': return ['path', 'target'];
+            case 'target-path': return ['target', 'path'];
+            case 'target-target': return ['target', 'target'];
+            case 'dependencies_built': return ['path', 'path'];
+            default: return ['target', 'target'];
+        }
+    }
+
     function buildElements(graph) {
         const elements = [];
         const targetIds = new Set();
+        const pathIds = new Set();
 
         for (const node of graph.nodes || []) {
             if (node.type === 'target') {
                 targetIds.add(node.id);
+            } else if (node.type === 'path') {
+                pathIds.add(node.id);
             }
         }
 
@@ -93,21 +129,10 @@
         }
 
         for (const edge of graph.edges || []) {
-            // Edges in the API are between ids but do not specify the
-            // endpoint node type. Infer from kind when possible.
-            let srcType = 'target';
-            let tgtType = 'target';
             const kind = edge.kind || '';
-            if (kind === 'path-path') {
-                srcType = 'path'; tgtType = 'path';
-            } else if (kind === 'path-target') {
-                srcType = 'path'; tgtType = 'target';
-            } else if (kind === 'target-path') {
-                srcType = 'target'; tgtType = 'path';
-            } else if (kind === 'target-target') {
-                srcType = 'target'; tgtType = 'target';
-            }
-            // dependencies_built and other kinds default to target-target.
+            const [srcPref, tgtPref] = preferredTypesForKind(kind);
+            const srcType = resolveEndpoint(edge.source, srcPref, targetIds, pathIds);
+            const tgtType = resolveEndpoint(edge.target, tgtPref, targetIds, pathIds);
             elements.push({
                 group: 'edges',
                 data: {
