@@ -30,6 +30,12 @@
     background: #eef;
 }
 
+.graph-zoom-in-btn,
+.graph-zoom-out-btn {
+    min-width: 32px;
+    font-weight: bold;
+}
+
 .graph-status {
     font-size: 12px;
     color: #555;
