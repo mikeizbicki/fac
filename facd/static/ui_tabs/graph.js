@@ -2,31 +2,34 @@
 //
 // Renders the build system dependency graph in a tab.
 //
-// Fetches the graph from the /dep_graph endpoint and renders it using
-// Cytoscape.js. Layout is computed manually (no auto-layout, no
-// cytoscape compound parents) so that positions are a deterministic
-// function of the "expanded set" of nodes. The layout:
+// Layout (manual; no cytoscape compound parents, no auto-layout):
+//   - Target-level DAG positions come from a hidden dagre run on just
+//     the target nodes and target-target edges.
+//   - For each *expanded* target or group, child nodes (sub-groups and
+//     path leaves) are placed at fixed offsets inside the parent's
+//     rectangle using a wrapping grid.
+//   - Target boxes are iteratively pushed apart so they never overlap.
 //
-//   - The "target-level" DAG (target nodes connected by target-target
-//     edges) is laid out via a hidden dagre instance to get stable
-//     top-level positions for every target.
-//   - For each *expanded* target or group node, child nodes
-//     (sub-groups and path leaves) are placed at fixed positions
-//     inside the parent's rectangle using a wrapping grid.
-//   - Targets are then iteratively pushed apart so their (resized)
-//     bounding boxes do not overlap.
+// Because every node is a regular non-compound cytoscape node with an
+// explicit width/height/position computed by these layout functions,
+// the final layout is a pure function of the "effective expanded set"
+// (== user expanded set ∪ auto-expanded set).
 //
-// Because every node is a regular (non-compound) cytoscape node and
-// every node's position is set explicitly from the layout function,
-// the rendered layout depends only on the set of expanded ids -- not
-// on the order of expand/collapse operations.
-//
-// - target->target edges use taxi-style routing and are always drawn.
-// - path->path (dependencies_built) edges are hidden by default; they
-//   appear only when the cursor is over a path node that is the
-//   *source* of those edges.
-// - Node dragging is disabled (grabify is turned off on all nodes).
-// - The toolbar provides Refresh, Fit, Zoom In, Zoom Out, Reset.
+// Features:
+//   - target->target edges use taxi routing and are always drawn.
+//   - path->path (dependencies_built) edges are hidden unless the
+//     cursor is over a path node that is the *source* of those edges.
+//   - Node dragging is fully disabled (autoungrabify).
+//   - Toolbar: Refresh, Fit, Zoom In/Out/Reset, Expand-all, Collapse-all.
+//   - Each expandable container gets two small inline buttons:
+//         [+]/[-]      toggle this node's expansion
+//         [+children]  toggle expansion of all direct children
+//     Buttons are gray when disabled (auto-expanded node, or no
+//     applicable children).
+//   - Auto-expand rule: any container that would have exactly one
+//     direct visible child when expanded is treated as expanded
+//     automatically (applied recursively).
+//   - Arrow keys pan the canvas when the canvas has keyboard focus.
 //
 // Cytoscape is loaded from a CDN on demand so we do not vendor it.
 
@@ -35,36 +38,48 @@
     const DAGRE_URL = 'https://unpkg.com/dagre@0.8.5/dist/dagre.min.js';
     const CYTOSCAPE_DAGRE_URL = 'https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js';
 
-    // Layout tuning constants.
-    const LEAF_W = 160;          // width of path leaf / collapsed placeholder
-    const LEAF_H = 32;           // height of same
-    const PAD_X = 18;            // horizontal padding inside a container
-    const PAD_TOP = 26;          // top padding (leaves room for label)
-    const PAD_BOTTOM = 16;       // bottom padding
-    const SIBLING_GAP_X = 14;    // gap between siblings in a row
-    const SIBLING_GAP_Y = 12;    // gap between rows of siblings
-    const TARGET_MARGIN = 40;    // min separation between target containers
-    const TARGET_NODE_SEP = 80;  // dagre nodeSep for the top-level target DAG
-    const TARGET_RANK_SEP = 120; // dagre rankSep for the top-level target DAG
+    // Layout tuning.
+    const LEAF_W = 160;
+    const LEAF_H = 32;
+    const PAD_X = 18;
+    const PAD_TOP = 30;
+    const PAD_BOTTOM = 16;
+    const SIBLING_GAP_X = 14;
+    const SIBLING_GAP_Y = 12;
+    const TARGET_MARGIN = 40;
+    const TARGET_NODE_SEP = 80;
+    const TARGET_RANK_SEP = 120;
+
+    // Inline button geometry. Buttons sit inside the top-left corner
+    // of an expanded container, or stacked to the right of a collapsed
+    // container leaf.
+    const BTN_W = 22;
+    const BTN_H = 18;
+    const BTN_GAP = 4;
+    // Width of the "[+children]" button (wider because of label).
+    const BTN_WIDE_W = 72;
+    const KBD_PAN_STEP = 50;
 
     let cyInstance = null;
     let containerEl = null;
+    let canvasEl = null;
     let loadingPromise = null;
 
-    // The set of node ids (cytoscape ids) that are currently "expanded".
-    // A target or internal-group node not in this set is collapsed
-    // (rendered as a single small leaf placeholder; its descendants are
-    // not present in the graph at all).
+    // User-controlled expansion set.
     let expandedIds = new Set();
+    // Derived (from hierarchy): containers that must always be treated
+    // as expanded because they have only one child.
+    let autoExpandedIds = new Set();
 
     let lastGraph = null;
     let hierarchy = null;
 
-    // parentMap is used to resolve edges whose endpoint is inside a
-    // collapsed container to the nearest visible ancestor.
-    let parentMap = new Map();          // cyId -> parent cyId (or null)
+    let parentMap = new Map();
     let knownTargetIds = new Set();
     let knownPathIds = new Set();
+
+    // Map from button-node-id -> { action, payload }.
+    let buttonHandlers = new Map();
 
     function loadScript(src) {
         return new Promise((resolve, reject) => {
@@ -150,16 +165,7 @@
 
         for (const tId of targetOrder) {
             const t = targetsById[tId];
-            t.root = {
-                cyId: groupCyId(t.id, []),
-                label: '',
-                isRoot: true,
-                children: [],
-                paths: [],
-                varNames: t.varNames,
-                targetId: t.id,
-                chain: [],
-            };
+            t.root = makeGroup(t.id, '', true, []);
         }
 
         for (const pNode of pathNodes) {
@@ -175,16 +181,8 @@
                 let child = group.children.find(c =>
                     c.label === `${varName}=${val}`);
                 if (!child) {
-                    child = {
-                        cyId: groupCyId(t.id, chain),
-                        label: `${varName}=${val}`,
-                        isRoot: false,
-                        children: [],
-                        paths: [],
-                        varNames: t.varNames,
-                        targetId: t.id,
-                        chain: chain.slice(),
-                    };
+                    child = makeGroup(t.id, `${varName}=${val}`, false,
+                                      chain.slice());
                     group.children.push(child);
                 }
                 group = child;
@@ -197,6 +195,18 @@
         }
 
         return { targets: targetOrder.map(id => targetsById[id]) };
+    }
+
+    function makeGroup(targetId, label, isRoot, chain) {
+        return {
+            cyId: groupCyId(targetId, chain),
+            label,
+            isRoot,
+            children: [],
+            paths: [],
+            targetId,
+            chain,
+        };
     }
 
     function buildParentMap() {
@@ -224,19 +234,49 @@
         }
     }
 
+    // ---------- Auto-expand computation ----------
+
+    function computeAutoExpandedIds() {
+        autoExpandedIds = new Set();
+        for (const t of hierarchy.targets) {
+            if (targetDirectChildCount(t) === 1) {
+                autoExpandedIds.add(t.cyId);
+            }
+            walkGroupAuto(t.root);
+        }
+        function walkGroupAuto(g) {
+            if (!g.isRoot) {
+                if (groupDirectChildCount(g) === 1) {
+                    autoExpandedIds.add(g.cyId);
+                }
+            }
+            for (const sub of g.children) walkGroupAuto(sub);
+        }
+    }
+
+    function targetDirectChildCount(t) {
+        // Direct children = children of t.root.
+        return t.root.children.length + t.root.paths.length;
+    }
+
+    function groupDirectChildCount(g) {
+        return g.children.length + g.paths.length;
+    }
+
+    function isEffectivelyExpanded(cyId) {
+        return expandedIds.has(cyId) || autoExpandedIds.has(cyId);
+    }
+
+    function isAutoExpanded(cyId) {
+        return autoExpandedIds.has(cyId);
+    }
+
     // ---------- Layout ----------
     //
-    // The layout functions return a plan object:
-    //   {
-    //     width, height,                              // bounding box size
-    //     place(cx, cy, out, depth)                   // emits placements
-    //   }
-    // where `out` is an array of placement records:
-    //   { cyId, x, y, w, h, kind, label, depth, data }
-    // kind in {'target', 'group', 'path'}.
-    //
-    // The container (target / group) itself is always emitted at its own
-    // center; descendants are emitted at their own centers.
+    // Plan object: { width, height, place(cx, cy, out) }
+    // Placement record:
+    //   { cyId, x, y, w, h, kind, label, depth, state?, collapsed?,
+    //     expandable?, hasChildren?, autoExpanded? }
 
     function layoutPathLeaf(p, depth) {
         return {
@@ -257,30 +297,39 @@
     }
 
     function layoutGroup(group, depth) {
-        const expanded = expandedIds.has(group.cyId);
-        const hasChildren = group.children.length > 0 || group.paths.length > 0;
+        const hasChildren = groupDirectChildCount(group) > 0;
+        const expanded = isEffectivelyExpanded(group.cyId);
 
         if (!expanded || !hasChildren) {
-            // Collapsed (or empty) group: small leaf placeholder.
+            // Collapsed leaf: room for control buttons to the right.
+            const w = LEAF_W + (hasChildren ? (BTN_W + BTN_GAP) * 1 : 0);
             return {
-                width: LEAF_W,
+                width: w,
                 height: LEAF_H,
                 place(cx, cy, out) {
                     out.push({
                         cyId: group.cyId,
                         x: cx, y: cy,
-                        w: LEAF_W, h: LEAF_H,
+                        w: w, h: LEAF_H,
                         kind: 'group',
                         label: group.label,
                         depth,
                         collapsed: true,
                         expandable: hasChildren,
+                        hasChildren,
+                        autoExpanded: false,
                     });
+                    if (hasChildren) {
+                        emitCollapsedButtons(group.cyId, cx, cy, w, LEAF_H,
+                                             /*isGroup*/ true,
+                                             /*hasChildren*/ hasChildren,
+                                             out);
+                    }
                 },
             };
         }
 
-        // Expanded: gather child layouts (sub-groups first, then paths).
+        // Expanded.
         const childPlans = [];
         for (const sub of group.children) {
             childPlans.push({ kind: 'group', plan: layoutGroup(sub, depth + 1) });
@@ -288,7 +337,6 @@
         for (const p of group.paths) {
             childPlans.push({ kind: 'path', plan: layoutPathLeaf(p, depth + 1) });
         }
-
         const grid = computeGrid(childPlans);
         const width = grid.innerW + 2 * PAD_X;
         const height = grid.innerH + PAD_TOP + PAD_BOTTOM;
@@ -297,7 +345,6 @@
             width,
             height,
             place(cx, cy, out) {
-                // Emit this container.
                 out.push({
                     cyId: group.cyId,
                     x: cx, y: cy,
@@ -307,40 +354,61 @@
                     depth,
                     collapsed: false,
                     expandable: true,
+                    hasChildren: true,
+                    autoExpanded: isAutoExpanded(group.cyId),
                 });
-                // Lay out children inside.
+                emitExpandedButtons(group.cyId, cx, cy, width, height,
+                                    /*isTarget*/ false,
+                                    hasContainerChildren(group),
+                                    isAutoExpanded(group.cyId),
+                                    out);
                 placeGrid(grid, cx, cy, width, height, out);
             },
         };
     }
 
-    function layoutTarget(t) {
-        const expanded = expandedIds.has(t.cyId);
-        const rootHasChildren =
-            t.root.children.length > 0 || t.root.paths.length > 0;
+    function hasContainerChildren(group) {
+        // True if any direct child is itself an expandable container
+        // (i.e. a sub-group; paths are not containers).
+        for (const sub of group.children) {
+            if (groupDirectChildCount(sub) > 0) return true;
+        }
+        return false;
+    }
 
-        if (!expanded || !rootHasChildren) {
+    function layoutTarget(t) {
+        const direct = targetDirectChildCount(t);
+        const expanded = isEffectivelyExpanded(t.cyId);
+        const expandable = direct > 0;
+
+        if (!expanded || !expandable) {
+            const w = LEAF_W + (expandable ? (BTN_W + BTN_GAP) * 1 : 0);
             return {
-                width: LEAF_W,
+                width: w,
                 height: LEAF_H,
                 place(cx, cy, out) {
                     out.push({
                         cyId: t.cyId,
                         x: cx, y: cy,
-                        w: LEAF_W, h: LEAF_H,
+                        w: w, h: LEAF_H,
                         kind: 'target',
                         label: t.id,
                         depth: 0,
                         collapsed: true,
-                        expandable: rootHasChildren,
+                        expandable,
+                        hasChildren: expandable,
+                        autoExpanded: false,
                     });
+                    if (expandable) {
+                        emitCollapsedButtons(t.cyId, cx, cy, w, LEAF_H,
+                                             /*isGroup*/ false,
+                                             expandable, out);
+                    }
                 },
             };
         }
 
-        // Expanded target: the root group's children attach directly to
-        // the target container (we skip drawing the root group as its
-        // own rectangle to avoid an extra nesting level).
+        // Expanded target: lay out root group's children directly inside.
         const childPlans = [];
         for (const sub of t.root.children) {
             childPlans.push({ kind: 'group', plan: layoutGroup(sub, 1) });
@@ -351,6 +419,9 @@
         const grid = computeGrid(childPlans);
         const width = grid.innerW + 2 * PAD_X;
         const height = grid.innerH + PAD_TOP + PAD_BOTTOM;
+
+        const targetHasContainerChildren = t.root.children.some(
+            sub => groupDirectChildCount(sub) > 0);
 
         return {
             width,
@@ -365,7 +436,14 @@
                     depth: 0,
                     collapsed: false,
                     expandable: true,
+                    hasChildren: true,
+                    autoExpanded: isAutoExpanded(t.cyId),
                 });
+                emitExpandedButtons(t.cyId, cx, cy, width, height,
+                                    /*isTarget*/ true,
+                                    targetHasContainerChildren,
+                                    isAutoExpanded(t.cyId),
+                                    out);
                 placeGrid(grid, cx, cy, width, height, out);
             },
         };
@@ -393,16 +471,13 @@
             colWidths.push(w);
         }
         const innerW = colWidths.reduce((a, b) => a + b, 0)
-            + SIBLING_GAP_X * (colWidths.length - 1);
+            + SIBLING_GAP_X * Math.max(0, colWidths.length - 1);
         const innerH = rowHeights.reduce((a, b) => a + b, 0)
-            + SIBLING_GAP_Y * (rows.length - 1);
+            + SIBLING_GAP_Y * Math.max(0, rows.length - 1);
         return { rows, rowHeights, colWidths, innerW, innerH };
     }
 
     function placeGrid(grid, cx, cy, width, height, out) {
-        // Inner area is offset from container center: leaves PAD_TOP at
-        // the top for the label, PAD_BOTTOM at the bottom, PAD_X on each
-        // side.
         const left = cx - width / 2 + PAD_X;
         const top = cy - height / 2 + PAD_TOP;
         let yCursor = top;
@@ -421,7 +496,79 @@
         }
     }
 
-    // ---------- Target-level layout (dagre on targets only) ----------
+    // ---------- Button placement ----------
+
+    function emitExpandedButtons(ownerCyId, cx, cy, w, h,
+                                 isTarget, hasContainerChildren,
+                                 isAuto, out) {
+        // Buttons sit just inside the top-left corner of the container.
+        const bx0 = cx - w / 2 + 6;
+        const by  = cy - h / 2 + 6 + BTN_H / 2;
+
+        // Toggle (collapse) button.
+        out.push({
+            cyId: `btn::${ownerCyId}::toggle`,
+            x: bx0 + BTN_W / 2,
+            y: by,
+            w: BTN_W, h: BTN_H,
+            kind: 'button',
+            buttonKind: 'toggle',
+            label: '−',
+            ownerCyId,
+            disabled: isAuto,
+            depth: 0,
+        });
+
+        // [+children] button.
+        const bx1 = bx0 + BTN_W + BTN_GAP;
+        out.push({
+            cyId: `btn::${ownerCyId}::children`,
+            x: bx1 + BTN_WIDE_W / 2,
+            y: by,
+            w: BTN_WIDE_W, h: BTN_H,
+            kind: 'button',
+            buttonKind: 'children-expand',
+            label: '+children',
+            ownerCyId,
+            disabled: !hasContainerChildren,
+            depth: 0,
+        });
+
+        // [-children] button below row.
+        const by2 = by + BTN_H + BTN_GAP;
+        out.push({
+            cyId: `btn::${ownerCyId}::children-collapse`,
+            x: bx1 + BTN_WIDE_W / 2,
+            y: by2,
+            w: BTN_WIDE_W, h: BTN_H,
+            kind: 'button',
+            buttonKind: 'children-collapse',
+            label: '−children',
+            ownerCyId,
+            disabled: !hasContainerChildren,
+            depth: 0,
+        });
+    }
+
+    function emitCollapsedButtons(ownerCyId, cx, cy, w, h,
+                                  isGroup, hasChildren, out) {
+        // Single toggle button at the right edge of the collapsed leaf.
+        const bx = cx + w / 2 - 6 - BTN_W / 2;
+        out.push({
+            cyId: `btn::${ownerCyId}::toggle`,
+            x: bx,
+            y: cy,
+            w: BTN_W, h: BTN_H,
+            kind: 'button',
+            buttonKind: 'toggle',
+            label: '+',
+            ownerCyId,
+            disabled: !hasChildren,
+            depth: 0,
+        });
+    }
+
+    // ---------- Target-level layout ----------
 
     function computeTargetCenters() {
         const targetEls = [];
@@ -439,7 +586,6 @@
                 data: { id: `${sId}->${tId}`, source: sId, target: tId },
             });
         }
-
         const tmpDiv = document.createElement('div');
         tmpDiv.style.position = 'absolute';
         tmpDiv.style.width = '1000px';
@@ -455,13 +601,12 @@
                 elements: targetEls,
                 style: [],
             });
-            const layout = tmpCy.layout({
+            tmpCy.layout({
                 name: 'dagre',
                 rankDir: 'TB',
                 nodeSep: TARGET_NODE_SEP,
                 rankSep: TARGET_RANK_SEP,
-            });
-            layout.run();
+            }).run();
             tmpCy.nodes().forEach(n => {
                 const pos = n.position();
                 centers.set(n.id(), { x: pos.x, y: pos.y });
@@ -473,9 +618,6 @@
         return centers;
     }
 
-    // Iteratively push apart any two target bounding boxes that overlap.
-    // Result depends only on (centers, boxes), so the final layout is a
-    // pure function of the expanded set.
     function separateBoxes(centers, boxes) {
         const ids = Array.from(centers.keys());
         const MAX_PASSES = 400;
@@ -514,10 +656,9 @@
         }
     }
 
-    // ---------- Element construction & application ----------
+    // ---------- Elements ----------
 
-    function endpointTypeFor(id, kind, role) {
-        // role is 'source' or 'target'
+    function endpointTypeFor(id, kind) {
         const inT = knownTargetIds.has(id);
         const inP = knownPathIds.has(id);
         const preferPath = (kind === 'dependencies_built');
@@ -528,10 +669,8 @@
     }
 
     function buildElementsAndPositions() {
-        // 1) Compute target-level centers (pure function of lastGraph).
         const baseCenters = computeTargetCenters();
 
-        // 2) Compute each target's plan and bounding box.
         const targetPlans = new Map();
         const targetBoxes = new Map();
         for (const t of hierarchy.targets) {
@@ -540,44 +679,58 @@
             targetBoxes.set(t.cyId, { width: plan.width, height: plan.height });
         }
 
-        // 3) Separate overlapping target boxes.
         const centers = new Map(baseCenters);
-        // Ensure every target has a center (in case dagre missed one).
         for (const t of hierarchy.targets) {
-            if (!centers.has(t.cyId)) {
-                centers.set(t.cyId, { x: 0, y: 0 });
-            }
+            if (!centers.has(t.cyId)) centers.set(t.cyId, { x: 0, y: 0 });
         }
         separateBoxes(centers, targetBoxes);
 
-        // 4) Emit placements for every visible node.
         const placements = [];
         for (const t of hierarchy.targets) {
             const c = centers.get(t.cyId);
             targetPlans.get(t.cyId).place(c.x, c.y, placements);
         }
 
-        // Build a quick lookup of visible cyIds.
         const visibleIds = new Set(placements.map(p => p.cyId));
 
-        // 5) Build cytoscape elements. Containers first (so they render
-        // below leaves), then leaves on top. Elements added to cytoscape
-        // in this order get lower z-index by default; we also set
-        // explicit z-index based on depth.
+        // Sort: containers (non-collapsed target/group) first, by depth,
+        // then leaves, then buttons last (so buttons render on top).
         const sorted = placements.slice().sort((a, b) => {
-            // Containers (kind == target/group with !collapsed) before
-            // leaves. Among containers, shallower depth first.
-            const aContainer = (a.kind === 'target' || a.kind === 'group')
-                             && !a.collapsed;
-            const bContainer = (b.kind === 'target' || b.kind === 'group')
-                             && !b.collapsed;
-            if (aContainer !== bContainer) return aContainer ? -1 : 1;
-            return a.depth - b.depth;
+            return zOrderRank(a) - zOrderRank(b);
         });
+
+        buttonHandlers = new Map();
 
         const elements = [];
         for (const p of sorted) {
-            const cls = nodeClasses(p);
+            if (p.kind === 'button') {
+                // Register handler.
+                buttonHandlers.set(p.cyId, {
+                    buttonKind: p.buttonKind,
+                    ownerCyId: p.ownerCyId,
+                    disabled: p.disabled,
+                });
+                elements.push({
+                    group: 'nodes',
+                    data: {
+                        id: p.cyId,
+                        label: p.label,
+                        nodeType: 'button',
+                        width: p.w,
+                        height: p.h,
+                        disabled: p.disabled,
+                        zIndexValue: 5000,
+                    },
+                    position: { x: p.x, y: p.y },
+                    classes: 'node-button'
+                        + (p.disabled ? ' disabled' : '')
+                        + ` btn-${p.buttonKind}`,
+                    grabbable: false,
+                    selectable: false,
+                });
+                continue;
+            }
+
             elements.push({
                 group: 'nodes',
                 data: {
@@ -590,19 +743,16 @@
                     expandable: !!p.expandable,
                     state: p.state || null,
                     depth: p.depth,
-                    zIndexValue:
-                        p.kind === 'path' ? 1000
-                        : (p.collapsed ? 800 : 100 + p.depth * 10),
+                    zIndexValue: zIndexFor(p),
                 },
                 position: { x: p.x, y: p.y },
-                classes: cls,
+                classes: nodeClasses(p),
                 grabbable: false,
                 selectable: true,
             });
         }
 
-        // 6) Edges. Redirect endpoints inside collapsed containers to
-        // the nearest visible ancestor.
+        // Edges (retargeted to nearest visible ancestor on each end).
         const ancestorCache = new Map();
         const resolveVisible = (cyId) => {
             if (visibleIds.has(cyId)) return cyId;
@@ -618,8 +768,8 @@
         const seenEdgeKeys = new Set();
         for (const edge of lastGraph.edges || []) {
             const kind = edge.kind || '';
-            const sType = endpointTypeFor(edge.source, kind, 'source');
-            const tType = endpointTypeFor(edge.target, kind, 'target');
+            const sType = endpointTypeFor(edge.source, kind);
+            const tType = endpointTypeFor(edge.target, kind);
             const sOrig = sType === 'target'
                 ? targetCyId(edge.source) : pathCyId(edge.source);
             const tOrig = tType === 'target'
@@ -629,8 +779,6 @@
             if (!sCy || !tCy) continue;
             if (sCy === tCy) continue;
 
-            // Deduplicate -- after retargeting, many path->path edges
-            // can collapse to the same target->target endpoints.
             const key = `${kind}|${sCy}|${tCy}`;
             if (seenEdgeKeys.has(key)) continue;
             seenEdgeKeys.add(key);
@@ -649,7 +797,23 @@
             });
         }
 
-        return { elements, placements };
+        return { elements };
+    }
+
+    function zOrderRank(p) {
+        if (p.kind === 'button') return 4000;
+        if (p.kind === 'path') return 3000;
+        if ((p.kind === 'target' || p.kind === 'group') && p.collapsed) {
+            return 2000;
+        }
+        // Expanded containers: shallower depth renders first (lower).
+        return 100 + p.depth * 10;
+    }
+
+    function zIndexFor(p) {
+        if (p.kind === 'path') return 1000;
+        if (p.collapsed) return 800;
+        return 100 + p.depth * 10;
     }
 
     function nodeClasses(p) {
@@ -657,10 +821,12 @@
         if (p.kind === 'target') {
             parts.push('node-target');
             parts.push(p.collapsed ? 'collapsed' : 'expanded');
+            if (p.autoExpanded) parts.push('auto-expanded');
         } else if (p.kind === 'group') {
             parts.push('node-group');
             parts.push(p.collapsed ? 'collapsed' : 'expanded');
             if (p.expandable) parts.push('expandable');
+            if (p.autoExpanded) parts.push('auto-expanded');
         } else if (p.kind === 'path') {
             parts.push('node-path');
             if (p.state) parts.push(`state-${p.state}`);
@@ -668,7 +834,7 @@
         return parts.join(' ');
     }
 
-    // ---------- Cytoscape style ----------
+    // ---------- Style ----------
 
     function getStyle() {
         return [
@@ -686,13 +852,13 @@
                     'border-style': 'dashed',
                     'label': 'data(label)',
                     'text-valign': 'top',
-                    'text-halign': 'center',
-                    'text-margin-y': 4,
+                    'text-halign': 'right',
+                    'text-margin-x': -8,
+                    'text-margin-y': 6,
                     'font-size': 11,
                     'font-weight': 'bold',
                     'color': '#2c3e64',
                     'z-index': 'data(zIndexValue)',
-                    'z-compound-depth': 'bottom',
                 },
             },
             {
@@ -702,6 +868,8 @@
                     'background-opacity': 1,
                     'border-style': 'solid',
                     'text-valign': 'center',
+                    'text-halign': 'center',
+                    'text-margin-x': -10,
                     'text-margin-y': 0,
                     'text-wrap': 'ellipsis',
                     'text-max-width': LEAF_W - 12,
@@ -721,8 +889,9 @@
                     'border-style': 'dotted',
                     'label': 'data(label)',
                     'text-valign': 'top',
-                    'text-halign': 'center',
-                    'text-margin-y': 4,
+                    'text-halign': 'right',
+                    'text-margin-x': -8,
+                    'text-margin-y': 6,
                     'font-size': 10,
                     'color': '#6b5400',
                     'z-index': 'data(zIndexValue)',
@@ -735,6 +904,8 @@
                     'background-opacity': 1,
                     'border-style': 'solid',
                     'text-valign': 'center',
+                    'text-halign': 'center',
+                    'text-margin-x': -10,
                     'text-margin-y': 0,
                     'text-wrap': 'ellipsis',
                     'text-max-width': LEAF_W - 12,
@@ -780,7 +951,35 @@
                 selector: 'node:selected',
                 style: { 'border-color': '#ff7e29', 'border-width': 3 },
             },
-            // Edges -- default.
+            // Inline button nodes.
+            {
+                selector: 'node.node-button',
+                style: {
+                    'shape': 'round-rectangle',
+                    'width': 'data(width)',
+                    'height': 'data(height)',
+                    'background-color': '#ffffff',
+                    'border-color': '#666',
+                    'border-width': 1,
+                    'label': 'data(label)',
+                    'text-valign': 'center',
+                    'text-halign': 'center',
+                    'font-size': 10,
+                    'font-weight': 'bold',
+                    'color': '#222',
+                    'z-index': 'data(zIndexValue)',
+                    'padding': 0,
+                },
+            },
+            {
+                selector: 'node.node-button.disabled',
+                style: {
+                    'background-color': '#eee',
+                    'border-color': '#bbb',
+                    'color': '#aaa',
+                },
+            },
+            // Edges.
             {
                 selector: 'edge',
                 style: {
@@ -814,7 +1013,6 @@
                     'line-style': 'dashed',
                 },
             },
-            // path->path edges: hidden by default, revealed on hover.
             {
                 selector: 'edge.edge-dependencies_built',
                 style: {
@@ -834,7 +1032,7 @@
         ];
     }
 
-    // ---------- Rendering ----------
+    // ---------- Rendering & interactions ----------
 
     async function fetchGraph() {
         const response = await fetch('/dep_graph');
@@ -846,11 +1044,10 @@
 
     function rebuildAndRender() {
         if (!cyInstance) return;
+        computeAutoExpandedIds();
         const { elements } = buildElementsAndPositions();
         cyInstance.elements().remove();
         cyInstance.add(elements);
-        // Make sure positions stick (cytoscape can recompute things
-        // after add; we re-apply explicitly from the placements).
         wireInteractionHandlers();
     }
 
@@ -858,12 +1055,11 @@
         cyInstance.off('tap', 'node');
         cyInstance.on('tap', 'node', evt => {
             const node = evt.target;
-            const t = node.data('nodeType');
-            if (t === 'target') {
-                toggleExpand(node.id());
-            } else if (t === 'group' && node.data('expandable')) {
-                toggleExpand(node.id());
-            }
+            const nodeType = node.data('nodeType');
+            if (nodeType !== 'button') return;
+            const h = buttonHandlers.get(node.id());
+            if (!h || h.disabled) return;
+            handleButtonClick(h);
         });
 
         cyInstance.off('mouseover', 'node.node-path');
@@ -880,28 +1076,97 @@
         });
     }
 
-    function toggleExpand(cyId) {
-        if (expandedIds.has(cyId)) {
-            collapseRecursive(cyId);
-        } else {
-            expandedIds.add(cyId);
+    function handleButtonClick(h) {
+        switch (h.buttonKind) {
+            case 'toggle':
+                toggleSingle(h.ownerCyId);
+                break;
+            case 'children-expand':
+                expandDirectChildren(h.ownerCyId);
+                break;
+            case 'children-collapse':
+                collapseDirectChildren(h.ownerCyId);
+                break;
         }
         rebuildAndRender();
     }
 
-    function collapseRecursive(cyId) {
-        expandedIds.delete(cyId);
+    function toggleSingle(cyId) {
+        if (isAutoExpanded(cyId)) return; // can't change
+        if (expandedIds.has(cyId)) {
+            // Collapsing: also clear descendants from user-expanded set.
+            expandedIds.delete(cyId);
+            forEachDescendantContainer(cyId, id => expandedIds.delete(id));
+        } else {
+            expandedIds.add(cyId);
+        }
+    }
+
+    function expandDirectChildren(cyId) {
+        forEachDirectChildContainer(cyId, id => expandedIds.add(id));
+    }
+
+    function collapseDirectChildren(cyId) {
+        forEachDirectChildContainer(cyId, id => {
+            expandedIds.delete(id);
+            forEachDescendantContainer(id, did => expandedIds.delete(did));
+        });
+    }
+
+    function expandAll() {
         for (const t of hierarchy.targets) {
-            if (t.cyId === cyId) {
-                collapseGroupDescendants(t.root);
-                return;
+            expandedIds.add(t.cyId);
+            forEachDescendantContainer(t.cyId, id => expandedIds.add(id));
+        }
+        rebuildAndRender();
+    }
+
+    function collapseAll() {
+        expandedIds = new Set();
+        rebuildAndRender();
+    }
+
+    // Walks the hierarchy to find all container descendants of cyId.
+    function forEachDescendantContainer(cyId, fn) {
+        const node = findHierarchyContainer(cyId);
+        if (!node) return;
+        if (node.kind === 'target') {
+            // Target's descendants are sub-groups of its root.
+            for (const sub of node.target.root.children) {
+                visitGroup(sub);
             }
-            const g = findGroupByCyId(t.root, cyId);
-            if (g) {
-                collapseGroupDescendants(g);
-                return;
+        } else if (node.kind === 'group') {
+            for (const sub of node.group.children) {
+                visitGroup(sub);
             }
         }
+        function visitGroup(g) {
+            // Only consider it a "container" if it has children.
+            if (groupDirectChildCount(g) > 0) {
+                fn(g.cyId);
+            }
+            for (const sub of g.children) visitGroup(sub);
+        }
+    }
+
+    function forEachDirectChildContainer(cyId, fn) {
+        const node = findHierarchyContainer(cyId);
+        if (!node) return;
+        const subs = node.kind === 'target'
+            ? node.target.root.children
+            : node.group.children;
+        for (const sub of subs) {
+            if (groupDirectChildCount(sub) > 0) fn(sub.cyId);
+        }
+    }
+
+    function findHierarchyContainer(cyId) {
+        for (const t of hierarchy.targets) {
+            if (t.cyId === cyId) return { kind: 'target', target: t };
+            const g = findGroupByCyId(t.root, cyId);
+            if (g) return { kind: 'group', group: g };
+        }
+        return null;
     }
 
     function findGroupByCyId(group, cyId) {
@@ -911,13 +1176,6 @@
             if (r) return r;
         }
         return null;
-    }
-
-    function collapseGroupDescendants(group) {
-        for (const sub of group.children) {
-            expandedIds.delete(sub.cyId);
-            collapseGroupDescendants(sub);
-        }
     }
 
     async function renderGraph() {
@@ -948,9 +1206,7 @@
                 style: getStyle(),
                 wheelSensitivity: 0.2,
                 layout: { name: 'preset' },
-                // Disable node dragging globally.
                 autoungrabify: true,
-                // Allow box-selection? Not needed here.
                 boxSelectionEnabled: false,
             });
 
@@ -977,11 +1233,15 @@
                 <button class="graph-zoom-in-btn" type="button" title="Zoom in">+</button>
                 <button class="graph-zoom-out-btn" type="button" title="Zoom out">−</button>
                 <button class="graph-zoom-reset-btn" type="button" title="Reset zoom">Reset</button>
+                <button class="graph-expand-all-btn" type="button">Expand all</button>
+                <button class="graph-collapse-all-btn" type="button">Collapse all</button>
                 <span class="graph-status"></span>
             </div>
-            <div class="graph-canvas"></div>
+            <div class="graph-canvas" tabindex="0"></div>
         `;
         container.appendChild(containerEl);
+
+        canvasEl = containerEl.querySelector('.graph-canvas');
 
         containerEl.querySelector('.graph-refresh-btn')
             .addEventListener('click', () => renderGraph());
@@ -1000,6 +1260,29 @@
                     cyInstance.center();
                 }
             });
+        containerEl.querySelector('.graph-expand-all-btn')
+            .addEventListener('click', expandAll);
+        containerEl.querySelector('.graph-collapse-all-btn')
+            .addEventListener('click', collapseAll);
+
+        // Keyboard panning when canvas is focused.
+        canvasEl.addEventListener('keydown', evt => {
+            if (!cyInstance) return;
+            let dx = 0, dy = 0;
+            switch (evt.key) {
+                case 'ArrowLeft':  dx = +KBD_PAN_STEP; break;
+                case 'ArrowRight': dx = -KBD_PAN_STEP; break;
+                case 'ArrowUp':    dy = +KBD_PAN_STEP; break;
+                case 'ArrowDown':  dy = -KBD_PAN_STEP; break;
+                default: return;
+            }
+            const mult = evt.shiftKey ? 3 : 1;
+            const pan = cyInstance.pan();
+            cyInstance.pan({ x: pan.x + dx * mult, y: pan.y + dy * mult });
+            evt.preventDefault();
+        });
+        // Focus the canvas on click so arrow keys work.
+        canvasEl.addEventListener('mousedown', () => canvasEl.focus());
 
         renderGraph();
     }

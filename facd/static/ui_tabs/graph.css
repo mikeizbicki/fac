@@ -15,6 +15,7 @@
     border-bottom: 1px solid #ddd;
     background: #fafafa;
     flex: 0 0 auto;
+    flex-wrap: wrap;
 }
 
 .graph-toolbar button {
@@ -51,4 +52,9 @@
     width: 100%;
     min-height: 0;
     background: #fff;
+    outline: none;
+}
+
+.graph-canvas:focus {
+    box-shadow: inset 0 0 0 2px #cce;
 }
