@@ -693,26 +693,28 @@ class Fac(Routable):
                         'data': {
                             'state': state,
                             'mime-type': context.config.get('mime-type'),
+                            'variables_resolved': context.variables_resolved,
+                            'variables_unresolved': context.variables_unresolved,
                             },
                         })
-                for dep in context.dependencies_built:
-                    edges.append({
-                        'source': context.path,
-                        'target': dep['target'],
-                        'kind': 'dependencies_built',
-                        })
-                for dep in context.dependencies_unresolved:
-                    edges.append({
-                        'source': context.path,
-                        'target': dep['target'],
-                        'kind': 'dependencies_unresolved',
-                        })
-                for dep in context.dependencies_unresolved:
-                    edges.append({
-                        'source': context.path,
-                        'target': dep['target'],
-                        'kind': 'dependencies_building',
-                        })
+                    for dep in context.dependencies_built:
+                        edges.append({
+                            'source': context.path,
+                            'target': dep['target'],
+                            'kind': 'dependencies_built',
+                            })
+                    for dep in context.dependencies_unresolved:
+                        edges.append({
+                            'source': context.path,
+                            'target': dep['target'],
+                            'kind': 'dependencies_unresolved',
+                            })
+                    for dep in context.dependencies_unresolved:
+                        edges.append({
+                            'source': context.path,
+                            'target': dep['target'],
+                            'kind': 'dependencies_building',
+                            })
         return {
             'nodes': nodes,
             'edges': edges,
