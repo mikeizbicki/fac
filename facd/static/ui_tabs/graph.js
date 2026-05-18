@@ -501,11 +501,9 @@
     function emitExpandedButtons(ownerCyId, cx, cy, w, h,
                                  isTarget, hasContainerChildren,
                                  isAuto, out) {
-        // Buttons sit just inside the top-left corner of the container.
+        // Single toggle (collapse) button inside the top-left corner.
         const bx0 = cx - w / 2 + 6;
         const by  = cy - h / 2 + 6 + BTN_H / 2;
-
-        // Toggle (collapse) button.
         out.push({
             cyId: `btn::${ownerCyId}::toggle`,
             x: bx0 + BTN_W / 2,
@@ -516,36 +514,6 @@
             label: '−',
             ownerCyId,
             disabled: isAuto,
-            depth: 0,
-        });
-
-        // [+children] button.
-        const bx1 = bx0 + BTN_W + BTN_GAP;
-        out.push({
-            cyId: `btn::${ownerCyId}::children`,
-            x: bx1 + BTN_WIDE_W / 2,
-            y: by,
-            w: BTN_WIDE_W, h: BTN_H,
-            kind: 'button',
-            buttonKind: 'children-expand',
-            label: '+children',
-            ownerCyId,
-            disabled: !hasContainerChildren,
-            depth: 0,
-        });
-
-        // [-children] button below row.
-        const by2 = by + BTN_H + BTN_GAP;
-        out.push({
-            cyId: `btn::${ownerCyId}::children-collapse`,
-            x: bx1 + BTN_WIDE_W / 2,
-            y: by2,
-            w: BTN_WIDE_W, h: BTN_H,
-            kind: 'button',
-            buttonKind: 'children-collapse',
-            label: '−children',
-            ownerCyId,
-            disabled: !hasContainerChildren,
             depth: 0,
         });
     }
@@ -1074,6 +1042,20 @@
             cyInstance.edges('.edge-dependencies_built.reveal')
                 .removeClass('reveal');
         });
+
+        // Double-click zoom: zoom in at clicked location; shift+dblclick
+        // zooms out. Works on background or nodes.
+        cyInstance.off('dbltap');
+        cyInstance.on('dbltap', evt => {
+            const factor = evt.originalEvent && evt.originalEvent.shiftKey
+                ? 1 / 1.5 : 1.5;
+            const rp = evt.renderedPosition || evt.position;
+            if (!rp) return;
+            cyInstance.zoom({
+                level: cyInstance.zoom() * factor,
+                renderedPosition: { x: rp.x, y: rp.y },
+            });
+        });
     }
 
     function handleButtonClick(h) {
@@ -1226,6 +1208,7 @@
     function renderTab(container) {
         containerEl = document.createElement('div');
         containerEl.className = 'graph-tab';
+        containerEl.tabIndex = 0;
         containerEl.innerHTML = `
             <div class="graph-toolbar">
                 <button class="graph-refresh-btn" type="button">Refresh</button>
@@ -1265,8 +1248,12 @@
         containerEl.querySelector('.graph-collapse-all-btn')
             .addEventListener('click', collapseAll);
 
-        // Keyboard panning when canvas is focused.
-        canvasEl.addEventListener('keydown', evt => {
+        // Keyboard panning. Cytoscape mounts its own canvases inside
+        // .graph-canvas and intercepts events there, so we attach the
+        // key handler to the outer tab container (which is focusable)
+        // and focus it whenever the user mouses down anywhere on the
+        // graph area.
+        const handleKey = evt => {
             if (!cyInstance) return;
             let dx = 0, dy = 0;
             switch (evt.key) {
@@ -1280,9 +1267,15 @@
             const pan = cyInstance.pan();
             cyInstance.pan({ x: pan.x + dx * mult, y: pan.y + dy * mult });
             evt.preventDefault();
-        });
-        // Focus the canvas on click so arrow keys work.
-        canvasEl.addEventListener('mousedown', () => canvasEl.focus());
+        };
+        containerEl.addEventListener('keydown', handleKey);
+        canvasEl.addEventListener('keydown', handleKey);
+        // Focus the outer container on any mousedown inside the canvas
+        // so arrow keys are received even though cytoscape's internal
+        // elements would otherwise steal focus.
+        const focusOuter = () => containerEl.focus({ preventScroll: true });
+        canvasEl.addEventListener('mousedown', focusOuter);
+        containerEl.addEventListener('mousedown', focusOuter);
 
         renderGraph();
     }
