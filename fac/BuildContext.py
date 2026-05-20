@@ -903,7 +903,7 @@ class FilesystemSnapshot:
             if line:
                 status = line[:2]
                 filepath = line[3:]
-                filepath = os.path.normpath(filepath)
+                filepath = os.path.abspath(filepath)
                 if status == '??':
                     self._untracked_files.add(filepath)
                 else:
@@ -934,14 +934,22 @@ class FilesystemSnapshot:
         (which don't change when the path they point to changes),
         but the implementation is more general and works for all file types.
         '''
-        path_timestamp = self._get_fac_timestamp(path, consider_metapaths)
-        #if consider_metapaths and os.path.islink(path):
-        if os.path.islink(path):
-            realpath = os.path.realpath(path)
-            realpath_timestamp = self.get_fac_timestamp(realpath, consider_metapaths)
-        else:
-            realpath_timestamp = 0
-        return max(realpath_timestamp, path_timestamp)
+
+        # if the input path is a symlink,
+        # we need to check the timestamp on the path pointed to by the link;
+        # if that is also a symlink, we traverse all of the symlinks until
+        # we find a regular file
+        paths = [path]
+        while os.path.islink(paths[-1]):
+            path1 = os.path.realpath(path)
+            if path1 in paths:
+                logger.warning(f'infinite loop in symlinks; paths={paths}')
+                break
+            else:
+                paths.append(path1)
+
+        timestamps = [self._get_fac_timestamp(path) for path in paths]
+        return max(timestamps)
 
     def _get_fac_timestamp(self, path, consider_metapaths=True):
         path_timestamp = self._get_lowlevel_timestamp(path)
@@ -954,7 +962,7 @@ class FilesystemSnapshot:
         filename = os.path.basename(path)
         if consider_metapaths:
             possible_metapaths = [
-                f'./{dirname}/.{filename}.buildlog',
+                #f'./{dirname}/.{filename}.buildlog',
                 ]
             metapaths = [metapath for metapath in possible_metapaths if os.path.exists(metapath)]
         else:
@@ -990,14 +998,14 @@ class FilesystemSnapshot:
             raise FileNotFoundError
 
         # Normalize path for comparison with cached sets
-        normalized_path = os.path.normpath(path)
-        if normalized_path.startswith('./'):
-            normalized_path = normalized_path[2:]
+        abspath = os.path.abspath(path)
+        if abspath.startswith('./'):
+            abspath = abspath[2:]
 
         # if a file is dirty or not in the repo,
         # we use the last modified time on the harddrive
-        is_file_dirty = normalized_path in self._dirty_files
-        is_path_untracked = normalized_path in self._untracked_files
+        is_file_dirty = abspath in self._dirty_files
+        is_path_untracked = abspath in self._untracked_files
         if is_file_dirty or is_path_untracked:
             # FIXME:
             # there can be bugs when clocks are not synced correctly;
@@ -1008,13 +1016,13 @@ class FilesystemSnapshot:
 
         # if the file has been committed to git and is clean,
         # we use the git commit timestamp
-        if normalized_path in self._commit_timestamp_cache:
-            return self._commit_timestamp_cache[normalized_path]
+        if abspath in self._commit_timestamp_cache:
+            return self._commit_timestamp_cache[abspath]
         else:
             commits = list(self._repo.iter_commits(paths=path, max_count=1))
             if len(commits) > 0:
                 timestamp = commits[0].committed_date
-                self._commit_timestamp_cache[normalized_path] = timestamp
+                self._commit_timestamp_cache[abspath] = timestamp
                 return timestamp
 
             # if there are no commits, then the path is in .gitignore;
