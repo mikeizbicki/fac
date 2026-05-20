@@ -347,8 +347,8 @@ class LLM():
                 "aspect_ratio": "16:9",
                 "image_urls": elements_urls,
             }
-            handler = await fal_client.submit_async(model, arguments)
             try:
+                handler = await fal_client.submit_async(model, arguments)
                 async for event in handler.iter_events(with_logs=True):
                     pass
                 result = await handler.get()
