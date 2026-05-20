@@ -190,8 +190,10 @@ class Fac(Routable):
                 if watch_task.done():
                     logger.error(f"error in _watch_files")
                     watch_task.result()
+
                 # run build_all in executor so it doesn't block the event loop
-                await loop.run_in_executor(None, self.build_all)
+                #await loop.run_in_executor(None, self.build_all)
+                await self.async_build_all()
                 await asyncio.sleep(1)
         except asyncio.CancelledError:
             self._shutdown = True
@@ -252,18 +254,22 @@ class Fac(Routable):
                     self.process_all_dependencies()
                     debug_print(f'iter={len(state_hashes)} -- dependencies')
                     self.assert_invariants()
+                    await asyncio.sleep(0)
 
                     self.process_all_variable()
                     debug_print(f'iter={len(state_hashes)} -- variable')
                     self.assert_invariants()
+                    await asyncio.sleep(0)
 
                     self.process_all_waiting()
                     debug_print(f'iter={len(state_hashes)} -- waiting')
                     self.assert_invariants()
+                    await asyncio.sleep(0)
 
                     self.process_all_buildable()
                     debug_print(f'iter={len(state_hashes)} -- buildable')
                     self.assert_invariants()
+                    await asyncio.sleep(0)
 
                     state1 = state0
                     state0 = state_hash()
@@ -275,6 +281,7 @@ class Fac(Routable):
                 # now that we have built some contexts,
                 # we should allow any jobs
                 self._finalize_jobs()
+                await asyncio.sleep(0)
 
                 # perform duplicate state check
                 if state0 in state_hashes:
@@ -547,8 +554,14 @@ class Fac(Routable):
                         change_str = 'modified'
                     elif change_type == Change.deleted:
                         change_str = 'deleted'
-                        assert not os.path.exists(path)
-                        assert not os.path.exists(abs_path)
+                        # NOTE:
+                        # The following asserts hold "morally".
+                        # But some editors implement file changes as a 
+                        # delete plus rewrite, and in this case the path will
+                        # exist by the time the code below is executed,
+                        # and so the asserts will fail.
+                        #assert not os.path.exists(path)
+                        #assert not os.path.exists(abs_path)
                     else:
                         assert False, 'unknown change_type'
                     logger.warning(f"change_detected ({change_str}): path={path}")
