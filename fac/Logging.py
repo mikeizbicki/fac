@@ -215,11 +215,16 @@ class CustomFormatter(logging.Formatter):
 
 stream_handler = logging.StreamHandler()
 stream_handler.setFormatter(CustomFormatter(datefmt='%Y-%m-%d %H:%M:%S'))
-file_handler = logging.FileHandler('.fac.log')
-file_handler.setFormatter(CustomFormatter(datefmt='%Y-%m-%d %H:%M:%S'))
 logger = RecursiveLogger(__name__)
 logger.addHandler(stream_handler)
-logger.addHandler(file_handler)
+# NOTE:
+# we've removed file_handler here because it creates a file,
+# and this conflicts with the assert_git_sane function
+# which checks that the repo is clean
+#file_handler = logging.FileHandler('.fac.log')
+#file_handler.setFormatter(CustomFormatter(datefmt='%Y-%m-%d %H:%M:%S'))
+#file_handler.setLevel('TRACE')
+#logger.addHandler(file_handler)
 logger.propagate = False
 logger.setLevel(logging.INFO)
 
@@ -230,4 +235,3 @@ def trace(self, message, *args, **kwargs):
     if self.isEnabledFor(TRACE_LEVEL):
         self._log(TRACE_LEVEL, message, args, **kwargs)
 logging.Logger.trace = trace
-file_handler.setLevel('TRACE')
