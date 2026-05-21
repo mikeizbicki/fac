@@ -347,8 +347,8 @@ class LLM():
                 "aspect_ratio": "16:9",
                 "image_urls": elements_urls,
             }
-            handler = await fal_client.submit_async(model, arguments)
             try:
+                handler = await fal_client.submit_async(model, arguments)
                 async for event in handler.iter_events(with_logs=True):
                     pass
                 result = await handler.get()
@@ -583,14 +583,7 @@ class LLM():
                             logger.debug(f'status "{path}": {log["message"]}')
                 result = await handler.get()
             except fal_client.client.FalClientHTTPError as e:
-                # in the documentation, e.message is always a dict;
-                # but sometimes it seems to be a str as well
-                # (I believe this is undocumented behavior);
-                # we have the if/else here to ensure good logs in either event
-                try:
-                    logger.error(f"FalClientHTTPError: {e.message[0]['type']}: {e.message[0]['loc']}", submessage=True)
-                except (TypeError, IndexError, KeyError):
-                    logger.error(f"FalClientHTTPError: {e.message}", submessage=True)
+                logger.error({'FalClientHTTPError': e.message})
                 logger.error({
                     'fal_client.submit_async() parameters': {
                         'model': model,
