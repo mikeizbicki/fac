@@ -431,3 +431,25 @@
 
     window.ScreenplayView = { createView };
 })();
+
+// actually create the horizontal/vertical views
+
+(function() {
+    const view = window.ScreenplayView.createView('vertical');
+    window.registerTab({
+        id: 'screenplay',
+        label: 'Screenplay - vertical',
+        pane: 'main',
+        render: view.init,
+    });
+})();
+
+(function() {
+    const view = window.ScreenplayView.createView('horizontal');
+    window.registerTab({
+        id: 'storyboard',
+        label: 'Screenplay - horizontal',
+        pane: 'main',
+        render: view.init,
+    });
+})();
