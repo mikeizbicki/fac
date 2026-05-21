@@ -60,6 +60,11 @@ class BuildContext(BaseModel):
     model_config = {
             'frozen': True,
             'arbitrary_types_allowed': True,
+
+            # the options below or for better runtime performance;
+            'slots': True,
+            'validate_assignment': False,
+            'validate_default': False,
             }
 
     ##############################
@@ -113,6 +118,7 @@ class BuildContext(BaseModel):
         if assert_invariants:
             new.assert_invariants()
         return new
+        return BuildContext.model_construct(**{**self.__dict__, **freeze(update)})
 
     def split(self):
         r'''
@@ -893,7 +899,11 @@ class FilesystemSnapshot:
     which greatly speeds up the get_fac_timestamp calls when in an inner loop.
     '''
     def __init__(self):
-        self._repo = git.Repo('.')
+        # profiling has shown that get_fac_timestamp is the main bottleneck
+        # of the build system; to speed it up, we cache a lot of info here
+        # to avoid repeated calls to a git subprocess; the odbt=git.GitDB
+        # also offers a performance boost
+        self._repo = git.Repo('.', odbt=git.GitDB)
 
         # Cache dirty/untracked files from git status
         result = self._repo.git.status('--porcelain')
@@ -911,6 +921,18 @@ class FilesystemSnapshot:
 
         # Cache for commit timestamps
         self._commit_timestamp_cache = {}
+
+        # NOTE:
+        # the caching below is in theory a good idea because it reduces
+        # the number of calls to git in an inner loop below;
+        # in practice, however, prepopulating the cache here is slower
+        # because it loops over *all* files instead of only needed files.
+        if False:
+            for item in self._repo.iter_commits(max_count=None):
+                for path in item.stats.files:
+                    abspath = os.path.abspath(path)
+                    if abspath not in self._commit_timestamp_cache:
+                        self._commit_timestamp_cache[abspath] = item.committed_date
 
     def get_fac_timestamp(self, path, consider_metapaths=True):
         '''
