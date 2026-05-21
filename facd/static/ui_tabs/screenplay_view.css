@@ -1,0 +1,321 @@
+/* screenplay_view.css
+ *
+ * Shared styles for screenplay and storyboard views. The same DOM is
+ * used for both; orientation is controlled by the
+ * data-orientation="vertical|horizontal" attribute on the container.
+ */
+
+.screenplay-container {
+    padding: 16px;
+    height: 100%;
+    overflow: auto;
+    background: #f5f5f5;
+}
+
+.screenplay-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 200px;
+    color: #666;
+    font-style: italic;
+    font-size: 14px;
+}
+
+.screenplay-board {
+    position: relative;
+    min-width: 100%;
+}
+
+/* Vertical board needs bottom-only padding for nothing; horizontal
+ * needs room below for arrow gutter. Vertical needs right gutter. */
+.screenplay-container[data-orientation="vertical"] .screenplay-board {
+    padding-right: 200px;
+}
+.screenplay-container[data-orientation="horizontal"] .screenplay-board {
+    display: inline-block;
+    padding-bottom: 200px;
+}
+
+/* Rows container holds the paper groups. */
+.screenplay-rows {
+    display: flex;
+    gap: 24px;
+}
+.screenplay-container[data-orientation="vertical"] .screenplay-rows {
+    flex-direction: column;
+    align-items: stretch;
+    max-width: 1100px;
+    margin: 0 auto;
+}
+.screenplay-container[data-orientation="horizontal"] .screenplay-rows {
+    flex-direction: row;
+    align-items: flex-start;
+    padding-bottom: 8px;
+}
+
+/* A "paper" groups one or more beats sharing a continues_from chain. */
+.screenplay-paper {
+    background: #fff;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+    border-radius: 2px;
+    padding: 16px;
+    display: flex;
+    gap: 0;
+}
+.screenplay-container[data-orientation="vertical"] .screenplay-paper {
+    flex-direction: column;
+    padding: 32px 48px;
+}
+.screenplay-container[data-orientation="horizontal"] .screenplay-paper {
+    flex-direction: row;
+    align-items: stretch;
+}
+
+/* A beat: script + sticky note. */
+.screenplay-beat {
+    display: flex;
+    position: relative;
+    flex-shrink: 0;
+}
+.screenplay-container[data-orientation="vertical"] .screenplay-beat {
+    flex-direction: row;
+    gap: 40px;
+    padding: 12px 0;
+}
+.screenplay-container[data-orientation="horizontal"] .screenplay-beat {
+    flex-direction: column;
+    width: 320px;
+    padding: 0 12px;
+}
+
+/* Dotted divider between same-paper beats. */
+.screenplay-container[data-orientation="vertical"]
+    .screenplay-paper > .screenplay-beat + .screenplay-beat {
+    border-top: 1px dashed #bbb;
+}
+.screenplay-container[data-orientation="horizontal"]
+    .screenplay-paper > .screenplay-beat + .screenplay-beat {
+    border-left: 1px dashed #bbb;
+}
+
+/* Beat content (the fountain script text). */
+.screenplay-beat-content {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12pt;
+    line-height: 1.5;
+    padding: 4px;
+    box-sizing: border-box;
+}
+.screenplay-container[data-orientation="vertical"] .screenplay-beat-content {
+    flex: 1;
+    min-width: 0;
+}
+.screenplay-container[data-orientation="horizontal"] .screenplay-beat-content {
+    font-size: 11pt;
+    line-height: 1.4;
+    min-height: 280px;
+    max-height: 280px;
+    overflow: auto;
+}
+
+/* Fountain.js element styling. */
+.screenplay-beat-content .scene-heading { font-weight: bold; margin: 1em 0 0.5em 0; }
+.screenplay-beat-content .action { margin: 0.5em 0; }
+.screenplay-beat-content .character {
+    margin-top: 1em;
+    text-transform: uppercase;
+}
+.screenplay-container[data-orientation="vertical"]
+    .screenplay-beat-content .character { margin-left: 2in; }
+.screenplay-container[data-orientation="horizontal"]
+    .screenplay-beat-content .character { text-align: center; }
+.screenplay-beat-content .dialogue { margin: 0 1em; }
+.screenplay-container[data-orientation="vertical"]
+    .screenplay-beat-content .dialogue { margin-left: 1in; margin-right: 1.5in; }
+.screenplay-beat-content .parenthetical { margin: 0 1.5em; }
+.screenplay-container[data-orientation="vertical"]
+    .screenplay-beat-content .parenthetical { margin-left: 1.5in; margin-right: 2in; }
+.screenplay-beat-content .transition {
+    text-align: right;
+    text-transform: uppercase;
+    margin: 1em 0;
+}
+.screenplay-beat-content .centered { text-align: center; }
+.fountain-fallback,
+.screenplay-beat-content .fountain-fallback {
+    white-space: pre-wrap;
+    font-family: 'Courier New', Courier, monospace;
+    margin: 0;
+}
+
+/* Edit textarea. */
+.beat-edit-textarea {
+    width: 100%;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12pt;
+    line-height: 1.5;
+    padding: 8px;
+    border: 2px solid #4a90d9;
+    border-radius: 4px;
+    resize: vertical;
+    box-sizing: border-box;
+    min-height: 100px;
+}
+.screenplay-container[data-orientation="horizontal"] .beat-edit-textarea {
+    height: 220px;
+    font-size: 11pt;
+    line-height: 1.4;
+}
+
+.beat-edit-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    justify-content: flex-end;
+}
+.beat-edit-actions button {
+    padding: 6px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: bold;
+}
+.beat-edit-cancel { background: #ccc; color: #333; }
+.beat-edit-cancel:hover { background: #bbb; }
+.beat-edit-submit { background: #4a90d9; color: white; }
+.beat-edit-submit:hover { background: #3a7bc8; }
+
+/* Hover menu. */
+.screenplay-beat-hover-menu {
+    position: absolute;
+    display: none;
+    gap: 4px;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 4px;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    z-index: 10;
+}
+.screenplay-container[data-orientation="vertical"] .screenplay-beat-hover-menu {
+    top: 8px;
+    left: -8px;
+    transform: translateX(-100%);
+    flex-direction: column;
+}
+.screenplay-container[data-orientation="horizontal"] .screenplay-beat-hover-menu {
+    top: 0;
+    right: 0;
+    flex-direction: row;
+}
+.screenplay-beat:hover > .screenplay-beat-hover-menu { display: flex; }
+.screenplay-beat.editing > .screenplay-beat-hover-menu { display: none; }
+
+.screenplay-beat-hover-menu button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px 6px;
+    font-size: 14px;
+    opacity: 0.7;
+    border-radius: 3px;
+    white-space: nowrap;
+}
+.screenplay-beat-hover-menu button:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.05);
+}
+
+/* Merge button on the dotted divider between same-paper beats. */
+.screenplay-merge-button {
+    position: absolute;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 12px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 5;
+    white-space: nowrap;
+}
+.screenplay-container[data-orientation="vertical"] .screenplay-merge-button {
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+.screenplay-container[data-orientation="horizontal"] .screenplay-merge-button {
+    top: 50%;
+    left: -10px;
+    transform: translateY(-50%);
+    font-size: 11px;
+    padding: 2px 6px;
+}
+.screenplay-beat:hover > .screenplay-merge-button,
+.screenplay-merge-button:hover { opacity: 1; }
+
+/* New-beat indicator. */
+.screenplay-beat.new-beat .screenplay-beat-content {
+    border: 2px dashed #4a90d9;
+    background: rgba(74, 144, 217, 0.05);
+}
+
+/* Sticky note. */
+.screenplay-sticky-note {
+    flex-shrink: 0;
+    background: #ffffa5;
+    box-sizing: border-box;
+    padding: 12px;
+    box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.15);
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 9pt;
+    align-self: flex-start;
+}
+.screenplay-container[data-orientation="vertical"] .screenplay-sticky-note {
+    width: 400px;
+}
+.screenplay-container[data-orientation="horizontal"] .screenplay-sticky-note {
+    margin-top: 12px;
+    min-height: 260px;
+}
+
+.sticky-meta-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 8px;
+    margin-bottom: 12px;
+}
+.sticky-meta-row { display: contents; }
+.sticky-meta-label {
+    font-weight: bold;
+    color: #333;
+    white-space: nowrap;
+}
+.sticky-meta-value {
+    color: #555;
+    word-break: break-word;
+}
+.sticky-target-value { color: #666; }
+
+.sticky-media-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* SVG arrow layer covers the board. */
+.screenplay-arrow-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    overflow: visible;
+}
+.screenplay-arrow-layer path {
+    fill: none;
+    stroke-width: 2;
+}
