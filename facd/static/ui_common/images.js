@@ -49,6 +49,12 @@
         if (!existing) {
             registeredContainers[path].push({ container, className });
         }
+        // If a blob URL is already cached for this path, paint into the
+        // new container immediately so views that join late still show
+        // the image without waiting for another fetch round-trip.
+        if (imageCache[path]) {
+            paintContainer(container, className, imageCache[path]);
+        }
     };
 
     window.unregisterImageContainer = function(path, container) {
@@ -65,14 +71,18 @@
         }
     };
 
+    function paintContainer(container, className, url) {
+        container.innerHTML = '';
+        const img = document.createElement('img');
+        img.src = url;
+        img.className = className;
+        container.appendChild(img);
+    }
+
     function refreshAllContainers(path, url) {
         if (!registeredContainers[path]) return;
         for (const { container, className } of registeredContainers[path]) {
-            container.innerHTML = '';
-            const img = document.createElement('img');
-            img.src = url;
-            img.className = className;
-            container.appendChild(img);
+            paintContainer(container, className, url);
         }
     }
 

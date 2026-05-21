@@ -72,3 +72,23 @@
     padding: 6px 10px 10px 36px;
     border-radius: 0 0 4px 4px;
 }
+
+/* Image containers reserve a fixed slot before the image loads, so
+ * layout (and any arrows/positions computed from sibling geometry)
+ * does not shift once the <img> blob arrives. Any view that needs a
+ * different size should override these with a more specific rule. */
+.image-container {
+    width: 192px;
+    height: 108px;
+    display: block;
+    background: rgba(0, 0, 0, 0.05);
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.image-container img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+}

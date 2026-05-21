@@ -46,6 +46,12 @@
         if (!existing) {
             registeredContainers[path].push({ container, className });
         }
+        // If a blob URL is already cached for this path, paint into the
+        // new container immediately so views that join late still show
+        // the video without waiting for another fetch round-trip.
+        if (videoCache[path]) {
+            paintContainer(container, className, videoCache[path]);
+        }
     };
 
     window.unregisterVideoContainer = function(path, container) {
@@ -62,16 +68,20 @@
         }
     };
 
+    function paintContainer(container, className, url) {
+        container.innerHTML = '';
+        const video = document.createElement('video');
+        video.src = url;
+        video.className = className;
+        video.controls = true;
+        video.preload = 'metadata';
+        container.appendChild(video);
+    }
+
     function refreshAllContainers(path, url) {
         if (!registeredContainers[path]) return;
         for (const { container, className } of registeredContainers[path]) {
-            container.innerHTML = '';
-            const video = document.createElement('video');
-            video.src = url;
-            video.className = className;
-            video.controls = true;
-            video.preload = 'metadata';
-            container.appendChild(video);
+            paintContainer(container, className, url);
         }
     }
 
