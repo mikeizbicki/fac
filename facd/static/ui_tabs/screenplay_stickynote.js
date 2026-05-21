@@ -85,22 +85,30 @@
             type: 'target', mimeType, isLeaf: true, order: 0,
             parent: wrapper, label: filename,
         });
+        const isImage = mimeType.startsWith('image/');
+        let mediaContainer = null;
         if (nodeEl) {
             nodeEl.classList.add('expanded');
-            const isImage = mimeType.startsWith('image/');
-            const mediaContainer = nodeEl.querySelector(
+            mediaContainer = nodeEl.querySelector(
                 isImage ? '.image-container' : '.video-container');
-            if (mediaContainer) {
-                if (isImage && window.registerImageContainer) {
-                    window.registerImageContainer(targetPath, mediaContainer, 'leaf-image');
-                    if (window.isFilePath(targetPath) && window.fetchImage) {
-                        window.fetchImage(targetPath, false).catch(() => {});
-                    }
-                } else if (!isImage && window.registerVideoContainer) {
-                    window.registerVideoContainer(targetPath, mediaContainer, 'leaf-video');
-                    if (window.isFilePath(targetPath) && window.fetchVideo) {
-                        window.fetchVideo(targetPath, false).catch(() => {});
-                    }
+        } else {
+            // The node is already owned by another view (e.g. the
+            // sibling screenplay/storyboard tab). Build a standalone
+            // media container so this sticky still shows the media.
+            mediaContainer = document.createElement('div');
+            mediaContainer.className = isImage ? 'image-container' : 'video-container';
+            wrapper.appendChild(mediaContainer);
+        }
+        if (mediaContainer) {
+            if (isImage && window.registerImageContainer) {
+                window.registerImageContainer(targetPath, mediaContainer, 'leaf-image');
+                if (window.isFilePath && window.isFilePath(targetPath) && window.fetchImage) {
+                    window.fetchImage(targetPath, false).catch(() => {});
+                }
+            } else if (!isImage && window.registerVideoContainer) {
+                window.registerVideoContainer(targetPath, mediaContainer, 'leaf-video');
+                if (window.isFilePath && window.isFilePath(targetPath) && window.fetchVideo) {
+                    window.fetchVideo(targetPath, false).catch(() => {});
                 }
             }
         }
@@ -167,11 +175,15 @@
                 content: metadata.content,
             });
         }
-        const valueSpan = document.querySelector(
+        // Update every sticky note that shows this target (both the
+        // screenplay and storyboard views can be live at once).
+        const valueSpans = document.querySelectorAll(
             `.sticky-target-value[data-target-path="${path}"]`);
-        if (valueSpan && metadata.content) {
-            valueSpan.textContent = metadata.content.trim() || '—';
-        }
+        valueSpans.forEach(valueSpan => {
+            if (metadata.content) {
+                valueSpan.textContent = metadata.content.trim() || '—';
+            }
+        });
         const nodeEl = window.getNode(path);
         if (!nodeEl) return;
         const mimeType = nodeEl.dataset.mimeType || metadata['mime-type'];

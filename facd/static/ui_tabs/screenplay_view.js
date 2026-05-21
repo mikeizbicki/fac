@@ -258,6 +258,13 @@
             const beatEls = board.querySelectorAll('.screenplay-beat');
             const boardRect = board.getBoundingClientRect();
 
+            // Give the SVG explicit pixel dimensions matching the board
+            // so paths drawn at large coordinates aren't clipped to the
+            // SVG's default 300x150 viewport (overflow:visible alone is
+            // not enough on all browsers for absolute-positioned SVGs).
+            arrowLayer.setAttribute('width', board.scrollWidth);
+            arrowLayer.setAttribute('height', board.scrollHeight);
+
             // Per-beat anchor point (in board coords) at the "exit" edge.
             const anchors = [];
             beatEls.forEach(el => {
