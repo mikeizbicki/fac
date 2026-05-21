@@ -583,14 +583,7 @@ class LLM():
                             logger.debug(f'status "{path}": {log["message"]}')
                 result = await handler.get()
             except fal_client.client.FalClientHTTPError as e:
-                # in the documentation, e.message is always a dict;
-                # but sometimes it seems to be a str as well
-                # (I believe this is undocumented behavior);
-                # we have the if/else here to ensure good logs in either event
-                try:
-                    logger.error(f"FalClientHTTPError: {e.message[0]['type']}: {e.message[0]['loc']}", submessage=True)
-                except (TypeError, IndexError, KeyError):
-                    logger.error(f"FalClientHTTPError: {e.message}", submessage=True)
+                logger.error({'FalClientHTTPError': e.message})
                 logger.error({
                     'fal_client.submit_async() parameters': {
                         'model': model,
