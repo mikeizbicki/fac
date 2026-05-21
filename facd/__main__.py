@@ -30,7 +30,9 @@ from facd import monitor_jobs
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    daemon_task = asyncio.create_task(app.state.build_daemon())
+    def run_daemon_in_thread():
+        asyncio.run(app.state.build_daemon())
+    daemon_task = asyncio.create_task(asyncio.to_thread(run_daemon_in_thread))
 
     yield
 
