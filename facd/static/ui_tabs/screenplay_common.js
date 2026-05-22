@@ -263,6 +263,8 @@
     // Compute paper-group boundaries for the storyboard's horizontal view.
     // Two adjacent beats (i, i+1) share a paper iff
     //   beats[i+1].continues_from_beat_id === beats[i].beat_id
+    //   OR (when continues_from_beat_id is empty)
+    //   beats[i+1].includes_beat_id === beats[i].beat_id
     //
     // Returns an array of groups, each: { start, end } (inclusive indices).
     function computePaperGroups(beats) {
@@ -270,7 +272,15 @@
         if (beats.length === 0) return groups;
         let start = 0;
         for (let i = 1; i < beats.length; i++) {
-            if (beats[i].continues_from_beat_id !== beats[i - 1].beat_id) {
+            const cur = beats[i];
+            const prev = beats[i - 1];
+            let ref = null;
+            if (cur.continues_from_beat_id) {
+                ref = cur.continues_from_beat_id;
+            } else if (cur.includes_beat_id) {
+                ref = cur.includes_beat_id;
+            }
+            if (ref !== prev.beat_id) {
                 groups.push({ start, end: i - 1 });
                 start = i;
             }
