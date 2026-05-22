@@ -87,14 +87,19 @@
         });
         const isImage = mimeType.startsWith('image/');
         let mediaContainer = null;
-        if (nodeEl) {
+        // createNode may return an existing node that is still attached
+        // to another view's wrapper. Only treat it as "ours" if it
+        // actually landed inside our wrapper.
+        if (nodeEl && nodeEl.parentElement === wrapper) {
             nodeEl.classList.add('expanded');
             mediaContainer = nodeEl.querySelector(
                 isImage ? '.image-container' : '.video-container');
         } else {
-            // The node is already owned by another view (e.g. the
-            // sibling screenplay/storyboard tab). Build a standalone
-            // media container so this sticky still shows the media.
+            // Node either was not created (null) or is owned by another
+            // view's wrapper. Build a standalone media container in our
+            // wrapper so this sticky still shows the media; it will be
+            // populated from the blob cache by registerImageContainer /
+            // registerVideoContainer.
             mediaContainer = document.createElement('div');
             mediaContainer.className = isImage ? 'image-container' : 'video-container';
             wrapper.appendChild(mediaContainer);
