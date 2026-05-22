@@ -148,9 +148,8 @@
         grid.appendChild(createMetaRow('BEAT_ID', beat.beat_id));
         grid.appendChild(createMetaRow('CONTINUES_FROM',
             beat.continues_from_beat_id || '—'));
-        if (beat.includes_beat_id) {
-            grid.appendChild(createMetaRow('INCLUDES', beat.includes_beat_id));
-        }
+        grid.appendChild(createMetaRow('INCLUDES',
+            beat.includes_beat_id || '—'));
         grid.appendChild(createTargetRow('beat_type',
             getTargetPath('beat_type', beat.beat_id), registeredPaths));
         grid.appendChild(createTargetRow('length_seconds',

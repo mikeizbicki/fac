@@ -220,18 +220,16 @@
         const adj = new Map();
         beats.forEach(b => adj.set(b.beat_id, []));
         beats.forEach(b => {
-            const refs = [];
+            let ref = null;
             if (b.continues_from_beat_id) {
-                refs.push(b.continues_from_beat_id);
+                ref = b.continues_from_beat_id;
             } else if (b.includes_beat_id) {
-                refs.push(b.includes_beat_id);
+                ref = b.includes_beat_id;
             }
-            refs.forEach(r => {
-                if (adj.has(r)) {
-                    adj.get(b.beat_id).push(r);
-                    adj.get(r).push(b.beat_id);
-                }
-            });
+            if (ref && adj.has(ref)) {
+                adj.get(b.beat_id).push(ref);
+                adj.get(ref).push(b.beat_id);
+            }
         });
 
         const islandOf = new Map();
