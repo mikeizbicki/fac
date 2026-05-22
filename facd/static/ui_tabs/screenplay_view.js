@@ -37,6 +37,7 @@
         let board = null;
         let arrowLayer = null;
         let currentBeats = [];
+        let lastIslands = null;
         const registeredPaths = new Set();
 
         // --- Save wrappers ---
@@ -372,6 +373,7 @@
             }
 
             const islands = C.computeIslands(beats);
+            lastIslands = islands;
             const groups = C.computePaperGroups(beats);
 
             const rows = document.createElement('div');
@@ -412,6 +414,35 @@
             board = document.createElement('div');
             board.className = 'screenplay-board';
             container.appendChild(board);
+
+            // When this view becomes visible (e.g. user switches
+            // tabs), arrow geometry computed while hidden will be
+            // wrong (all anchors collapse to 0,0). Re-run drawArrows
+            // whenever the container transitions from hidden to
+            // visible. Also redraw on resize for good measure.
+            let wasVisible = false;
+            const checkVisibility = () => {
+                if (!container || !arrowLayer || !lastIslands) return;
+                const rect = container.getBoundingClientRect();
+                const visible = rect.width > 0 && rect.height > 0;
+                if (visible && !wasVisible) {
+                    drawArrows(currentBeats, lastIslands.colorOf);
+                }
+                wasVisible = visible;
+            };
+            if (typeof ResizeObserver !== 'undefined') {
+                const ro = new ResizeObserver(checkVisibility);
+                ro.observe(container);
+            }
+            if (typeof IntersectionObserver !== 'undefined') {
+                const io = new IntersectionObserver(checkVisibility);
+                io.observe(container);
+            }
+            window.addEventListener('resize', () => {
+                if (arrowLayer && lastIslands) {
+                    drawArrows(currentBeats, lastIslands.colorOf);
+                }
+            });
 
             window.registerPathHandler(function(path, metadata) {
                 if (path === 'shooting-script.xml') {

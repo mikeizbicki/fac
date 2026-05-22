@@ -214,12 +214,18 @@
         beats.forEach((b, i) => indexOf.set(b.beat_id, i));
 
         // Build undirected adjacency.
+        // For each beat, prefer continues_from_beat_id; only fall
+        // back to includes_beat_id when continues_from_beat_id is
+        // not present.
         const adj = new Map();
         beats.forEach(b => adj.set(b.beat_id, []));
         beats.forEach(b => {
             const refs = [];
-            if (b.continues_from_beat_id) refs.push(b.continues_from_beat_id);
-            if (b.includes_beat_id) refs.push(b.includes_beat_id);
+            if (b.continues_from_beat_id) {
+                refs.push(b.continues_from_beat_id);
+            } else if (b.includes_beat_id) {
+                refs.push(b.includes_beat_id);
+            }
             refs.forEach(r => {
                 if (adj.has(r)) {
                     adj.get(b.beat_id).push(r);
