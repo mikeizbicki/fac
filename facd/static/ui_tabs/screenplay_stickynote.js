@@ -94,12 +94,26 @@
             nodeEl.classList.add('expanded');
             mediaContainer = nodeEl.querySelector(
                 isImage ? '.image-container' : '.video-container');
+        } else if (nodeEl) {
+            // Node is owned by another view. Deep-clone its DOM into
+            // our wrapper so the sticky has the full tree-node
+            // structure (header, build menu, metadata) -- not just a
+            // bare media container. The clone's media container is
+            // then registered so it gets painted from the blob cache.
+            const clone = nodeEl.cloneNode(true);
+            clone.classList.add('expanded');
+            // Drop any blob src on the clone; registerImageContainer /
+            // registerVideoContainer will repopulate from the cache.
+            const mc = clone.querySelector(
+                isImage ? '.image-container' : '.video-container');
+            if (mc) mc.innerHTML = '';
+            wrapper.appendChild(clone);
+            mediaContainer = mc;
         } else {
-            // Node either was not created (null) or is owned by another
-            // view's wrapper. Build a standalone media container in our
-            // wrapper so this sticky still shows the media; it will be
-            // populated from the blob cache by registerImageContainer /
-            // registerVideoContainer.
+            // createNode declined to make a node (e.g. file does not
+            // exist yet and a non-target path was requested). Fall back
+            // to a bare media container so the sticky still has a
+            // paintable slot once data arrives.
             mediaContainer = document.createElement('div');
             mediaContainer.className = isImage ? 'image-container' : 'video-container';
             wrapper.appendChild(mediaContainer);
