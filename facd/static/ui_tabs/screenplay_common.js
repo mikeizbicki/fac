@@ -33,12 +33,12 @@
         doc.querySelectorAll('beat').forEach(el => {
             const beat_id = el.getAttribute('beat_id');
             const continues_from_beat_id = el.getAttribute('continues_from_beat_id') || '';
-            const includes_beat_id = el.getAttribute('includes_beat_id') || '';
+            const include_beat_id = el.getAttribute('include_beat_id') || '';
             const text = el.textContent || '';
             if (beat_id) beats.push({
                 beat_id,
                 continues_from_beat_id,
-                includes_beat_id,
+                include_beat_id,
                 text,
             });
         });
@@ -66,8 +66,8 @@
             if (beat.continues_from_beat_id) {
                 attrs += ` continues_from_beat_id="${escapeXmlAttr(beat.continues_from_beat_id)}"`;
             }
-            if (beat.includes_beat_id) {
-                attrs += ` includes_beat_id="${escapeXmlAttr(beat.includes_beat_id)}"`;
+            if (beat.include_beat_id) {
+                attrs += ` include_beat_id="${escapeXmlAttr(beat.include_beat_id)}"`;
             }
             xml += `<beat${attrs}>${escapeXmlText(beat.text)}</beat>\n`;
         });
@@ -158,7 +158,7 @@
         const newBeat = {
             beat_id: newBeatId,
             continues_from_beat_id: beat.continues_from_beat_id,
-            includes_beat_id: '',
+            include_beat_id: '',
             text: '',
             isNew: true,
         };
@@ -179,7 +179,7 @@
         const newBeat = {
             beat_id: newBeatId,
             continues_from_beat_id: beat.beat_id,
-            includes_beat_id: '',
+            include_beat_id: '',
             text: '',
             isNew: true,
         };
@@ -196,7 +196,7 @@
     // --- DAG / island computation ---
     //
     // Computes connected components of the beat graph where edges are
-    // continues_from_beat_id and includes_beat_id references. Beats are
+    // continues_from_beat_id and include_beat_id references. Beats are
     // identified by their index in the document-order array.
     //
     // Returns:
@@ -215,7 +215,7 @@
 
         // Build undirected adjacency.
         // For each beat, prefer continues_from_beat_id; only fall
-        // back to includes_beat_id when continues_from_beat_id is
+        // back to include_beat_id when continues_from_beat_id is
         // not present.
         const adj = new Map();
         beats.forEach(b => adj.set(b.beat_id, []));
@@ -223,8 +223,8 @@
             let ref = null;
             if (b.continues_from_beat_id) {
                 ref = b.continues_from_beat_id;
-            } else if (b.includes_beat_id) {
-                ref = b.includes_beat_id;
+            } else if (b.include_beat_id) {
+                ref = b.include_beat_id;
             }
             if (ref && adj.has(ref)) {
                 adj.get(b.beat_id).push(ref);
