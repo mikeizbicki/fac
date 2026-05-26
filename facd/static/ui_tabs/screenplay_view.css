@@ -102,6 +102,17 @@
     border-left: 1px dashed #bbb;
 }
 
+/* When the join is an include_beat_id reference, use a thicker,
+ * longer-dashed line to visually distinguish it from continues_from. */
+.screenplay-container[data-orientation="vertical"]
+    .screenplay-paper > .screenplay-beat[data-separator="includes"] {
+    border-top: 3px dashed #888;
+}
+.screenplay-container[data-orientation="horizontal"]
+    .screenplay-paper > .screenplay-beat[data-separator="includes"] {
+    border-left: 3px dashed #888;
+}
+
 /* Beat content (the fountain script text). */
 .screenplay-beat-content {
     font-family: 'Courier New', Courier, monospace;

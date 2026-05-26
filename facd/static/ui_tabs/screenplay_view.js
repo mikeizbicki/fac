@@ -206,7 +206,7 @@
             return menu;
         }
 
-        function createBeatElement(beat, idx, color, isFirstInPaper) {
+        function createBeatElement(beat, idx, color, isFirstInPaper, separatorKind) {
             const beatDiv = document.createElement('div');
             beatDiv.className = 'screenplay-beat';
             beatDiv.dataset.beat_id = beat.beat_id;
@@ -216,6 +216,9 @@
             beatDiv.appendChild(createHoverMenu(idx));
 
             if (!isFirstInPaper) {
+                if (separatorKind) {
+                    beatDiv.dataset.separator = separatorKind;
+                }
                 const mergeBtn = document.createElement('button');
                 mergeBtn.className = 'screenplay-merge-button';
                 mergeBtn.innerHTML = '📄📄→📄';
@@ -252,7 +255,7 @@
         // Draw arrows in the gutter for non-adjacent continues_from refs.
         // Anchor edge depends on orientation: right edge for vertical,
         // bottom edge for horizontal.
-        function drawArrows(beats, colorOf) {
+        function drawArrows(beats, colorOf, beatColors) {
             if (!arrowLayer) return;
             while (arrowLayer.firstChild) arrowLayer.removeChild(arrowLayer.firstChild);
 
@@ -287,13 +290,37 @@
                 }
             });
 
+            // Build list of arrows. Each arrow has a 'kind':
+            //   'continues' - solid, colored from island
+            //   'includes'  - colored from grayed source sticky color
+            // Adjacent continues_from arrows are drawn direct (no gutter)
+            // in vertical mode and skipped entirely in horizontal mode.
+            // Adjacent include_beat_id arrows are always drawn direct.
             const arrows = [];
+            const directArrows = [];
             beats.forEach((b, i) => {
-                if (!b.continues_from_beat_id) return;
-                const dst = beats.findIndex(x => x.beat_id === b.continues_from_beat_id);
-                if (dst < 0) return;
-                if (Math.abs(i - dst) <= 1) return;
-                arrows.push({ srcIdx: i, dstIdx: dst });
+                if (b.continues_from_beat_id) {
+                    const dst = beats.findIndex(x => x.beat_id === b.continues_from_beat_id);
+                    if (dst >= 0) {
+                        if (Math.abs(i - dst) <= 1) {
+                            if (!isHorizontal) {
+                                directArrows.push({ srcIdx: i, dstIdx: dst, kind: 'continues' });
+                            }
+                        } else {
+                            arrows.push({ srcIdx: i, dstIdx: dst, kind: 'continues' });
+                        }
+                    }
+                }
+                if (b.include_beat_id) {
+                    const dst = beats.findIndex(x => x.beat_id === b.include_beat_id);
+                    if (dst >= 0) {
+                        if (Math.abs(i - dst) <= 1) {
+                            directArrows.push({ srcIdx: i, dstIdx: dst, kind: 'includes' });
+                        } else {
+                            arrows.push({ srcIdx: i, dstIdx: dst, kind: 'includes' });
+                        }
+                    }
+                }
             });
 
             // Lane assignment along the primary axis.
@@ -317,11 +344,18 @@
             });
 
             const svgNS = 'http://www.w3.org/2000/svg';
+            function arrowColor(a) {
+                const srcBeatId = beats[a.srcIdx].beat_id;
+                if (a.kind === 'includes') {
+                    return (beatColors && beatColors.get(srcBeatId)) || '#888';
+                }
+                return colorOf.get(srcBeatId) || '#444';
+            }
             arrows.forEach(a => {
                 const src = anchors[a.srcIdx];
                 const dst = anchors[a.dstIdx];
                 if (!src || !dst) return;
-                const color = colorOf.get(beats[a.srcIdx].beat_id) || '#444';
+                const color = arrowColor(a);
                 const laneCross = Math.max(src.cross, dst.cross)
                     + ARROW_BASE_OFFSET + a.lane * ARROW_LANE_DEPTH;
                 const h = ARROW_HEAD_SIZE;
@@ -357,6 +391,49 @@
                 head.setAttribute('stroke', color);
                 arrowLayer.appendChild(head);
             });
+
+            // Direct (non-gutter) arrows: from one sticky's near edge to
+            // the adjacent sticky's near edge. Vertical only for
+            // continues; both orientations possible for includes.
+            directArrows.forEach(a => {
+                const srcEl = beatEls[a.srcIdx];
+                const dstEl = beatEls[a.dstIdx];
+                if (!srcEl || !dstEl) return;
+                const srcSticky = srcEl.querySelector('.screenplay-sticky-note');
+                const dstSticky = dstEl.querySelector('.screenplay-sticky-note');
+                if (!srcSticky || !dstSticky) return;
+                const sr = srcSticky.getBoundingClientRect();
+                const dr = dstSticky.getBoundingClientRect();
+                const color = arrowColor(a);
+                const h = ARROW_HEAD_SIZE;
+                let d, headD;
+                if (isHorizontal) {
+                    // src at left of dst or right of dst
+                    const srcX = a.srcIdx < a.dstIdx ? sr.right : sr.left;
+                    const dstX = a.srcIdx < a.dstIdx ? dr.left : dr.right;
+                    const y = ((sr.top + sr.bottom) / 2 + (dr.top + dr.bottom) / 2) / 2 - boardRect.top;
+                    const sx = srcX - boardRect.left, dx = dstX - boardRect.left;
+                    d = `M ${sx} ${y} L ${dx} ${y}`;
+                    const sign = dx > sx ? -1 : 1;
+                    headD = `M ${dx + sign * h} ${y - h} L ${dx} ${y} L ${dx + sign * h} ${y + h}`;
+                } else {
+                    const srcY = a.srcIdx < a.dstIdx ? sr.bottom : sr.top;
+                    const dstY = a.srcIdx < a.dstIdx ? dr.top : dr.bottom;
+                    const x = ((sr.left + sr.right) / 2 + (dr.left + dr.right) / 2) / 2 - boardRect.left;
+                    const sy = srcY - boardRect.top, dy = dstY - boardRect.top;
+                    d = `M ${x} ${sy} L ${x} ${dy}`;
+                    const sign = dy > sy ? -1 : 1;
+                    headD = `M ${x - h} ${dy + sign * h} L ${x} ${dy} L ${x + h} ${dy + sign * h}`;
+                }
+                const path = document.createElementNS(svgNS, 'path');
+                path.setAttribute('d', d);
+                path.setAttribute('stroke', color);
+                arrowLayer.appendChild(path);
+                const head = document.createElementNS(svgNS, 'path');
+                head.setAttribute('d', headD);
+                head.setAttribute('stroke', color);
+                arrowLayer.appendChild(head);
+            });
         }
 
         function renderBoard(beats) {
@@ -375,6 +452,16 @@
             const islands = C.computeIslands(beats);
             lastIslands = islands;
             const groups = C.computePaperGroups(beats);
+            const includeDepths = C.computeIncludeDepths(beats);
+
+            // Per-beat displayed sticky color, with include-graying applied.
+            const beatColors = new Map();
+            beats.forEach(b => {
+                const base = islands.colorOf.get(b.beat_id) || C.ISLAND_COLORS[0];
+                const d = includeDepths.get(b.beat_id) || 0;
+                const amount = Math.min(d * 0.22, 0.85);
+                beatColors.set(b.beat_id, C.grayifyColor(base, amount));
+            });
 
             const rows = document.createElement('div');
             rows.className = 'screenplay-rows';
@@ -385,9 +472,11 @@
                 paper.className = 'screenplay-paper';
                 for (let i = group.start; i <= group.end; i++) {
                     const beat = beats[i];
-                    const color = islands.colorOf.get(beat.beat_id) || C.ISLAND_COLORS[0];
+                    const color = beatColors.get(beat.beat_id);
+                    const sep = (i > group.start)
+                        ? group.separators[i - group.start - 1] : null;
                     paper.appendChild(
-                        createBeatElement(beat, i, color, i === group.start));
+                        createBeatElement(beat, i, color, i === group.start, sep));
                 }
                 rows.appendChild(paper);
             });
@@ -397,13 +486,16 @@
             arrowLayer.setAttribute('class', 'screenplay-arrow-layer');
             board.appendChild(arrowLayer);
 
-            requestAnimationFrame(() => drawArrows(beats, islands.colorOf));
+            lastBeatColors = beatColors;
+            requestAnimationFrame(() => drawArrows(beats, islands.colorOf, beatColors));
         }
 
         function handleScreenplayUpdate(content) {
             currentBeats = content ? C.parseScreenplayXml(content) : [];
             renderBoard(currentBeats);
         }
+
+        let lastBeatColors = null;
 
         function init(tabContainer) {
             container = document.createElement('div');
@@ -426,7 +518,7 @@
                 const rect = container.getBoundingClientRect();
                 const visible = rect.width > 0 && rect.height > 0;
                 if (visible && !wasVisible) {
-                    drawArrows(currentBeats, lastIslands.colorOf);
+                    drawArrows(currentBeats, lastIslands.colorOf, lastBeatColors);
                 }
                 wasVisible = visible;
             };
@@ -440,7 +532,7 @@
             }
             window.addEventListener('resize', () => {
                 if (arrowLayer && lastIslands) {
-                    drawArrows(currentBeats, lastIslands.colorOf);
+                    drawArrows(currentBeats, lastIslands.colorOf, lastBeatColors);
                 }
             });
 

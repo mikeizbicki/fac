@@ -260,32 +260,78 @@
         return { islandOf, islandCount, colorOf, indexOf };
     }
 
+    // Compute the "include depth" for each beat. A beat with no
+    // include_beat_id has depth 0. A beat that include_beat_id's
+    // another beat has depth = (target's depth) + 1. This is used to
+    // gray out included beats progressively: deeper = more gray.
+    function computeIncludeDepths(beats) {
+        const indexOf = new Map();
+        beats.forEach((b, i) => indexOf.set(b.beat_id, i));
+        const depth = new Map();
+        function compute(beat_id, visiting) {
+            if (depth.has(beat_id)) return depth.get(beat_id);
+            if (visiting.has(beat_id)) return 0; // cycle guard
+            const idx = indexOf.get(beat_id);
+            if (idx === undefined) return 0;
+            const b = beats[idx];
+            if (!b.include_beat_id || !indexOf.has(b.include_beat_id)) {
+                depth.set(beat_id, 0);
+                return 0;
+            }
+            visiting.add(beat_id);
+            const d = compute(b.include_beat_id, visiting) + 1;
+            visiting.delete(beat_id);
+            depth.set(beat_id, d);
+            return d;
+        }
+        beats.forEach(b => compute(b.beat_id, new Set()));
+        return depth;
+    }
+
+    // Mix a hex color toward gray by `amount` (0..1). amount=0 returns
+    // the original color; amount=1 returns mid-gray.
+    function grayifyColor(hex, amount) {
+        if (amount <= 0) return hex;
+        const a = Math.min(amount, 0.85);
+        const m = hex.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+        if (!m) return hex;
+        let r = parseInt(m[1], 16), g = parseInt(m[2], 16), b = parseInt(m[3], 16);
+        const gray = 180;
+        r = Math.round(r * (1 - a) + gray * a);
+        g = Math.round(g * (1 - a) + gray * a);
+        b = Math.round(b * (1 - a) + gray * a);
+        const h = n => n.toString(16).padStart(2, '0');
+        return '#' + h(r) + h(g) + h(b);
+    }
+
     // Compute paper-group boundaries for the storyboard's horizontal view.
-    // Two adjacent beats (i, i+1) share a paper iff
-    //   beats[i+1].continues_from_beat_id === beats[i].beat_id
-    //   OR (when continues_from_beat_id is empty)
-    //   beats[i+1].includes_beat_id === beats[i].beat_id
+    // Two adjacent beats (i, i+1) share a paper iff they are connected
+    // by either continues_from_beat_id or include_beat_id.
     //
-    // Returns an array of groups, each: { start, end } (inclusive indices).
+    // Returns an array of groups, each:
+    //   { start, end, separators: [type, ...] }
+    // where separators[k] describes the join between beats start+k and
+    // start+k+1, and is either 'continues' or 'includes'.
     function computePaperGroups(beats) {
         const groups = [];
         if (beats.length === 0) return groups;
         let start = 0;
+        let separators = [];
         for (let i = 1; i < beats.length; i++) {
             const cur = beats[i];
             const prev = beats[i - 1];
-            let ref = null;
-            if (cur.continues_from_beat_id) {
-                ref = cur.continues_from_beat_id;
-            } else if (cur.includes_beat_id) {
-                ref = cur.includes_beat_id;
-            }
-            if (ref !== prev.beat_id) {
-                groups.push({ start, end: i - 1 });
+            let kind = null;
+            if (cur.continues_from_beat_id === prev.beat_id) kind = 'continues';
+            else if (cur.include_beat_id === prev.beat_id) kind = 'includes';
+            if (kind === null) {
+                groups.push({ start, end: i - 1, separators });
                 start = i;
+                separators = [];
+            } else {
+                separators.push(kind);
             }
         }
-        groups.push({ start, end: beats.length - 1 });
+        groups.push({ start, end: beats.length - 1, separators });
         return groups;
     }
 
@@ -302,6 +348,8 @@
         insertBeatBelow,
         computeIslands,
         computePaperGroups,
+        computeIncludeDepths,
+        grayifyColor,
         escapeXmlAttr,
         escapeXmlText,
     };
