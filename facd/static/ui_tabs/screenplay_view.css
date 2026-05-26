@@ -294,6 +294,29 @@
     width: 100%;
 }
 
+/* Make arrow path segments clickable. The SVG layer itself remains
+ * non-interactive (pointer-events: none on the layer), but the
+ * individual paths we want to click on opt back in. We also widen
+ * their effective click area with a transparent stroke. */
+.screenplay-arrow-layer path.arrow-line,
+.screenplay-arrow-layer path.arrow-head {
+    pointer-events: stroke;
+    cursor: pointer;
+}
+.screenplay-arrow-layer path.arrow-line:hover,
+.screenplay-arrow-layer path.arrow-head:hover {
+    stroke-width: 6;
+}
+
+/* Brief highlight when an arrow click scrolls a beat into view. */
+.screenplay-sticky-note.flash-highlight {
+    animation: sticky-flash 1.2s ease-out;
+}
+@keyframes sticky-flash {
+    0%   { box-shadow: 0 0 0 4px rgba(74, 144, 217, 0.8),
+                       2px 2px 6px rgba(0, 0, 0, 0.15); }
+    100% { box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.15); }
+}
 .sticky-meta-grid {
     display: grid;
     grid-template-columns: auto 1fr;

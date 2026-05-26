@@ -260,10 +260,12 @@
         return { islandOf, islandCount, colorOf, indexOf };
     }
 
-    // Compute the "include depth" for each beat. A beat with no
-    // include_beat_id has depth 0. A beat that include_beat_id's
-    // another beat has depth = (target's depth) + 1. This is used to
-    // gray out included beats progressively: deeper = more gray.
+    // Compute the "include depth" for each beat. Depth is propagated
+    // along both continues_from_beat_id (no depth increment) and
+    // include_beat_id (depth increment by 1). A beat with no outgoing
+    // ref, or whose ref points outside the known beat set, has depth 0.
+    // This ensures continues_from chains preserve the color (depth) of
+    // whatever they point to, while include_beat_id grays things out.
     function computeIncludeDepths(beats) {
         const indexOf = new Map();
         beats.forEach((b, i) => indexOf.set(b.beat_id, i));
@@ -274,13 +276,16 @@
             const idx = indexOf.get(beat_id);
             if (idx === undefined) return 0;
             const b = beats[idx];
-            if (!b.include_beat_id || !indexOf.has(b.include_beat_id)) {
-                depth.set(beat_id, 0);
-                return 0;
+            let d = 0;
+            if (b.continues_from_beat_id && indexOf.has(b.continues_from_beat_id)) {
+                visiting.add(beat_id);
+                d = compute(b.continues_from_beat_id, visiting);
+                visiting.delete(beat_id);
+            } else if (b.include_beat_id && indexOf.has(b.include_beat_id)) {
+                visiting.add(beat_id);
+                d = compute(b.include_beat_id, visiting) + 1;
+                visiting.delete(beat_id);
             }
-            visiting.add(beat_id);
-            const d = compute(b.include_beat_id, visiting) + 1;
-            visiting.delete(beat_id);
             depth.set(beat_id, d);
             return d;
         }
@@ -305,14 +310,18 @@
     }
 
     // Compute paper-group boundaries for the storyboard's horizontal view.
-    // Two adjacent beats (i, i+1) share a paper iff they are connected
-    // by either continues_from_beat_id or include_beat_id.
+    // Two adjacent beats (i, i+1) share a paper iff they belong to the
+    // same connected island (i.e., are linked via any chain of
+    // continues_from_beat_id / include_beat_id refs, possibly via
+    // intermediate beats).
     //
     // Returns an array of groups, each:
     //   { start, end, separators: [type, ...] }
     // where separators[k] describes the join between beats start+k and
-    // start+k+1, and is either 'continues' or 'includes'.
-    function computePaperGroups(beats) {
+    // start+k+1, and is either 'continues' (light dotted) or 'includes'
+    // (heavy dashed). When two same-island beats are adjacent without
+    // a direct ref between them, the separator defaults to 'continues'.
+    function computePaperGroups(beats, islandOf) {
         const groups = [];
         if (beats.length === 0) return groups;
         let start = 0;
@@ -320,14 +329,16 @@
         for (let i = 1; i < beats.length; i++) {
             const cur = beats[i];
             const prev = beats[i - 1];
-            let kind = null;
-            if (cur.continues_from_beat_id === prev.beat_id) kind = 'continues';
-            else if (cur.include_beat_id === prev.beat_id) kind = 'includes';
-            if (kind === null) {
+            const sameIsland = islandOf
+                && islandOf.get(cur.beat_id) === islandOf.get(prev.beat_id);
+            if (!sameIsland) {
                 groups.push({ start, end: i - 1, separators });
                 start = i;
                 separators = [];
             } else {
+                let kind = 'continues';
+                if (cur.include_beat_id === prev.beat_id
+                    || prev.include_beat_id === cur.beat_id) kind = 'includes';
                 separators.push(kind);
             }
         }

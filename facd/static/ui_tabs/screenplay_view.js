@@ -269,26 +269,57 @@
             arrowLayer.setAttribute('width', board.scrollWidth);
             arrowLayer.setAttribute('height', board.scrollHeight);
 
-            // Per-beat anchor point (in board coords) at the "exit" edge.
-            const anchors = [];
+            // Per-beat sticky-note rectangle in board coords. We later
+            // pick specific anchor points along the appropriate edge
+            // and offset them so multiple arrows don't overlap.
+            const rects = [];
             beatEls.forEach(el => {
                 const sticky = el.querySelector('.screenplay-sticky-note');
-                if (!sticky) { anchors.push(null); return; }
+                if (!sticky) { rects.push(null); return; }
                 const r = sticky.getBoundingClientRect();
-                if (isHorizontal) {
-                    // bottom edge, centered horizontally
-                    anchors.push({
-                        primary: (r.left + r.right) / 2 - boardRect.left, // x
-                        cross:   r.bottom - boardRect.top,                 // y
-                    });
-                } else {
-                    // right edge, centered vertically
-                    anchors.push({
-                        primary: (r.top + r.bottom) / 2 - boardRect.top,   // y
-                        cross:   r.right - boardRect.left,                  // x
-                    });
-                }
+                rects.push({
+                    left:   r.left   - boardRect.left,
+                    right:  r.right  - boardRect.left,
+                    top:    r.top    - boardRect.top,
+                    bottom: r.bottom - boardRect.top,
+                });
             });
+
+            // Helper: compute an anchor along a sticky's edge, given a
+            // position index (0..n-1 of n total anchors on that edge).
+            // Anchors are distributed in the middle 60% of the edge to
+            // keep them centered-ish while still being distinct.
+            function edgeAnchor(idx, edge, posIdx, total) {
+                const r = rects[idx];
+                if (!r) return null;
+                const t = total <= 1 ? 0.5 : (0.2 + 0.6 * posIdx / (total - 1));
+                if (edge === 'top') {
+                    return { x: r.left + (r.right - r.left) * t, y: r.top };
+                } else if (edge === 'bottom') {
+                    return { x: r.left + (r.right - r.left) * t, y: r.bottom };
+                } else if (edge === 'left') {
+                    return { x: r.left, y: r.top + (r.bottom - r.top) * t };
+                } else {
+                    return { x: r.right, y: r.top + (r.bottom - r.top) * t };
+                }
+            }
+
+            function scrollBeatIntoView(beatId) {
+                const el = board.querySelector(
+                    `.screenplay-beat[data-beat_id="${beatId}"]`);
+                if (!el) return;
+                el.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center',
+                    inline: 'center',
+                });
+                // Brief highlight flash to make the destination obvious.
+                const sticky = el.querySelector('.screenplay-sticky-note');
+                if (sticky) {
+                    sticky.classList.add('flash-highlight');
+                    setTimeout(() => sticky.classList.remove('flash-highlight'), 1200);
+                }
+            }
 
             // Build list of arrows. Each arrow has a 'kind':
             //   'continues' - solid, colored from island
@@ -344,6 +375,60 @@
             });
 
             const svgNS = 'http://www.w3.org/2000/svg';
+            // Collect anchor requests per (beat index, edge) so we can
+            // distribute them along the edge once we know the total
+            // count. Each request gets a unique posIdx in [0, total-1].
+            const anchorRequests = new Map(); // key "idx|edge" -> [request, ...]
+            function requestAnchor(beatIdx, edge, request) {
+                const key = beatIdx + '|' + edge;
+                if (!anchorRequests.has(key)) anchorRequests.set(key, []);
+                anchorRequests.get(key).push(request);
+            }
+
+            // Gutter-arrow exit/entry edges depend on orientation.
+            const gutterEdge = isHorizontal ? 'bottom' : 'right';
+            arrows.forEach(a => {
+                requestAnchor(a.srcIdx, gutterEdge, { arrow: a, role: 'src' });
+                requestAnchor(a.dstIdx, gutterEdge, { arrow: a, role: 'dst' });
+            });
+
+            // Direct-arrow edges depend on src/dst index ordering.
+            directArrows.forEach(a => {
+                let srcEdge, dstEdge;
+                if (isHorizontal) {
+                    srcEdge = a.srcIdx < a.dstIdx ? 'right' : 'left';
+                    dstEdge = a.srcIdx < a.dstIdx ? 'left'  : 'right';
+                } else {
+                    srcEdge = a.srcIdx < a.dstIdx ? 'bottom' : 'top';
+                    dstEdge = a.srcIdx < a.dstIdx ? 'top'    : 'bottom';
+                }
+                requestAnchor(a.srcIdx, srcEdge, { arrow: a, role: 'src' });
+                requestAnchor(a.dstIdx, dstEdge, { arrow: a, role: 'dst' });
+            });
+
+            // Resolve positions: for each edge, sort requests by the
+            // index of the "other" beat so arrows fan out predictably,
+            // then assign posIdx.
+            anchorRequests.forEach((reqs, key) => {
+                reqs.sort((x, y) => {
+                    const ox = x.role === 'src' ? x.arrow.dstIdx : x.arrow.srcIdx;
+                    const oy = y.role === 'src' ? y.arrow.dstIdx : y.arrow.srcIdx;
+                    return ox - oy;
+                });
+                reqs.forEach((req, i) => {
+                    req.posIdx = i;
+                    req.total = reqs.length;
+                    req.key = key;
+                });
+            });
+
+            function resolveAnchor(beatIdx, edge, arrow, role) {
+                const reqs = anchorRequests.get(beatIdx + '|' + edge) || [];
+                const req = reqs.find(r => r.arrow === arrow && r.role === role);
+                if (!req) return null;
+                return edgeAnchor(beatIdx, edge, req.posIdx, req.total);
+            }
+
             function arrowColor(a) {
                 const srcBeatId = beats[a.srcIdx].beat_id;
                 if (a.kind === 'includes') {
@@ -351,34 +436,58 @@
                 }
                 return colorOf.get(srcBeatId) || '#444';
             }
+
+            function attachClickHandlers(linePath, headPath, arrow) {
+                const srcBeatId = beats[arrow.srcIdx].beat_id;
+                const dstBeatId = beats[arrow.dstIdx].beat_id;
+                linePath.classList.add('arrow-line');
+                headPath.classList.add('arrow-head');
+                linePath.addEventListener('click', e => {
+                    e.stopPropagation();
+                    scrollBeatIntoView(dstBeatId);
+                });
+                headPath.addEventListener('click', e => {
+                    e.stopPropagation();
+                    scrollBeatIntoView(srcBeatId);
+                });
+            }
+
             arrows.forEach(a => {
-                const src = anchors[a.srcIdx];
-                const dst = anchors[a.dstIdx];
+                const src = resolveAnchor(a.srcIdx, gutterEdge, a, 'src');
+                const dst = resolveAnchor(a.dstIdx, gutterEdge, a, 'dst');
                 if (!src || !dst) return;
                 const color = arrowColor(a);
-                const laneCross = Math.max(src.cross, dst.cross)
+                // Convert anchor x,y to (primary, cross) in the gutter
+                // coordinate system used below.
+                let srcP, srcC, dstP, dstC, laneCross;
+                if (isHorizontal) {
+                    srcP = src.x; srcC = src.y;
+                    dstP = dst.x; dstC = dst.y;
+                } else {
+                    srcP = src.y; srcC = src.x;
+                    dstP = dst.y; dstC = dst.x;
+                }
+                laneCross = Math.max(srcC, dstC)
                     + ARROW_BASE_OFFSET + a.lane * ARROW_LANE_DEPTH;
                 const h = ARROW_HEAD_SIZE;
 
                 let d, headD;
                 if (isHorizontal) {
-                    // primary=x, cross=y. Path: down, across, up.
-                    d = `M ${src.primary} ${src.cross} ` +
-                        `L ${src.primary} ${laneCross} ` +
-                        `L ${dst.primary} ${laneCross} ` +
-                        `L ${dst.primary} ${dst.cross}`;
-                    headD = `M ${dst.primary - h} ${dst.cross + h} ` +
-                            `L ${dst.primary} ${dst.cross} ` +
-                            `L ${dst.primary + h} ${dst.cross + h}`;
+                    d = `M ${srcP} ${srcC} ` +
+                        `L ${srcP} ${laneCross} ` +
+                        `L ${dstP} ${laneCross} ` +
+                        `L ${dstP} ${dstC}`;
+                    headD = `M ${dstP - h} ${dstC + h} ` +
+                            `L ${dstP} ${dstC} ` +
+                            `L ${dstP + h} ${dstC + h}`;
                 } else {
-                    // primary=y, cross=x. Path: right, down/up, left.
-                    d = `M ${src.cross} ${src.primary} ` +
-                        `L ${laneCross} ${src.primary} ` +
-                        `L ${laneCross} ${dst.primary} ` +
-                        `L ${dst.cross} ${dst.primary}`;
-                    headD = `M ${dst.cross + h} ${dst.primary - h} ` +
-                            `L ${dst.cross} ${dst.primary} ` +
-                            `L ${dst.cross + h} ${dst.primary + h}`;
+                    d = `M ${srcC} ${srcP} ` +
+                        `L ${laneCross} ${srcP} ` +
+                        `L ${laneCross} ${dstP} ` +
+                        `L ${dstC} ${dstP}`;
+                    headD = `M ${dstC + h} ${dstP - h} ` +
+                            `L ${dstC} ${dstP} ` +
+                            `L ${dstC + h} ${dstP + h}`;
                 }
 
                 const path = document.createElementNS(svgNS, 'path');
@@ -390,40 +499,39 @@
                 head.setAttribute('d', headD);
                 head.setAttribute('stroke', color);
                 arrowLayer.appendChild(head);
+                attachClickHandlers(path, head, a);
             });
 
             // Direct (non-gutter) arrows: from one sticky's near edge to
             // the adjacent sticky's near edge. Vertical only for
             // continues; both orientations possible for includes.
             directArrows.forEach(a => {
-                const srcEl = beatEls[a.srcIdx];
-                const dstEl = beatEls[a.dstIdx];
-                if (!srcEl || !dstEl) return;
-                const srcSticky = srcEl.querySelector('.screenplay-sticky-note');
-                const dstSticky = dstEl.querySelector('.screenplay-sticky-note');
-                if (!srcSticky || !dstSticky) return;
-                const sr = srcSticky.getBoundingClientRect();
-                const dr = dstSticky.getBoundingClientRect();
+                let srcEdge, dstEdge;
+                if (isHorizontal) {
+                    srcEdge = a.srcIdx < a.dstIdx ? 'right' : 'left';
+                    dstEdge = a.srcIdx < a.dstIdx ? 'left'  : 'right';
+                } else {
+                    srcEdge = a.srcIdx < a.dstIdx ? 'bottom' : 'top';
+                    dstEdge = a.srcIdx < a.dstIdx ? 'top'    : 'bottom';
+                }
+                const src = resolveAnchor(a.srcIdx, srcEdge, a, 'src');
+                const dst = resolveAnchor(a.dstIdx, dstEdge, a, 'dst');
+                if (!src || !dst) return;
                 const color = arrowColor(a);
                 const h = ARROW_HEAD_SIZE;
                 let d, headD;
                 if (isHorizontal) {
-                    // src at left of dst or right of dst
-                    const srcX = a.srcIdx < a.dstIdx ? sr.right : sr.left;
-                    const dstX = a.srcIdx < a.dstIdx ? dr.left : dr.right;
-                    const y = ((sr.top + sr.bottom) / 2 + (dr.top + dr.bottom) / 2) / 2 - boardRect.top;
-                    const sx = srcX - boardRect.left, dx = dstX - boardRect.left;
-                    d = `M ${sx} ${y} L ${dx} ${y}`;
-                    const sign = dx > sx ? -1 : 1;
-                    headD = `M ${dx + sign * h} ${y - h} L ${dx} ${y} L ${dx + sign * h} ${y + h}`;
+                    d = `M ${src.x} ${src.y} L ${dst.x} ${dst.y}`;
+                    const sign = dst.x > src.x ? -1 : 1;
+                    headD = `M ${dst.x + sign * h} ${dst.y - h} ` +
+                            `L ${dst.x} ${dst.y} ` +
+                            `L ${dst.x + sign * h} ${dst.y + h}`;
                 } else {
-                    const srcY = a.srcIdx < a.dstIdx ? sr.bottom : sr.top;
-                    const dstY = a.srcIdx < a.dstIdx ? dr.top : dr.bottom;
-                    const x = ((sr.left + sr.right) / 2 + (dr.left + dr.right) / 2) / 2 - boardRect.left;
-                    const sy = srcY - boardRect.top, dy = dstY - boardRect.top;
-                    d = `M ${x} ${sy} L ${x} ${dy}`;
-                    const sign = dy > sy ? -1 : 1;
-                    headD = `M ${x - h} ${dy + sign * h} L ${x} ${dy} L ${x + h} ${dy + sign * h}`;
+                    d = `M ${src.x} ${src.y} L ${dst.x} ${dst.y}`;
+                    const sign = dst.y > src.y ? -1 : 1;
+                    headD = `M ${dst.x - h} ${dst.y + sign * h} ` +
+                            `L ${dst.x} ${dst.y} ` +
+                            `L ${dst.x + h} ${dst.y + sign * h}`;
                 }
                 const path = document.createElementNS(svgNS, 'path');
                 path.setAttribute('d', d);
@@ -433,6 +541,7 @@
                 head.setAttribute('d', headD);
                 head.setAttribute('stroke', color);
                 arrowLayer.appendChild(head);
+                attachClickHandlers(path, head, a);
             });
         }
 
@@ -451,7 +560,7 @@
 
             const islands = C.computeIslands(beats);
             lastIslands = islands;
-            const groups = C.computePaperGroups(beats);
+            const groups = C.computePaperGroups(beats, islands.islandOf);
             const includeDepths = C.computeIncludeDepths(beats);
 
             // Per-beat displayed sticky color, with include-graying applied.
