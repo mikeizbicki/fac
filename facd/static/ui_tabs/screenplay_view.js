@@ -39,11 +39,39 @@
         let currentBeats = [];
         let lastIslands = null;
         const registeredPaths = new Set();
+        let savingOverlay = null;
+        let savingTimeout = null;
+
+        function showSavingOverlay(message) {
+            if (!container) return;
+            if (!savingOverlay) {
+                savingOverlay = document.createElement('div');
+                savingOverlay.className = 'screenplay-saving-overlay';
+                const spinner = document.createElement('div');
+                spinner.className = 'screenplay-saving-spinner';
+                const msg = document.createElement('div');
+                msg.className = 'screenplay-saving-message';
+                msg.textContent = message || 'Saving...';
+                savingOverlay.appendChild(spinner);
+                savingOverlay.appendChild(msg);
+                container.appendChild(savingOverlay);
+            }
+        }
+
+        function hideSavingOverlay() {
+            if (savingOverlay && savingOverlay.parentElement) {
+                savingOverlay.parentElement.removeChild(savingOverlay);
+            }
+            savingOverlay = null;
+            if (savingTimeout) { clearTimeout(savingTimeout); savingTimeout = null; }
+        }
 
         // --- Save wrappers ---
 
         function saveAndCatch(beats, message) {
+            showSavingOverlay(message ? ('Saving: ' + message) : 'Saving...');
             return C.saveScreenplay(beats, message).catch(err => {
+                hideSavingOverlay();
                 console.error('screenplay_view save failed:', err);
                 alert('Save failed: ' + err.message);
             });
@@ -622,6 +650,7 @@
 
         function handleScreenplayUpdate(content) {
             currentBeats = content ? C.parseScreenplayXml(content) : [];
+            hideSavingOverlay();
             renderBoard(currentBeats);
         }
 
