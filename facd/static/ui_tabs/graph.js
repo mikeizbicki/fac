@@ -34,9 +34,12 @@
 // Cytoscape is loaded from a CDN on demand so we do not vendor it.
 
 (function() {
-    const CYTOSCAPE_URL = 'https://unpkg.com/cytoscape@3.30.2/dist/cytoscape.min.js';
-    const DAGRE_URL = 'https://unpkg.com/dagre@0.8.5/dist/dagre.min.js';
-    const CYTOSCAPE_DAGRE_URL = 'https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js';
+    //const CYTOSCAPE_URL = 'https://unpkg.com/cytoscape@3.30.2/dist/cytoscape.min.js';
+    //const DAGRE_URL = 'https://unpkg.com/dagre@0.8.5/dist/dagre.min.js';
+    //const CYTOSCAPE_DAGRE_URL = 'https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js';
+    const CYTOSCAPE_URL = '/static/external/cytoscape.min.js';
+    const DAGRE_URL = '/static/external/dagre.min.js';
+    const CYTOSCAPE_DAGRE_URL = '/static/external/cytoscape-dagre.js';
 
     // Layout tuning.
     const LEAF_W = 160;
