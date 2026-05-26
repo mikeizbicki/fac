@@ -30,9 +30,20 @@ from facd import monitor_jobs
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    def run_daemon_in_thread():
-        asyncio.run(app.state.build_daemon())
-    daemon_task = asyncio.create_task(asyncio.to_thread(run_daemon_in_thread))
+    # FIXME:
+    # If the build daemon is run in a single thread with the FastAPI server,
+    # then the server sometimes has slow responses.
+    # This happens when the daemon is in the middle of a CPU-heavy task.
+    # Multithreading fixes the issue,
+    # but the build daemon isn't thread-safe :(
+    multithread = False
+    if multithread:
+        def run_daemon_in_thread():
+            asyncio.run(app.state.build_daemon())
+        daemon_task = asyncio.create_task(asyncio.to_thread(run_daemon_in_thread))
+
+    else:
+        daemon_task = asyncio.create_task(app.state.build_daemon())
 
     yield
 

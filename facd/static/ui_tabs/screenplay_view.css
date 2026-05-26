@@ -40,7 +40,7 @@
 /* Rows container holds the paper groups. */
 .screenplay-rows {
     display: flex;
-    gap: 24px;
+    gap: 2px;
 }
 .screenplay-rows[data-orientation="vertical"] {
     gap: 2px;
@@ -277,6 +277,11 @@
     font-size: 9pt;
     align-self: flex-start;
     width: 400px;
+}
+.screenplay-container[data-orientation="horizontal"] .screenplay-sticky-note {
+    margin-top: 12px;
+    min-height: 260px;
+    width: 100%;
 }
 
 .sticky-meta-grid {
