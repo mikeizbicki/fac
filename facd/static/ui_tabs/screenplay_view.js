@@ -471,34 +471,48 @@
                     + ARROW_BASE_OFFSET + a.lane * ARROW_LANE_DEPTH;
                 const h = ARROW_HEAD_SIZE;
 
-                let d, headD;
+                // Split the arrow into two paths:
+                //   - lineD: the long routing portion from the source
+                //            sticky out to (and along) the lane.
+                //   - tailHeadD: the final segment from the lane back
+                //            to the destination, fused with the
+                //            arrowhead, so the drop-shadow casts as a
+                //            single shape and doesn't break the line.
+                // We append the tail+head path *first*, then the line
+                // path, so the line is painted on top and the head's
+                // shadow falls behind the line rather than across it.
+                let lineD, tailHeadD;
                 if (isHorizontal) {
-                    d = `M ${srcP} ${srcC} ` +
-                        `L ${srcP} ${laneCross} ` +
-                        `L ${dstP} ${laneCross} ` +
-                        `L ${dstP} ${dstC}`;
-                    headD = `M ${dstP - h} ${dstC + h} ` +
-                            `L ${dstP} ${dstC} ` +
-                            `L ${dstP + h} ${dstC + h}`;
+                    lineD = `M ${srcP} ${srcC} ` +
+                            `L ${srcP} ${laneCross} ` +
+                            `L ${dstP} ${laneCross}`;
+                    tailHeadD = `M ${dstP} ${laneCross} ` +
+                                `L ${dstP} ${dstC} ` +
+                                `M ${dstP - h} ${dstC + h} ` +
+                                `L ${dstP} ${dstC} ` +
+                                `L ${dstP + h} ${dstC + h}`;
                 } else {
-                    d = `M ${srcC} ${srcP} ` +
-                        `L ${laneCross} ${srcP} ` +
-                        `L ${laneCross} ${dstP} ` +
-                        `L ${dstC} ${dstP}`;
-                    headD = `M ${dstC + h} ${dstP - h} ` +
-                            `L ${dstC} ${dstP} ` +
-                            `L ${dstC + h} ${dstP + h}`;
+                    lineD = `M ${srcC} ${srcP} ` +
+                            `L ${laneCross} ${srcP} ` +
+                            `L ${laneCross} ${dstP}`;
+                    tailHeadD = `M ${laneCross} ${dstP} ` +
+                                `L ${dstC} ${dstP} ` +
+                                `M ${dstC + h} ${dstP - h} ` +
+                                `L ${dstC} ${dstP} ` +
+                                `L ${dstC + h} ${dstP + h}`;
                 }
 
+                // Append head first (drawn under), then line (drawn over).
+                const head = document.createElementNS(svgNS, 'path');
+                head.setAttribute('d', tailHeadD);
+                head.setAttribute('stroke', color);
+                arrowLayer.appendChild(head);
+
                 const path = document.createElementNS(svgNS, 'path');
-                path.setAttribute('d', d);
+                path.setAttribute('d', lineD);
                 path.setAttribute('stroke', color);
                 arrowLayer.appendChild(path);
 
-                const head = document.createElementNS(svgNS, 'path');
-                head.setAttribute('d', headD);
-                head.setAttribute('stroke', color);
-                arrowLayer.appendChild(head);
                 attachClickHandlers(path, head, a);
             });
 
@@ -519,28 +533,31 @@
                 if (!src || !dst) return;
                 const color = arrowColor(a);
                 const h = ARROW_HEAD_SIZE;
-                let d, headD;
+                // For direct arrows we likewise fuse the (very short)
+                // line and arrowhead into one shape, and draw the
+                // separate line beneath, so shadows are consistent.
+                let lineD, tailHeadD;
                 if (isHorizontal) {
-                    d = `M ${src.x} ${src.y} L ${dst.x} ${dst.y}`;
+                    lineD = `M ${src.x} ${src.y} L ${dst.x} ${dst.y}`;
                     const sign = dst.x > src.x ? -1 : 1;
-                    headD = `M ${dst.x + sign * h} ${dst.y - h} ` +
-                            `L ${dst.x} ${dst.y} ` +
-                            `L ${dst.x + sign * h} ${dst.y + h}`;
+                    tailHeadD = `M ${dst.x + sign * h} ${dst.y - h} ` +
+                                `L ${dst.x} ${dst.y} ` +
+                                `L ${dst.x + sign * h} ${dst.y + h}`;
                 } else {
-                    d = `M ${src.x} ${src.y} L ${dst.x} ${dst.y}`;
+                    lineD = `M ${src.x} ${src.y} L ${dst.x} ${dst.y}`;
                     const sign = dst.y > src.y ? -1 : 1;
-                    headD = `M ${dst.x - h} ${dst.y + sign * h} ` +
-                            `L ${dst.x} ${dst.y} ` +
-                            `L ${dst.x + h} ${dst.y + sign * h}`;
+                    tailHeadD = `M ${dst.x - h} ${dst.y + sign * h} ` +
+                                `L ${dst.x} ${dst.y} ` +
+                                `L ${dst.x + h} ${dst.y + sign * h}`;
                 }
-                const path = document.createElementNS(svgNS, 'path');
-                path.setAttribute('d', d);
-                path.setAttribute('stroke', color);
-                arrowLayer.appendChild(path);
                 const head = document.createElementNS(svgNS, 'path');
-                head.setAttribute('d', headD);
+                head.setAttribute('d', tailHeadD);
                 head.setAttribute('stroke', color);
                 arrowLayer.appendChild(head);
+                const path = document.createElementNS(svgNS, 'path');
+                path.setAttribute('d', lineD);
+                path.setAttribute('stroke', color);
+                arrowLayer.appendChild(path);
                 attachClickHandlers(path, head, a);
             });
         }

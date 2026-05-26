@@ -318,9 +318,15 @@
     // Returns an array of groups, each:
     //   { start, end, separators: [type, ...] }
     // where separators[k] describes the join between beats start+k and
-    // start+k+1, and is either 'continues' (light dotted) or 'includes'
-    // (heavy dashed). When two same-island beats are adjacent without
-    // a direct ref between them, the separator defaults to 'continues'.
+    // start+k+1. The separator describes the relationship of the
+    // *later* beat to anything earlier:
+    //   - 'continues': the later beat has continues_from_beat_id set
+    //                  (drawn as a light dotted line).
+    //   - 'includes':  the later beat has include_beat_id set but no
+    //                  continues_from_beat_id (drawn as a heavy dashed
+    //                  line).
+    //   - null:        no direct ref on the later beat; no decorative
+    //                  divider is drawn.
     function computePaperGroups(beats, islandOf) {
         const groups = [];
         if (beats.length === 0) return groups;
@@ -336,9 +342,12 @@
                 start = i;
                 separators = [];
             } else {
-                let kind = 'continues';
-                if (cur.include_beat_id === prev.beat_id
-                    || prev.include_beat_id === cur.beat_id) kind = 'includes';
+                let kind = null;
+                if (cur.continues_from_beat_id) {
+                    kind = 'continues';
+                } else if (cur.include_beat_id) {
+                    kind = 'includes';
+                }
                 separators.push(kind);
             }
         }

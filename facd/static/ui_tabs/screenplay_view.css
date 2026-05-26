@@ -92,13 +92,15 @@
     width: 420px;
 }
 
-/* Dotted divider between same-paper beats. */
+/* Dotted divider between same-paper beats: only when the later beat
+ * uses continues_from_beat_id. Beats with no separator attribute get
+ * no decorative divider. */
 .screenplay-container[data-orientation="vertical"]
-    .screenplay-paper > .screenplay-beat + .screenplay-beat {
+    .screenplay-paper > .screenplay-beat[data-separator="continues"] {
     border-top: 1px dashed #bbb;
 }
 .screenplay-container[data-orientation="horizontal"]
-    .screenplay-paper > .screenplay-beat + .screenplay-beat {
+    .screenplay-paper > .screenplay-beat[data-separator="continues"] {
     border-left: 1px dashed #bbb;
 }
 
