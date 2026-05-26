@@ -1,4 +1,5 @@
 // videos.js
+// (exposes window._refreshVideoContainers via its own internals if present)
 //
 // This component handles display of video files in the target tree.
 // When a path node has mime-type video/*, it registers for video loading

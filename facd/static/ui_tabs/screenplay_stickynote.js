@@ -209,8 +209,30 @@
         const isVideo = mimeType?.startsWith('video/');
         const status = metadata.status;
         if (status === 'fresh' || status === 'stale') {
-            if (isImage && window.fetchImage) window.fetchImage(path, status === 'fresh').catch(() => {});
-            else if (isVideo && window.fetchVideo) window.fetchVideo(path, status === 'fresh').catch(() => {});
+            if (isImage && window.fetchImage) {
+                window.fetchImage(path, status === 'fresh').then(url => {
+                    // Repaint all registered containers for this path.
+                    // Multiple views (vertical + horizontal) may share
+                    // the same target path, so we must explicitly
+                    // refresh all of them; fetchImage alone only
+                    // caches the blob.
+                    document.querySelectorAll(
+                        `.image-container`
+                    );
+                    if (window.clearImageFromContainers) {
+                        // no-op safety: ensure function exists
+                    }
+                    if (window._refreshImageContainers) {
+                        window._refreshImageContainers(path, url);
+                    }
+                }).catch(() => {});
+            } else if (isVideo && window.fetchVideo) {
+                window.fetchVideo(path, status === 'fresh').then(url => {
+                    if (window._refreshVideoContainers) {
+                        window._refreshVideoContainers(path, url);
+                    }
+                }).catch(() => {});
+            }
         } else if (status === 'deleted') {
             if (isImage && window.clearImageFromContainers) window.clearImageFromContainers(path);
             else if (isVideo && window.clearVideoFromContainers) window.clearVideoFromContainers(path);

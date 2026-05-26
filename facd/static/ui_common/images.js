@@ -86,6 +86,8 @@
         }
     }
 
+    window._refreshImageContainers = refreshAllContainers;
+
     function isImageMimeType(mimeType) {
         return mimeType && mimeType.startsWith('image/');
     }
