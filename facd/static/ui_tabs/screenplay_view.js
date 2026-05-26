@@ -346,7 +346,9 @@
                     const dst = beats.findIndex(x => x.beat_id === b.include_beat_id);
                     if (dst >= 0) {
                         if (Math.abs(i - dst) <= 1) {
-                            directArrows.push({ srcIdx: i, dstIdx: dst, kind: 'includes' });
+                            if (!isHorizontal) {
+                                directArrows.push({ srcIdx: i, dstIdx: dst, kind: 'includes' });
+                            }
                         } else {
                             arrows.push({ srcIdx: i, dstIdx: dst, kind: 'includes' });
                         }
@@ -550,14 +552,16 @@
                                 `L ${dst.x} ${dst.y} ` +
                                 `L ${dst.x + h} ${dst.y + sign * h}`;
                 }
-                const head = document.createElementNS(svgNS, 'path');
-                head.setAttribute('d', tailHeadD);
-                head.setAttribute('stroke', color);
-                arrowLayer.appendChild(head);
+                // For direct arrows, draw the line first and then the
+                // arrowhead on top so the head is clearly visible.
                 const path = document.createElementNS(svgNS, 'path');
                 path.setAttribute('d', lineD);
                 path.setAttribute('stroke', color);
                 arrowLayer.appendChild(path);
+                const head = document.createElementNS(svgNS, 'path');
+                head.setAttribute('d', tailHeadD);
+                head.setAttribute('stroke', color);
+                arrowLayer.appendChild(head);
                 attachClickHandlers(path, head, a);
             });
         }
