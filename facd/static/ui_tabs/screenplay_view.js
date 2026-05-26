@@ -433,10 +433,10 @@
 
             function arrowColor(a) {
                 const srcBeatId = beats[a.srcIdx].beat_id;
-                if (a.kind === 'includes') {
-                    return (beatColors && beatColors.get(srcBeatId)) || '#888';
-                }
-                return colorOf.get(srcBeatId) || '#444';
+                // Arrows always match the (possibly grayed) source
+                // sticky color, regardless of arrow kind.
+                return (beatColors && beatColors.get(srcBeatId))
+                    || colorOf.get(srcBeatId) || '#444';
             }
 
             function attachClickHandlers(linePath, headPath, arrow) {
