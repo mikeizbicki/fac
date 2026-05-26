@@ -229,6 +229,15 @@
     line-height: 1.4;
 }
 
+/* Visual indication that the beat content is editable: a blue
+ * outline around the content box. Using `outline` rather than
+ * `border` avoids shifting the text inside, since outlines do not
+ * occupy layout space. */
+.screenplay-beat-content.editing {
+    outline: 2px solid #4a90d9;
+    border-radius: 4px;
+}
+
 /* When a beat is being edited in vertical mode, make the content
  * area fill the full beat height so the textarea expands with it. */
 .screenplay-container[data-orientation="vertical"]
