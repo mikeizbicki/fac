@@ -11,6 +11,7 @@ from fac.Logging import logger
 from fastapi import Request, HTTPException
 from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
+import git
 
 
 class EditFileRequest(BaseModel):
@@ -172,6 +173,7 @@ class PathRoutes(Routable):
         Args:
             path: The relative path to the file
             body: JSON body with "content" field containing the new file contents
+            message: The commit message for the change
 
         Returns:
             {"status": "ok", "path": path}
@@ -188,6 +190,11 @@ class PathRoutes(Routable):
 
         with open(path, "w") as f:
             f.write(body.content)
+
+        repo = git.Repo(search_parent_directories=True)
+        repo.index.add([os.path.abspath(path)])
+        commit_message = body.message if body.message else f"Edit {path}"
+        repo.index.commit(commit_message)
 
         return {"status": "ok", "path": path}
 
@@ -209,6 +216,8 @@ class PathRoutes(Routable):
             raise HTTPException(status_code=404, detail=f"File not tracked: {path}")
 
         if os.path.exists(path):
-            os.remove(path)
+            repo = git.Repo(search_parent_directories=True)
+            repo.index.remove([path], working_tree=True)
+            repo.index.commit(f"delete {path}")
 
         return {"status": "ok", "path": path}
