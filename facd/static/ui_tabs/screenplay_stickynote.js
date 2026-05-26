@@ -94,6 +94,13 @@
             nodeEl.classList.add('expanded');
             mediaContainer = nodeEl.querySelector(
                 isImage ? '.image-container' : '.video-container');
+            if (!mediaContainer) {
+                // nodes.js doesn't create media containers for
+                // target-type nodes; create one ourselves.
+                mediaContainer = document.createElement('div');
+                mediaContainer.className = isImage ? 'image-container' : 'video-container';
+                nodeEl.insertBefore(mediaContainer, nodeEl.firstChild);
+            }
         } else if (nodeEl) {
             // Node is owned by another view. Deep-clone its DOM into
             // our wrapper so the sticky has the full tree-node
