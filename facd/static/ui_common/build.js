@@ -8,14 +8,15 @@
 
 (function() {
     function buildTarget(path, prompt) {
-        const params = new URLSearchParams();
-        params.append('target', path);
+        const body = { target: path };
         if (prompt && prompt.trim()) {
-            params.append('include_prompt', prompt.trim());
+            body.include_prompt = prompt.trim();
         }
 
-        fetch('/add_target?' + params.toString(), {
-            method: 'POST'
+        fetch('/add_target', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
         })
         .then(response => {
             if (!response.ok) throw new Error('Failed to queue build');
