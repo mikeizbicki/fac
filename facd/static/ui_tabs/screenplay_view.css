@@ -203,23 +203,44 @@
     margin: 0;
 }
 
-/* Edit textarea. */
+/* Edit textarea. Styled to match the rendered fountain output as
+ * closely as possible so that toggling edit mode does not visually
+ * shift the text: same font, same line-height, same padding, no
+ * background or border, and filling the beat-content box. */
 .beat-edit-textarea {
     width: 100%;
+    height: 100%;
     font-family: 'Courier New', Courier, monospace;
     font-size: 12pt;
     line-height: 1.5;
-    padding: 8px;
-    border: 2px solid #4a90d9;
-    border-radius: 4px;
+    padding: 0;
+    margin: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: inherit;
     resize: vertical;
     box-sizing: border-box;
-    min-height: 100px;
+    display: block;
 }
 .screenplay-container[data-orientation="horizontal"] .beat-edit-textarea {
     height: 220px;
     font-size: 11pt;
     line-height: 1.4;
+}
+
+/* When a beat is being edited in vertical mode, make the content
+ * area fill the full beat height so the textarea expands with it. */
+.screenplay-container[data-orientation="vertical"]
+    .screenplay-beat.editing .screenplay-beat-content {
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+}
+.screenplay-container[data-orientation="vertical"]
+    .screenplay-beat.editing .beat-edit-textarea {
+    flex: 1;
+    min-height: 100px;
 }
 
 .beat-edit-actions {
