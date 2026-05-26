@@ -90,7 +90,6 @@
 .screenplay-container[data-orientation="horizontal"] .screenplay-beat {
     flex-direction: column;
     width: 420px;
-    padding: 0 12px;
 }
 
 /* Dotted divider between same-paper beats. */
