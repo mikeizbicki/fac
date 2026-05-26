@@ -40,10 +40,6 @@
 /* Rows container holds the paper groups. */
 .screenplay-rows {
     display: flex;
-    gap: 2px;
-}
-.screenplay-rows[data-orientation="vertical"] {
-    gap: 2px;
 }
 
 .screenplay-container[data-orientation="vertical"] .screenplay-rows {
@@ -51,11 +47,13 @@
     align-items: stretch;
     max-width: 1100px;
     margin: 0 auto;
+    gap: 24px;
 }
 .screenplay-container[data-orientation="horizontal"] .screenplay-rows {
     flex-direction: row;
     align-items: flex-start;
     padding-bottom: 8px;
+    gap: 8px;
 }
 
 /* A "paper" groups one or more beats sharing a continues_from chain. */
