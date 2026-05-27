@@ -12,8 +12,13 @@
     const BEAT_TARGETS = {
         beat_type: 'beats/$BEAT_ID/beat_type',
         length_seconds: 'beats/$BEAT_ID/length_seconds',
+        dialog_duration_with_padding: 'beats/$BEAT_ID/processed_config/dialog_duration_with_padding',
+        truncate_video: 'beats/$BEAT_ID/processed_config/truncate_video',
+        add_sfx: 'beats/$BEAT_ID/sfx/add_sfx',
+        sfx_model: 'beats/$BEAT_ID/sfx/model',
         startframe: 'beats/$BEAT_ID/beat_type=standard/startframe.png',
         video: 'beats/$BEAT_ID/raw.mp4',
+        debug_video: 'beats/$BEAT_ID/debug.mp4',
     };
 
     function getTargetPath(key, beat_id) {
@@ -40,34 +45,6 @@
         valueSpan.className = 'sticky-meta-value';
         valueSpan.textContent = value;
         row.appendChild(valueSpan);
-        return row;
-    }
-
-    function createTargetRow(label, targetPath, registeredPaths) {
-        const row = document.createElement('div');
-        row.className = 'sticky-meta-row sticky-target-row';
-
-        const labelSpan = document.createElement('span');
-        labelSpan.className = 'sticky-meta-label';
-        labelSpan.textContent = label;
-        row.appendChild(labelSpan);
-
-        const valueSpan = document.createElement('span');
-        valueSpan.className = 'sticky-meta-value sticky-target-value';
-        valueSpan.dataset.targetPath = targetPath;
-
-        // Initial text content from any cached path state delivered
-        // via the SSE stream so far. No tree-node is created or
-        // hidden in the sticky -- the value span is the entire UI.
-        const state = window.getPathState && window.getPathState(targetPath);
-        if (state && state.status !== 'notbuilt' && state.content) {
-            valueSpan.textContent = state.content.trim() || '—';
-        } else {
-            valueSpan.textContent = '—';
-        }
-
-        row.appendChild(valueSpan);
-        registeredPaths.add(targetPath);
         return row;
     }
 
@@ -165,10 +142,16 @@
         wrapper.appendChild(createMediaHeader(targetPath, filename));
 
         const isImage = mimeType.startsWith('image/');
-        wrapper.classList.add(isImage ? 'has-image' : 'has-video');
+        const isVideo = mimeType.startsWith('video/');
+        const isText = mimeType.startsWith('text/');
+        if (isImage) wrapper.classList.add('has-image');
+        else if (isVideo) wrapper.classList.add('has-video');
+        else if (isText) wrapper.classList.add('has-text');
 
         const mediaContainer = document.createElement('div');
-        mediaContainer.className = isImage ? 'image-container' : 'video-container';
+        mediaContainer.className = isImage
+            ? 'image-container'
+            : (isVideo ? 'video-container' : 'text-container');
         wrapper.appendChild(mediaContainer);
 
         // Status overlay. data-status on .sticky-media-wrapper drives
@@ -195,7 +178,7 @@
             if (status !== 'notbuilt' && window.fetchImage) {
                 window.fetchImage(targetPath, false).catch(() => {});
             }
-        } else {
+        } else if (isVideo) {
             if (window.registerVideoContainer) {
                 window.registerImageContainer(targetPath, mediaContainer, 'leaf-image');
                 window.registerVideoContainer(targetPath, mediaContainer, 'leaf-video');
@@ -203,6 +186,15 @@
             if (status !== 'notbuilt' && window.fetchVideo) {
                 window.fetchVideo(targetPath, false).catch(() => {});
             }
+        } else if (isText) {
+            // Text targets: render the file content (or em-dash if
+            // not yet built) directly in the container. The
+            // monitor_files SSE will repaint this via
+            // handleTargetUpdate when content arrives.
+            mediaContainer.classList.add('sticky-text-content');
+            const state = window.getPathState && window.getPathState(targetPath);
+            const content = (state && state.content) ? state.content.trim() : '';
+            mediaContainer.textContent = content || '—';
         }
         registeredPaths.add(targetPath);
         return wrapper;
@@ -223,20 +215,33 @@
             beat.continues_from_beat_id || '—'));
         grid.appendChild(createMetaRow('INCLUDES',
             beat.include_beat_id || '—'));
-        grid.appendChild(createTargetRow('beat_type',
-            getTargetPath('beat_type', beat.beat_id), registeredPaths));
-        grid.appendChild(createTargetRow('length_seconds',
-            getTargetPath('length_seconds', beat.beat_id), registeredPaths));
         sticky.appendChild(grid);
 
         const media = document.createElement('div');
         media.className = 'sticky-media-section';
+        // Text-backed targets first, so they appear above images/videos.
+        const textTargets = [
+            ['beat_type',                     'beat_type'],
+            ['length_seconds',                'length_seconds'],
+            ['dialog_duration_with_padding',  'dialog_duration_with_padding'],
+            ['truncate_video',                'truncate_video'],
+            ['add_sfx',                       'add_sfx'],
+            ['sfx_model',                     'sfx_model'],
+        ];
+        textTargets.forEach(([key, label]) => {
+            media.appendChild(createMediaNode(
+                getTargetPath(key, beat.beat_id),
+                label, 'text/plain', registeredPaths));
+        });
         media.appendChild(createMediaNode(
             getTargetPath('startframe', beat.beat_id),
             'startframe.png', 'image/png', registeredPaths));
         media.appendChild(createMediaNode(
             getTargetPath('video', beat.beat_id),
             'raw.mp4', 'video/mp4', registeredPaths));
+        media.appendChild(createMediaNode(
+            getTargetPath('debug_video', beat.beat_id),
+            'debug.mp4', 'video/mp4', registeredPaths));
         sticky.appendChild(media);
 
         return sticky;
@@ -264,18 +269,6 @@
     }
 
     function handleTargetUpdate(path, metadata) {
-        // Update every sticky note that shows this target (both the
-        // screenplay and storyboard views can be live at once).
-        const valueSpans = document.querySelectorAll(
-            `.sticky-target-value[data-target-path="${path}"]`);
-        valueSpans.forEach(valueSpan => {
-            if (metadata.status === 'notbuilt') {
-                valueSpan.textContent = '—';
-            } else if (metadata.content) {
-                valueSpan.textContent = metadata.content.trim() || '—';
-            }
-        });
-
         // Update every sticky-media-wrapper for this path: refresh
         // data-status (which the overlay CSS keys off), set the
         // overlay text, and re-trigger the flash animation.
@@ -286,6 +279,17 @@
             wrapper.dataset.status = status;
             const overlayText = wrapper.querySelector('.node-status-overlay-text');
             if (overlayText) overlayText.textContent = status.toUpperCase();
+
+            // For text-backed wrappers, also refresh the textual content.
+            const textContainer = wrapper.querySelector('.sticky-text-content');
+            if (textContainer) {
+                if (status === 'notbuilt' || !metadata.content) {
+                    textContainer.textContent = '—';
+                } else {
+                    textContainer.textContent = metadata.content.trim() || '—';
+                }
+            }
+
             const overlay = wrapper.querySelector('.node-status-overlay');
             if (overlay) {
                 overlay.classList.remove('status-flash');
