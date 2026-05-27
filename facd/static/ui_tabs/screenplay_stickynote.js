@@ -71,6 +71,70 @@
         return row;
     }
 
+    // Build a header bar with filename + build/delete buttons for a
+    // sticky-media-wrapper. This duplicates the relevant bits of
+    // build.js's tree-node header menu without depending on the
+    // tree-node DOM, because sticky wrappers intentionally don't
+    // reuse tree-nodes (see comment in createMediaNode).
+    function createMediaHeader(targetPath, filename) {
+        const header = document.createElement('div');
+        header.className = 'sticky-media-header';
+
+        const label = document.createElement('span');
+        label.className = 'sticky-media-label';
+        label.textContent = filename;
+        header.appendChild(label);
+
+        const menu = document.createElement('div');
+        menu.className = 'sticky-media-menu';
+
+        const buildBtn = document.createElement('button');
+        buildBtn.innerHTML = '🔨';
+        buildBtn.title = 'Build';
+        buildBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            // Optimistic state update on every sticky wrapper for this path.
+            document.querySelectorAll(
+                `.sticky-media-wrapper[data-path="${targetPath}"]`)
+                .forEach(w => { w.dataset.status = 'command_sent(build)'; });
+            fetch('/add_target', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ target: targetPath }),
+            }).then(r => {
+                if (!r.ok) throw new Error('Failed to queue build');
+                return r.json();
+            }).catch(err => {
+                console.error('Error queuing build:', err);
+                alert('Failed to queue build: ' + err.message);
+            });
+        });
+        menu.appendChild(buildBtn);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.innerHTML = '🗑️';
+        deleteBtn.title = 'Delete';
+        deleteBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            if (!confirm(`Are you sure you want to delete "${targetPath}"?`)) return;
+            document.querySelectorAll(
+                `.sticky-media-wrapper[data-path="${targetPath}"]`)
+                .forEach(w => { w.dataset.status = 'command_sent(delete)'; });
+            fetch(`/delete_file/${encodeURIComponent(targetPath)}`, { method: 'DELETE' })
+                .then(r => {
+                    if (!r.ok) throw new Error('Failed to delete file');
+                    return r.json();
+                }).catch(err => {
+                    console.error('Error deleting file:', err);
+                    alert('Failed to delete file: ' + err.message);
+                });
+        });
+        menu.appendChild(deleteBtn);
+
+        header.appendChild(menu);
+        return header;
+    }
+
     function createMediaNode(targetPath, filename, mimeType, registeredPaths) {
         // Build a self-contained sticky-media display: a media
         // container (image/video) plus a status overlay that mirrors
@@ -96,6 +160,9 @@
         wrapper.className = 'sticky-media-wrapper';
         wrapper.dataset.path = targetPath;
         wrapper.dataset.mimeType = mimeType;
+
+        // Header (filename + build/delete buttons).
+        wrapper.appendChild(createMediaHeader(targetPath, filename));
 
         const isImage = mimeType.startsWith('image/');
         wrapper.classList.add(isImage ? 'has-image' : 'has-video');

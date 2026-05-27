@@ -421,6 +421,44 @@
     min-height: 80px;
 }
 
+/* Header strip atop each sticky media wrapper: filename on the
+ * left, build/delete buttons on the right. The buttons must sit
+ * above the status overlay (which uses z-index 10) so they remain
+ * clickable even when an overlay is visible. */
+.sticky-media-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 2px 4px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 9pt;
+    position: relative;
+    z-index: 20;
+}
+.sticky-media-label {
+    font-weight: bold;
+    color: #333;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.sticky-media-menu {
+    display: flex;
+    gap: 2px;
+}
+.sticky-media-menu button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px 4px;
+    font-size: 12px;
+    border-radius: 3px;
+}
+.sticky-media-menu button:hover {
+    background: rgba(0, 0, 0, 0.08);
+}
+
 /* SVG arrow layer covers the board. */
 .screenplay-arrow-layer {
     position: absolute;
