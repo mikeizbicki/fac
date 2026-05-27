@@ -474,6 +474,46 @@
     overflow: auto;
 }
 
+/* Inline text-editor for text-backed sticky targets. Mirrors the
+ * compact look of .sticky-text-content so toggling between view and
+ * edit modes doesn't shift the sticky layout. */
+.sticky-text-editor {
+    width: 100%;
+    min-height: 40px;
+    max-height: 120px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 9pt;
+    padding: 2px 4px;
+    margin: 0;
+    border: 1px solid #4a90d9;
+    border-radius: 2px;
+    outline: none;
+    background: #fff;
+    color: #333;
+    resize: vertical;
+    box-sizing: border-box;
+    display: block;
+}
+.sticky-text-edit-actions {
+    display: flex;
+    gap: 4px;
+    justify-content: flex-end;
+    margin-top: 4px;
+}
+.sticky-text-edit-actions button {
+    padding: 2px 8px;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: bold;
+}
+.sticky-text-cancel { background: #ccc; color: #333; }
+.sticky-text-cancel:hover { background: #bbb; }
+.sticky-text-submit { background: #4a90d9; color: white; }
+.sticky-text-submit:hover:not(:disabled) { background: #3a7bc8; }
+.sticky-text-edit-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* SVG arrow layer covers the board. */
 .screenplay-arrow-layer {
     position: absolute;

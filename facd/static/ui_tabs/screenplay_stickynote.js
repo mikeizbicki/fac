@@ -53,7 +53,7 @@
     // build.js's tree-node header menu without depending on the
     // tree-node DOM, because sticky wrappers intentionally don't
     // reuse tree-nodes (see comment in createMediaNode).
-    function createMediaHeader(targetPath, filename) {
+    function createMediaHeader(targetPath, filename, mimeType) {
         const header = document.createElement('div');
         header.className = 'sticky-media-header';
 
@@ -88,6 +88,21 @@
         });
         menu.appendChild(buildBtn);
 
+        // Edit button for text-backed targets. The actual edit UI is
+        // wired up in createMediaNode (which owns the text container)
+        // via the data-edit-trigger attribute.
+        if (mimeType && mimeType.startsWith('text/')) {
+            const editBtn = document.createElement('button');
+            editBtn.innerHTML = '✏️';
+            editBtn.title = 'Edit';
+            editBtn.dataset.editTrigger = targetPath;
+            editBtn.addEventListener('click', e => {
+                e.stopPropagation();
+                startStickyTextEdit(targetPath);
+            });
+            menu.appendChild(editBtn);
+        }
+
         const deleteBtn = document.createElement('button');
         deleteBtn.innerHTML = '🗑️';
         deleteBtn.title = 'Delete';
@@ -110,6 +125,79 @@
 
         header.appendChild(menu);
         return header;
+    }
+
+    // Inline-edit a text-backed sticky-media wrapper. Mirrors the
+    // flow in build.js for tree-node text editing, but operates on
+    // the .sticky-text-content element inside the wrapper. Edits
+    // every matching wrapper across the DOM (vertical + horizontal
+    // views) but only one edit session is active per path at a time;
+    // we use the first wrapper as the editing surface.
+    function startStickyTextEdit(targetPath) {
+        const wrapper = document.querySelector(
+            `.sticky-media-wrapper[data-path="${targetPath}"]`);
+        if (!wrapper) return;
+        const textContainer = wrapper.querySelector('.sticky-text-content');
+        if (!textContainer) return;
+        if (wrapper.dataset.editing === 'true') return;
+        wrapper.dataset.editing = 'true';
+
+        const originalText = textContainer.textContent === '—'
+            ? '' : textContainer.textContent;
+
+        const textarea = document.createElement('textarea');
+        textarea.className = 'sticky-text-editor';
+        textarea.value = originalText;
+
+        const actions = document.createElement('div');
+        actions.className = 'sticky-text-edit-actions';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'sticky-text-cancel';
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            textarea.remove();
+            actions.remove();
+            textContainer.style.display = '';
+            wrapper.dataset.editing = 'false';
+        });
+
+        const submitBtn = document.createElement('button');
+        submitBtn.className = 'sticky-text-submit';
+        submitBtn.textContent = 'Submit';
+        submitBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            submitBtn.disabled = true;
+            cancelBtn.disabled = true;
+            wrapper.dataset.status = 'command_sent(edit)';
+            fetch(`/edit_file/${encodeURIComponent(targetPath)}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: textarea.value }),
+            }).then(r => {
+                if (!r.ok) throw new Error('Failed to edit file');
+                return r.json();
+            }).then(() => {
+                // SSE-driven handleTargetUpdate will repaint content.
+                textarea.remove();
+                actions.remove();
+                textContainer.style.display = '';
+                wrapper.dataset.editing = 'false';
+            }).catch(err => {
+                console.error('Error editing file:', err);
+                alert('Failed to edit file: ' + err.message);
+                submitBtn.disabled = false;
+                cancelBtn.disabled = false;
+            });
+        });
+
+        actions.appendChild(cancelBtn);
+        actions.appendChild(submitBtn);
+        textContainer.style.display = 'none';
+        textContainer.parentElement.insertBefore(textarea, textContainer.nextSibling);
+        textContainer.parentElement.insertBefore(actions, textarea.nextSibling);
+        textarea.focus();
     }
 
     function createMediaNode(targetPath, filename, mimeType, registeredPaths) {
@@ -139,7 +227,7 @@
         wrapper.dataset.mimeType = mimeType;
 
         // Header (filename + build/delete buttons).
-        wrapper.appendChild(createMediaHeader(targetPath, filename));
+        wrapper.appendChild(createMediaHeader(targetPath, filename, mimeType));
 
         const isImage = mimeType.startsWith('image/');
         const isVideo = mimeType.startsWith('video/');
