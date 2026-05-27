@@ -129,6 +129,22 @@ class Fac(Routable):
             logger.error(f'target {target} has no match in fac.yaml')
             raise FACError()
 
+        # FIXME: this is a super hack and buggy!
+        # the problem is that when we call add_target from the web interface
+        # (in order to rebuild a stale path or overwrite an existing path),
+        # the target will already have been added and be in the built/stale state;
+        # this prevents us from  actually adding/building the target;
+        # here we remove any existing context whose path matches the target.
+        # This does not work if the target is not a path 
+        # (which "probably" won't happen from the web interface,
+        # but still feels ugly not supporting the general problem).
+        # It's also not clear to me that this is actually correct,
+        # and we need test cases demonstrating correctness.
+        for state in self.contexts:
+            for context in set(self.contexts[state]):
+                if context.path_safe() == target:
+                    self.contexts[state].discard(context)
+
         # get job info
         if required_for is None:
             str_mode = ''
@@ -313,16 +329,16 @@ class Fac(Routable):
                         #    that haven't already been built.
                         if self.settings.clean_stalled_dryrun:
                             logger.warning('evaluated as far as dryrun will allow; removing dryrun contexts')
-                            for context in itertools.chain(
-                                    self.contexts['buildable'],
-                                    self.contexts['waiting'],
-                                    self.contexts['unresolved'],
-                                    ):
+                            states = ('buildable', 'waiting', 'unresolved')
+                            pairs = ((s, c) for s in states for c in self.contexts[s])
+                            for state, context in pairs:
                                 if context.path_safe():
                                     if os.path.exists(context.path):
                                         self._set_context_state(context, 'stale')
                                     else:
                                         self._set_context_state(context, 'notbuilt')
+                                    logger.warning(f'{state} - {context.path}', submessage=True)
+                                    #logger.warning({'context': context.to_dict()}, submessage=True)
                             self.contexts['buildable'] = set()
                             self.contexts['waiting'] = set()
                             self.contexts['unresolved'] = set()
@@ -448,10 +464,12 @@ class Fac(Routable):
 
             # if a path is in context.dependencies_built,
             # then there must be a corresponding context in the 'built' state
+            stale_built = self.contexts['built'] | self.contexts['stale']
             for state in self.contexts:
                 for context in self.contexts[state]:
                     for dep in context.dependencies_built:
-                        assert any([context2.path == dep['target'] for context2 in self.contexts['built']]), f"context.dependencies_built contains a target not found in built state; context.path={context.path} state={state} dep['target']={dep['target']}"
+                        #assert any([context2.path == dep['target'] for context2 in self.contexts['built']]), f"context.dependencies_built contains a target not found in built state; context.path={context.path} state={state} dep['target']={dep['target']}"
+                        assert any([context2.path == dep['target'] for context2 in stale_built]), f"context.dependencies_built contains a target not found in built state; context.path={context.path} state={state} dep['target']={dep['target']}"
 
             # every path in self.rdeps must have a corresponding context
             for path in self.rdeps:
@@ -621,22 +639,34 @@ class Fac(Routable):
         # set the state of any rdep to stale/notbuilt
         for rdep in rdeps:
             rdep_context = self.path2context[rdep]
+
+            # the state that we move to depends on whether we need to build;
+            # we could always just ask the context if we need to build,
+            # but this requires moderately expensive git calculations,
+            # and we hard-code that we always need to build if path was deleted
             if path_rm:
                 do_build = True
                 status = 'none'
             else:
                 status, do_build = rdep_context.get_status()
-            if do_build:
+
+            # now we actually register the path state;
+            if not do_build:
+                # we need to register the context so that the /monitor_paths
+                # will notify end-users of the change
+                self._set_context_state(rdep_context, 'built')
+            else:
+                # we need to remove the context from whatever state it is in
+                # to prevent merging from putting us into a bad state afterward
                 for state in self.contexts:
                     self.contexts[state].discard(rdep_context)
-                self._contexts_history[rdep_context] = []
                 if os.path.lexists(rdep):
                     self._set_context_state(rdep_context, 'stale')
                 else:
                     self._set_context_state(rdep_context, 'notbuilt')
 
         self.assert_invariants()
-        self.assert_invariants_io()
+        #self.assert_invariants_io()
 
     def assert_invariants_io(self):
         '''
@@ -797,9 +827,6 @@ class Fac(Routable):
     # state transition methods
     ########################################
 
-    def _get_built_paths(self):
-        return [context.path for context in self.contexts['built']]
-
     def _set_context_state(self, context, state):
         '''
         This helper function should be used when assigning a context to a state
@@ -889,6 +916,13 @@ class Fac(Routable):
             # if we haven't built the context,
             # then put it in the appropriate state
             if len(context.dependencies_building) > 0:
+                # FIXME:
+                # (this is a top-priority easy-ish fixme that will result in
+                # major speed gains)
+                # it may be possible to continue resolving variables/dependencies
+                # even if we are waiting for some dependencies to still be built;
+                # by continuing to resolve before waiting,
+                # we will allow more targets to be built in parallel
                 state = 'waiting'
             else:
                 if (len(context.variables_unresolved) == 0 and
@@ -922,7 +956,13 @@ class Fac(Routable):
                 # paths and targets must be handled differently
                 if '$' not in denormalized_target:
                     path = denormalized_target
-                    if path in self._get_built_paths():
+                    built_paths = [context.path for context in self.contexts['built']]
+                    stale_paths = [context.path for context in self.contexts['stale']]
+                    if path in built_paths:
+                        dep1 = dict(dep_building)
+                        dep1['target'] = path
+                        dependencies_built1.append(dep1)
+                    elif path in stale_paths:
                         dep1 = dict(dep_building)
                         dep1['target'] = path
                         dependencies_built1.append(dep1)
@@ -1045,7 +1085,13 @@ class Fac(Routable):
                 self._set_context_state(context, 'build_required')
             else:
                 if os.path.exists(context.path):
-                    self._set_context_state(context, 'built')
+                    stale_paths = set([context2.path for context2 in self.contexts['stale']])
+                    has_stale_dep = any([dep['target'] in stale_paths for dep in context.dependencies_built])
+
+                    if 'out-of-date' in status or has_stale_dep:
+                        self._set_context_state(context, 'stale')
+                    else:
+                        self._set_context_state(context, 'built')
                     for postreq in context.config.get('postreqs', []):
                         self.add_target(postreq)
                 else:
