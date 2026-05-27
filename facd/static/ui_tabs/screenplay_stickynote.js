@@ -34,7 +34,7 @@
         );
     }
 
-    function createMetaRow(label, value) {
+    function createMetaRow(label, value, options) {
         const row = document.createElement('div');
         row.className = 'sticky-meta-row';
         const labelSpan = document.createElement('span');
@@ -45,6 +45,131 @@
         valueSpan.className = 'sticky-meta-value';
         valueSpan.textContent = value;
         row.appendChild(valueSpan);
+        if (options && options.editable) {
+            row.classList.add('sticky-meta-editable');
+            attachBeatRefDropdown(row, options);
+        }
+        return row;
+    }
+
+    // Attach a hover-activated dropdown menu to a meta row that lets
+    // the user reassign a beat reference field (continues_from_beat_id
+    // or include_beat_id). The dropdown lists all previous beats (plus
+    // a "no beat_id" option at the top) with their startframe.png
+    // thumbnails. Clicking an entry rewrites the XML; the SSE update
+    // triggers the re-render.
+    function attachBeatRefDropdown(row, opts) {
+        // opts: { field, currentValue, beat, beats, orientation,
+        //         onSelect(newValue) }
+        const { field, currentValue, beat, beats, orientation, onSelect } = opts;
+
+        let menu = null;
+        let hideTimer = null;
+
+        function cancelHide() {
+            if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+        }
+        function scheduleHide() {
+            cancelHide();
+            hideTimer = setTimeout(() => {
+                if (menu && menu.parentElement) menu.parentElement.removeChild(menu);
+                menu = null;
+            }, 150);
+        }
+
+        function buildMenu() {
+            const m = document.createElement('div');
+            m.className = 'sticky-beatref-menu';
+            m.dataset.orientation = orientation || 'vertical';
+
+            // Build entry list: "none" first, then all beats that come
+            // before `beat` in the beats array.
+            const entries = [{ beat_id: '', label: '— (no beat_id)' }];
+            const myIdx = beats.findIndex(b => b.beat_id === beat.beat_id);
+            for (let i = 0; i < myIdx; i++) {
+                entries.push({ beat_id: beats[i].beat_id, label: beats[i].beat_id });
+            }
+
+            let selectedEl = null;
+            entries.forEach(entry => {
+                const item = document.createElement('div');
+                item.className = 'sticky-beatref-item';
+                if (entry.beat_id === (currentValue || '')) {
+                    item.classList.add('selected');
+                    selectedEl = item;
+                }
+
+                const idLabel = document.createElement('div');
+                idLabel.className = 'sticky-beatref-id';
+                idLabel.textContent = entry.beat_id || '—';
+                item.appendChild(idLabel);
+
+                const thumb = document.createElement('div');
+                thumb.className = 'sticky-beatref-thumb';
+                if (!entry.beat_id) {
+                    thumb.classList.add('sticky-beatref-thumb-empty');
+                    thumb.textContent = 'no beat_id';
+                } else {
+                    const targetPath = getTargetPath('startframe', entry.beat_id);
+                    thumb.dataset.path = targetPath;
+                    const imgContainer = document.createElement('div');
+                    imgContainer.className = 'image-container';
+                    thumb.appendChild(imgContainer);
+
+                    const overlay = document.createElement('div');
+                    overlay.className = 'node-status-overlay';
+                    const overlayText = document.createElement('div');
+                    overlayText.className = 'node-status-overlay-text';
+                    overlay.appendChild(overlayText);
+                    thumb.appendChild(overlay);
+
+                    const state = window.getPathState && window.getPathState(targetPath);
+                    const status = (state && state.status) || 'notbuilt';
+                    thumb.dataset.status = status;
+                    overlayText.textContent = status.toUpperCase();
+
+                    if (window.registerImageContainer) {
+                        window.registerImageContainer(targetPath, imgContainer, 'leaf-image');
+                    }
+                    if (status !== 'notbuilt' && window.fetchImage) {
+                        window.fetchImage(targetPath, false).catch(() => {});
+                    }
+                }
+                item.appendChild(thumb);
+
+                item.addEventListener('click', e => {
+                    e.stopPropagation();
+                    if (entry.beat_id === (currentValue || '')) return;
+                    onSelect(entry.beat_id);
+                    if (menu && menu.parentElement) menu.parentElement.removeChild(menu);
+                    menu = null;
+                });
+                m.appendChild(item);
+            });
+
+            m.addEventListener('mouseenter', cancelHide);
+            m.addEventListener('mouseleave', scheduleHide);
+
+            row.appendChild(m);
+
+            // Center the selected entry within the menu's scroll area.
+            if (selectedEl) {
+                if (m.dataset.orientation === 'horizontal') {
+                    m.scrollLeft = selectedEl.offsetLeft
+                        - (m.clientWidth / 2) + (selectedEl.offsetWidth / 2);
+                } else {
+                    m.scrollTop = selectedEl.offsetTop
+                        - (m.clientHeight / 2) + (selectedEl.offsetHeight / 2);
+                }
+            }
+            return m;
+        }
+
+        row.addEventListener('mouseenter', () => {
+            cancelHide();
+            if (!menu) menu = buildMenu();
+        });
+        row.addEventListener('mouseleave', scheduleHide);
         return row;
     }
 
@@ -290,7 +415,7 @@
 
     // Build a sticky note element for a given beat. The background
     // color is set inline so callers can supply per-island colors.
-    function createStickyNote(beat, color, registeredPaths) {
+    function createStickyNote(beat, color, registeredPaths, context) {
         const sticky = document.createElement('div');
         sticky.className = 'screenplay-sticky-note';
         if (color) sticky.style.background = color;
@@ -299,10 +424,33 @@
         const grid = document.createElement('div');
         grid.className = 'sticky-meta-grid';
         grid.appendChild(createMetaRow('BEAT_ID', beat.beat_id));
-        grid.appendChild(createMetaRow('CONTINUES_FROM',
-            beat.continues_from_beat_id || '—'));
-        grid.appendChild(createMetaRow('INCLUDES',
-            beat.include_beat_id || '—'));
+        const ctxBeats = (context && context.beats) || [];
+        const ctxOrient = (context && context.orientation) || 'vertical';
+        const onSelectFactory = (field) => (newValue) => {
+            if (context && typeof context.onUpdateBeatRef === 'function') {
+                context.onUpdateBeatRef(beat.beat_id, field, newValue);
+            }
+        };
+        grid.appendChild(createMetaRow(
+            'CONTINUES_FROM',
+            beat.continues_from_beat_id || '—',
+            {
+                editable: !!context,
+                field: 'continues_from_beat_id',
+                currentValue: beat.continues_from_beat_id || '',
+                beat, beats: ctxBeats, orientation: ctxOrient,
+                onSelect: onSelectFactory('continues_from_beat_id'),
+            }));
+        grid.appendChild(createMetaRow(
+            'INCLUDES',
+            beat.include_beat_id || '—',
+            {
+                editable: !!context,
+                field: 'include_beat_id',
+                currentValue: beat.include_beat_id || '',
+                beat, beats: ctxBeats, orientation: ctxOrient,
+                onSelect: onSelectFactory('include_beat_id'),
+            }));
         sticky.appendChild(grid);
 
         const media = document.createElement('div');

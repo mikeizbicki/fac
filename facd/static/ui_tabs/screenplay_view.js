@@ -234,6 +234,17 @@
             return menu;
         }
 
+        function updateBeatRef(beatId, field, newValue) {
+            const idx = currentBeats.findIndex(b => b.beat_id === beatId);
+            if (idx < 0) return;
+            const updated = currentBeats.map((s, i) =>
+                i === idx ? { ...s, [field]: newValue } : s);
+            const human = field === 'continues_from_beat_id'
+                ? 'continues_from' : 'includes';
+            saveAndCatch(updated,
+                'set ' + human + ' on beat_id=' + beatId + ' to ' + (newValue || 'none'));
+        }
+
         function createBeatElement(beat, idx, color, isFirstInPaper, separatorKind) {
             const beatDiv = document.createElement('div');
             beatDiv.className = 'screenplay-beat';
@@ -268,7 +279,11 @@
             beatDiv.appendChild(content);
 
             if (!beat.isNew) {
-                beatDiv.appendChild(SN.createStickyNote(beat, color, registeredPaths));
+                beatDiv.appendChild(SN.createStickyNote(beat, color, registeredPaths, {
+                    beats: currentBeats,
+                    orientation: orientation,
+                    onUpdateBeatRef: updateBeatRef,
+                }));
             } else {
                 const placeholder = document.createElement('div');
                 placeholder.className = 'screenplay-sticky-note';

@@ -407,6 +407,103 @@
 }
 .sticky-target-value { color: #666; }
 
+/* Editable meta rows (CONTINUES_FROM, INCLUDES) act as hover-activated
+ * dropdowns. The row itself stays inline in the meta grid; the menu is
+ * absolutely positioned just outside the row so it can overflow the
+ * sticky note's bounds without affecting layout. */
+.sticky-meta-editable {
+    position: relative;
+    cursor: pointer;
+}
+.sticky-meta-editable:hover .sticky-meta-value {
+    text-decoration: underline dotted;
+}
+
+.sticky-beatref-menu {
+    position: absolute;
+    z-index: 1000;
+    background: #fff;
+    border: 1px solid #888;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    border-radius: 4px;
+    padding: 4px;
+    max-width: 90vw;
+    max-height: 60vh;
+}
+/* Vertical menu: stack items top-to-bottom, place to the right of the row. */
+.sticky-beatref-menu[data-orientation="vertical"] {
+    top: 0;
+    left: 100%;
+    margin-left: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow-y: auto;
+    max-height: 400px;
+    min-width: 180px;
+}
+/* Horizontal menu: lay items left-to-right, place below the row. */
+.sticky-beatref-menu[data-orientation="horizontal"] {
+    top: 100%;
+    left: 0;
+    margin-top: 6px;
+    display: flex;
+    flex-direction: row;
+    gap: 6px;
+    overflow-x: auto;
+    max-width: 600px;
+}
+
+.sticky-beatref-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 4px;
+    border: 2px solid transparent;
+    border-radius: 3px;
+    cursor: pointer;
+    background: #fafafa;
+    flex-shrink: 0;
+}
+.sticky-beatref-item:hover { background: #eef4fb; }
+.sticky-beatref-item.selected {
+    border-color: #4a90d9;
+    background: #e6f0fa;
+}
+.sticky-beatref-id {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 9pt;
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 2px;
+    white-space: nowrap;
+}
+.sticky-beatref-thumb {
+    position: relative;
+    width: 120px;
+    height: 68px;
+    background: #eee;
+    overflow: hidden;
+    border-radius: 2px;
+}
+.sticky-beatref-thumb-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #888;
+    font-size: 9pt;
+    font-style: italic;
+}
+.sticky-beatref-thumb .image-container {
+    width: 100%;
+    height: 100%;
+}
+.sticky-beatref-thumb .image-container img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
 .sticky-media-section {
     display: flex;
     flex-direction: column;
