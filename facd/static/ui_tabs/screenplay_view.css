@@ -512,6 +512,9 @@
     height: 100%;
     object-fit: cover;
 }
+.sticky-beatref-thumb[data-status="built"] .node-status-overlay {
+    display: none;
+}
 
 .sticky-media-section {
     display: flex;
