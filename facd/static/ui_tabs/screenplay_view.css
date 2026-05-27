@@ -413,6 +413,14 @@
     gap: 8px;
 }
 
+/* Each sticky-media-wrapper hosts a media container plus a
+ * .node-status-overlay; the overlay is absolutely positioned, so the
+ * wrapper must establish a positioning context. */
+.sticky-media-wrapper {
+    position: relative;
+    min-height: 80px;
+}
+
 /* SVG arrow layer covers the board. */
 .screenplay-arrow-layer {
     position: absolute;

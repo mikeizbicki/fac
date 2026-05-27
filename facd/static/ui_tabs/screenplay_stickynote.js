@@ -55,87 +55,86 @@
         const valueSpan = document.createElement('span');
         valueSpan.className = 'sticky-meta-value sticky-target-value';
         valueSpan.dataset.targetPath = targetPath;
-        row.appendChild(valueSpan);
 
-        const nodeEl = window.createNode(targetPath, {
-            type: 'target', isLeaf: true, order: 0, parent: null, label,
-        });
-        if (nodeEl) {
-            nodeEl.style.display = 'none';
-            row.appendChild(nodeEl);
-            if (window.isFilePath && window.isFilePath(targetPath)) {
-                const c = nodeEl.dataset.content;
-                valueSpan.textContent = c ? c.trim() : '—';
-            } else {
-                valueSpan.textContent = '—';
-            }
+        // Initial text content from any cached path state delivered
+        // via the SSE stream so far. No tree-node is created or
+        // hidden in the sticky -- the value span is the entire UI.
+        const state = window.getPathState && window.getPathState(targetPath);
+        if (state && state.status !== 'notbuilt' && state.content) {
+            valueSpan.textContent = state.content.trim() || '—';
         } else {
-            const existing = window.getNode(targetPath);
-            valueSpan.textContent = (existing && existing.dataset.content)
-                ? existing.dataset.content.trim() : '—';
+            valueSpan.textContent = '—';
         }
+
+        row.appendChild(valueSpan);
         registeredPaths.add(targetPath);
         return row;
     }
 
     function createMediaNode(targetPath, filename, mimeType, registeredPaths) {
+        // Build a self-contained sticky-media display: a media
+        // container (image/video) plus a status overlay that mirrors
+        // the tree-node overlay system. We deliberately do NOT use
+        // createNode / cloneNode here -- earlier versions tried to
+        // reuse the tree-node from the targets tab so they could share
+        // the build/edit/delete header menu, but this caused three
+        // related bugs:
+        //   1. The first sticky view (vertical) registered as the
+        //      "real" node; later views (horizontal) cloned the DOM
+        //      with cloneNode(true), which doesn't copy event
+        //      handlers and doesn't get future updateNode() updates.
+        //      That left the horizontal view with a permanent stale
+        //      status overlay and broken header buttons.
+        //   2. The cloned tree-node carried a clickable expand/
+        //      collapse header which broke screenplay layout (and
+        //      moved sticky positions out from under arrow anchors).
+        //   3. The display:none hidden tree-nodes inside meta rows
+        //      added complexity for no UI benefit.
+        // The new wrapper is purely a media+overlay surface, with no
+        // tree-node coupling.
         const wrapper = document.createElement('div');
         wrapper.className = 'sticky-media-wrapper';
-        const nodeEl = window.createNode(targetPath, {
-            type: 'target', mimeType, isLeaf: true, order: 0,
-            parent: wrapper, label: filename,
-        });
+        wrapper.dataset.path = targetPath;
+        wrapper.dataset.mimeType = mimeType;
+
         const isImage = mimeType.startsWith('image/');
-        let mediaContainer = null;
-        // createNode may return an existing node that is still attached
-        // to another view's wrapper. Only treat it as "ours" if it
-        // actually landed inside our wrapper.
-        if (nodeEl && nodeEl.parentElement === wrapper) {
-            nodeEl.classList.add('expanded');
-            mediaContainer = nodeEl.querySelector(
-                isImage ? '.image-container' : '.video-container');
-            if (!mediaContainer) {
-                // nodes.js doesn't create media containers for
-                // target-type nodes; create one ourselves.
-                mediaContainer = document.createElement('div');
-                mediaContainer.className = isImage ? 'image-container' : 'video-container';
-                nodeEl.insertBefore(mediaContainer, nodeEl.firstChild);
-            }
-        } else if (nodeEl) {
-            // Node is owned by another view. Deep-clone its DOM into
-            // our wrapper so the sticky has the full tree-node
-            // structure (header, build menu, metadata) -- not just a
-            // bare media container. The clone's media container is
-            // then registered so it gets painted from the blob cache.
-            const clone = nodeEl.cloneNode(true);
-            clone.classList.add('expanded');
-            // Drop any blob src on the clone; registerImageContainer /
-            // registerVideoContainer will repopulate from the cache.
-            const mc = clone.querySelector(
-                isImage ? '.image-container' : '.video-container');
-            if (mc) mc.innerHTML = '';
-            wrapper.appendChild(clone);
-            mediaContainer = mc;
-        } else {
-            // createNode declined to make a node (e.g. file does not
-            // exist yet and a non-target path was requested). Fall back
-            // to a bare media container so the sticky still has a
-            // paintable slot once data arrives.
-            mediaContainer = document.createElement('div');
-            mediaContainer.className = isImage ? 'image-container' : 'video-container';
-            wrapper.appendChild(mediaContainer);
-        }
-        if (mediaContainer) {
-            if (isImage && window.registerImageContainer) {
+        wrapper.classList.add(isImage ? 'has-image' : 'has-video');
+
+        const mediaContainer = document.createElement('div');
+        mediaContainer.className = isImage ? 'image-container' : 'video-container';
+        wrapper.appendChild(mediaContainer);
+
+        // Status overlay. data-status on .sticky-media-wrapper drives
+        // its visibility via overlay.css, matching the tree-node UX.
+        const overlay = document.createElement('div');
+        overlay.className = 'node-status-overlay';
+        const overlayText = document.createElement('div');
+        overlayText.className = 'node-status-overlay-text';
+        overlay.appendChild(overlayText);
+        wrapper.appendChild(overlay);
+
+        const state = window.getPathState && window.getPathState(targetPath);
+        const status = (state && state.status) || 'notbuilt';
+        wrapper.dataset.status = status;
+        overlayText.textContent = status.toUpperCase();
+
+        // Register the media container so any blob-cache refresh
+        // (typically triggered by the targets tab when an SSE event
+        // arrives) repaints us automatically.
+        if (isImage) {
+            if (window.registerImageContainer) {
                 window.registerImageContainer(targetPath, mediaContainer, 'leaf-image');
-                if (window.isFilePath && window.isFilePath(targetPath) && window.fetchImage) {
-                    window.fetchImage(targetPath, false).catch(() => {});
-                }
-            } else if (!isImage && window.registerVideoContainer) {
+            }
+            if (status !== 'notbuilt' && window.fetchImage) {
+                window.fetchImage(targetPath, false).catch(() => {});
+            }
+        } else {
+            if (window.registerVideoContainer) {
+                window.registerImageContainer(targetPath, mediaContainer, 'leaf-image');
                 window.registerVideoContainer(targetPath, mediaContainer, 'leaf-video');
-                if (window.isFilePath && window.isFilePath(targetPath) && window.fetchVideo) {
-                    window.fetchVideo(targetPath, false).catch(() => {});
-                }
+            }
+            if (status !== 'notbuilt' && window.fetchVideo) {
+                window.fetchVideo(targetPath, false).catch(() => {});
             }
         }
         registeredPaths.add(targetPath);
@@ -176,30 +175,28 @@
         return sticky;
     }
 
-    function clearRegisteredPaths(registeredPaths) {
-        for (const path of registeredPaths) {
-            const nodeEl = window.getNode(path);
-            if (nodeEl) {
-                const img = nodeEl.querySelector('.image-container');
-                const vid = nodeEl.querySelector('.video-container');
-                if (img && window.unregisterImageContainer) window.unregisterImageContainer(path, img);
-                if (vid && window.unregisterVideoContainer) window.unregisterVideoContainer(path, vid);
-                if (nodeEl.style.display === 'none') {
-                    window.clearNodeFromRegistry(path);
+    function clearRegisteredPaths(board, registeredPaths) {
+        // Unregister every media container we attached to sticky
+        // notes before the board is torn down, so the blob-cache
+        // doesn't keep trying to repaint into orphaned DOM nodes.
+        if (board) {
+            board.querySelectorAll('.sticky-media-wrapper').forEach(w => {
+                const path = w.dataset.path;
+                if (!path) return;
+                const img = w.querySelector('.image-container');
+                const vid = w.querySelector('.video-container');
+                if (img && window.unregisterImageContainer) {
+                    window.unregisterImageContainer(path, img);
                 }
-            }
+                if (vid && window.unregisterVideoContainer) {
+                    window.unregisterVideoContainer(path, vid);
+                }
+            });
         }
         registeredPaths.clear();
     }
 
     function handleTargetUpdate(path, metadata) {
-        if (window.hasNode(path)) {
-            window.updateNode(path, {
-                status: metadata.status,
-                mimeType: metadata['mime-type'],
-                content: metadata.content,
-            });
-        }
         // Update every sticky note that shows this target (both the
         // screenplay and storyboard views can be live at once).
         const valueSpans = document.querySelectorAll(
@@ -211,32 +208,57 @@
                 valueSpan.textContent = metadata.content.trim() || '—';
             }
         });
-        const nodeEl = window.getNode(path);
-        if (!nodeEl) return;
-        const mimeType = nodeEl.dataset.mimeType || metadata['mime-type'];
-        const isImage = mimeType?.startsWith('image/');
-        const isVideo = mimeType?.startsWith('video/');
-        const status = metadata.status;
-        if (status === 'built') {
-            if (isImage && window.fetchImage) {
-                window.fetchImage(path, true).then(url => {
-                    // Repaint every container registered for this
-                    // path (vertical + horizontal views may both be
-                    // showing it). fetchImage only caches the blob.
-                    if (window._refreshImageContainers) {
-                        window._refreshImageContainers(path, url);
-                    }
-                }).catch(() => {});
-            } else if (isVideo && window.fetchVideo) {
-                window.fetchVideo(path, true).then(url => {
-                    if (window._refreshVideoContainers) {
-                        window._refreshVideoContainers(path, url);
-                    }
-                }).catch(() => {});
+
+        // Update every sticky-media-wrapper for this path: refresh
+        // data-status (which the overlay CSS keys off), set the
+        // overlay text, and re-trigger the flash animation.
+        const wrappers = document.querySelectorAll(
+            `.sticky-media-wrapper[data-path="${path}"]`);
+        wrappers.forEach(wrapper => {
+            const status = metadata.status || 'notbuilt';
+            wrapper.dataset.status = status;
+            const overlayText = wrapper.querySelector('.node-status-overlay-text');
+            if (overlayText) overlayText.textContent = status.toUpperCase();
+            const overlay = wrapper.querySelector('.node-status-overlay');
+            if (overlay) {
+                overlay.classList.remove('status-flash');
+                // Force a reflow so the animation restarts even on
+                // back-to-back status changes.
+                void overlay.offsetWidth;
+                overlay.classList.add('status-flash');
             }
-        } else if (status === 'notbuilt') {
-            if (isImage && window.clearImageFromContainers) window.clearImageFromContainers(path);
-            else if (isVideo && window.clearVideoFromContainers) window.clearVideoFromContainers(path);
+        });
+
+        // When the targets tab already has a tree-node for this path
+        // its updateNode -> images.js/videos.js callback chain
+        // refreshes the blob cache (and thus every container, sticky
+        // or otherwise, registered for that path). When no tree-node
+        // exists yet -- e.g. the screenplay rendered before the
+        // targets tab finished its initial build -- we kick off the
+        // refresh ourselves so the sticky still shows the right thing.
+        if (!window.hasNode || !window.hasNode(path)) {
+            const mimeType = metadata['mime-type'] || '';
+            if (metadata.status === 'built') {
+                if (mimeType.startsWith('image/') && window.fetchImage) {
+                    window.fetchImage(path, true).then(url => {
+                        if (window._refreshImageContainers) {
+                            window._refreshImageContainers(path, url);
+                        }
+                    }).catch(() => {});
+                } else if (mimeType.startsWith('video/') && window.fetchVideo) {
+                    window.fetchVideo(path, true).then(url => {
+                        if (window._refreshVideoContainers) {
+                            window._refreshVideoContainers(path, url);
+                        }
+                    }).catch(() => {});
+                }
+            } else if (metadata.status === 'notbuilt') {
+                if (mimeType.startsWith('image/') && window.clearImageFromContainers) {
+                    window.clearImageFromContainers(path);
+                } else if (mimeType.startsWith('video/') && window.clearVideoFromContainers) {
+                    window.clearVideoFromContainers(path);
+                }
+            }
         }
     }
 

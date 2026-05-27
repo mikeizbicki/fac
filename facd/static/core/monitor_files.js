@@ -10,14 +10,26 @@
 //   - path: string path of the file
 //   - metadata: { target, status, "mime-type", content }
 //
+// window.getPathState(path) - Return the most recent metadata for `path`
+//   that we've ever seen on the SSE stream, or undefined. This lets
+//   late-rendering views (e.g. the screenplay tabs, which only render
+//   after the shooting-script.xml event arrives) pick up the current
+//   state of any path whose SSE event was delivered earlier in this
+//   connection's replay.
+//
 // The handlers are responsible for determining what to do with the event,
 // including tracking whether a path is "new" in their own context.
 
 (function() {
     const pathHandlers = [];
+    const pathStates = new Map();
 
     window.registerPathHandler = function(callback) {
         pathHandlers.push(callback);
+    };
+
+    window.getPathState = function(path) {
+        return pathStates.get(path);
     };
 
     function monitorFiles() {
@@ -33,6 +45,8 @@
                 'mime-type': data['mime-type'],
                 content: data.content
             };
+
+            pathStates.set(path, metadata);
 
             for (const handler of pathHandlers) {
                 handler(path, metadata);

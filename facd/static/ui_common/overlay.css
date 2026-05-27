@@ -54,6 +54,14 @@
     opacity: 0;
 }
 
+/* The same fade applies to sticky-media wrappers in screenplay
+ * views. These reuse the .node-status-overlay structure to mirror
+ * the tree-node UX without dragging in the tree-node header/expand
+ * machinery (which messed up the screenplay layout). */
+.sticky-media-wrapper[data-status="built"] > .node-status-overlay {
+    opacity: 0;
+}
+
 /* Flash animation re-triggered on every status transition. JS
  * toggles the .status-flash class with a forced reflow in between
  * so the animation restarts even on <100ms back-to-back changes. */
