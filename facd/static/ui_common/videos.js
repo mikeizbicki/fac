@@ -27,7 +27,11 @@
             URL.revokeObjectURL(videoCache[path]);
             delete videoCache[path];
         }
-        return fetch(`/contents?path=${encodeURIComponent(path)}`)
+        // Bypass the browser cache: file contents at a given path can
+        // change rapidly (e.g. delete then rebuild) and the browser
+        // will otherwise happily serve a stale cached video.
+        const cacheBust = `&_t=${Date.now()}`;
+        return fetch(`/contents?path=${encodeURIComponent(path)}${cacheBust}`, { cache: 'no-store' })
             .then(response => {
                 if (!response.ok) throw new Error('Not found');
                 return response.blob();
@@ -86,6 +90,8 @@
         }
     }
 
+    window._refreshVideoContainers = refreshAllContainers;
+
     function isVideoMimeType(mimeType) {
         return mimeType && mimeType.startsWith('video/');
     }
@@ -109,9 +115,16 @@
 
         window.registerVideoContainer(path, videoContainer, 'leaf-video');
 
-        window.fetchVideo(path, false).then(url => {
-            refreshAllContainers(path, url);
-        }).catch(() => {});
+        // Skip the initial fetch when the backend already reports the
+        // file as 'notbuilt'.
+        const initialStatus = nodeEl.dataset.status;
+        if (initialStatus === 'notbuilt') {
+            window.clearVideoFromContainers(path);
+        } else {
+            window.fetchVideo(path, false).then(url => {
+                refreshAllContainers(path, url);
+            }).catch(() => {});
+        }
     }
 
     function updateVideoForStatus(nodeEl, status) {
@@ -121,13 +134,15 @@
         const path = nodeEl.dataset.path;
         if (!path) return;
 
-        if (status === 'fresh') {
+        if (status === 'built') {
             window.fetchVideo(path, true).then(url => {
                 refreshAllContainers(path, url);
             }).catch(() => {});
-        } else if (status === 'deleted') {
+        } else if (status === 'notbuilt') {
             window.clearVideoFromContainers(path);
         }
+        // For any other state the currently-displayed video stays
+        // until the next 'built' refresh.
     }
 
     window.registerComponent(function(nodeEl, status, isNew) {

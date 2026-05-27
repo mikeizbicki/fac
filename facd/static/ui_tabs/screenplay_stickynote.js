@@ -205,7 +205,9 @@
         const valueSpans = document.querySelectorAll(
             `.sticky-target-value[data-target-path="${path}"]`);
         valueSpans.forEach(valueSpan => {
-            if (metadata.content) {
+            if (metadata.status === 'notbuilt') {
+                valueSpan.textContent = '—';
+            } else if (metadata.content) {
                 valueSpan.textContent = metadata.content.trim() || '—';
             }
         });
@@ -215,32 +217,24 @@
         const isImage = mimeType?.startsWith('image/');
         const isVideo = mimeType?.startsWith('video/');
         const status = metadata.status;
-        if (status === 'fresh' || status === 'stale') {
+        if (status === 'built') {
             if (isImage && window.fetchImage) {
-                window.fetchImage(path, status === 'fresh').then(url => {
-                    // Repaint all registered containers for this path.
-                    // Multiple views (vertical + horizontal) may share
-                    // the same target path, so we must explicitly
-                    // refresh all of them; fetchImage alone only
-                    // caches the blob.
-                    document.querySelectorAll(
-                        `.image-container`
-                    );
-                    if (window.clearImageFromContainers) {
-                        // no-op safety: ensure function exists
-                    }
+                window.fetchImage(path, true).then(url => {
+                    // Repaint every container registered for this
+                    // path (vertical + horizontal views may both be
+                    // showing it). fetchImage only caches the blob.
                     if (window._refreshImageContainers) {
                         window._refreshImageContainers(path, url);
                     }
                 }).catch(() => {});
             } else if (isVideo && window.fetchVideo) {
-                window.fetchVideo(path, status === 'fresh').then(url => {
+                window.fetchVideo(path, true).then(url => {
                     if (window._refreshVideoContainers) {
                         window._refreshVideoContainers(path, url);
                     }
                 }).catch(() => {});
             }
-        } else if (status === 'deleted') {
+        } else if (status === 'notbuilt') {
             if (isImage && window.clearImageFromContainers) window.clearImageFromContainers(path);
             else if (isVideo && window.clearVideoFromContainers) window.clearVideoFromContainers(path);
         }

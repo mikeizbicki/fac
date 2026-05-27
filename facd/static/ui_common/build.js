@@ -7,7 +7,21 @@
 // - Target build menu with optional prompt textarea
 
 (function() {
+    // Immediately reflect that a user-initiated command has been sent
+    // for `path`, before the backend has had a chance to respond via
+    // /monitor_files. The status will be overwritten as soon as
+    // monitor_files delivers the real new state. We use a synthetic
+    // 'command_sent(<command>)' status string so the overlay system
+    // (which is state-agnostic) shows it like any other state.
+    function setCommandSentState(path, command) {
+        if (!path) return;
+        if (window.hasNode && window.hasNode(path)) {
+            window.updateNode(path, { status: 'command_sent(' + command + ')' });
+        }
+    }
+
     function buildTarget(path, prompt) {
+        setCommandSentState(path, 'build');
         const body = { target: path };
         if (prompt && prompt.trim()) {
             body.include_prompt = prompt.trim();
@@ -152,6 +166,7 @@
     }
 
     function submitEdit(path, newContent, contentWrapper, textarea, actions) {
+        setCommandSentState(path, 'edit');
         textarea.disabled = true;
         actions.style.display = 'none';
 
@@ -193,6 +208,7 @@
 
     function deleteFile(path) {
         if (!confirm(`Are you sure you want to delete "${path}"?`)) return;
+        setCommandSentState(path, 'delete');
 
         fetch(`/delete_file/${encodeURIComponent(path)}`, { method: 'DELETE' })
         .then(response => {

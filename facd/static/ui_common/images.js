@@ -28,7 +28,12 @@
             URL.revokeObjectURL(imageCache[path]);
             delete imageCache[path];
         }
-        return fetch(`/contents?path=${encodeURIComponent(path)}`)
+        // Bypass the browser cache: file contents at a given path can
+        // change rapidly (e.g. delete then rebuild) and the browser
+        // will otherwise happily serve a stale cached image, leading
+        // to deleted files that appear to "still exist" after refresh.
+        const cacheBust = `&_t=${Date.now()}`;
+        return fetch(`/contents?path=${encodeURIComponent(path)}${cacheBust}`, { cache: 'no-store' })
             .then(response => {
                 if (!response.ok) throw new Error('Not found');
                 return response.blob();
@@ -111,9 +116,18 @@
 
         window.registerImageContainer(path, imageContainer, 'leaf-image');
 
-        window.fetchImage(path, false).then(url => {
-            refreshAllContainers(path, url);
-        }).catch(() => {});
+        // Skip the initial fetch when the backend already reports the
+        // file as 'notbuilt' (it doesn't exist), so we don't risk
+        // pulling a stale copy out of the browser cache and showing a
+        // file that's been deleted.
+        const initialStatus = nodeEl.dataset.status;
+        if (initialStatus === 'notbuilt') {
+            window.clearImageFromContainers(path);
+        } else {
+            window.fetchImage(path, false).then(url => {
+                refreshAllContainers(path, url);
+            }).catch(() => {});
+        }
     }
 
     function updateImageForStatus(nodeEl, status) {
@@ -123,13 +137,20 @@
         const path = nodeEl.dataset.path;
         if (!path) return;
 
-        if (status === 'fresh') {
+        if (status === 'built') {
+            // Force-refresh: a freshly-built file may have the same
+            // path as an older one already cached in the browser, so
+            // we explicitly bust the cache here.
             window.fetchImage(path, true).then(url => {
                 refreshAllContainers(path, url);
             }).catch(() => {});
-        } else if (status === 'deleted') {
+        } else if (status === 'notbuilt') {
             window.clearImageFromContainers(path);
         }
+        // For any other backend state (stale, unresolved, waiting,
+        // phantom, buildable, build_required, command_sent(...), ...)
+        // the currently-displayed image stays as-is until the next
+        // 'built' transition refreshes it.
     }
 
     function getDescendantImagePaths(nodeEl) {
