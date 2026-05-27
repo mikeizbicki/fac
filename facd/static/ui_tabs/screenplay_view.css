@@ -412,6 +412,15 @@
  * absolutely positioned just outside the row so it can overflow the
  * sticky note's bounds without affecting layout. */
 .sticky-meta-editable {
+    /* Override .sticky-meta-row's display:contents so this row
+     * actually establishes a box (and therefore a positioning
+     * context for the absolutely-positioned dropdown menu).
+     * Span the full grid width and lay label+value out internally
+     * with flex to preserve the original look. */
+    display: flex;
+    grid-column: 1 / -1;
+    align-items: baseline;
+    gap: 8px;
     position: relative;
     cursor: pointer;
 }
