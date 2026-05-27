@@ -32,8 +32,11 @@
         const header = nodeEl.querySelector('.tree-header');
         if (!header) return;
 
-        // Check if header menu already exists
-        if (header.querySelector('.header-menu')) return;
+        // Remove any existing header menu so it gets rebuilt with the
+        // correct buttons for the current node type (target vs path).
+        // This matters when a node is converted between types.
+        const existing = header.querySelector('.header-menu');
+        if (existing) existing.remove();
 
         const menu = document.createElement('div');
         menu.className = 'header-menu';
