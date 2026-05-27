@@ -448,7 +448,7 @@
     flex-direction: column;
     gap: 4px;
     overflow-y: auto;
-    max-height: 400px;
+    max-height: 800px;
     min-width: 180px;
 }
 /* Horizontal menu: lay items left-to-right, place below the row. */
@@ -460,7 +460,7 @@
     flex-direction: row;
     gap: 6px;
     overflow-x: auto;
-    max-width: 600px;
+    max-width: 1000px;
 }
 
 .sticky-beatref-item {
@@ -489,8 +489,8 @@
 }
 .sticky-beatref-thumb {
     position: relative;
-    width: 120px;
-    height: 68px;
+    width: 240px;
+    height: 136px;
     background: #eee;
     overflow: hidden;
     border-radius: 2px;
