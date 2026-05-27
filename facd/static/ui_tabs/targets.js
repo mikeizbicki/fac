@@ -220,7 +220,10 @@ function showTargetNodeForPath(path) {
 function handlePathEvent(path, metadata) {
     // Queue metadata but don't process events until initial tree is built
     if (!isInitialized) {
-        if (metadata.status !== 'deleted') {
+        // Skip 'notbuilt' so we don't surface a path node for a file
+        // that doesn't actually exist on disk; such targets will be
+        // surfaced by the target-node insertion pass instead.
+        if (metadata.status !== 'notbuilt') {
             pathMetadata[path] = metadata;
             window.markPathAsFile(path);
         }
@@ -229,18 +232,22 @@ function handlePathEvent(path, metadata) {
 
     const status = metadata.status;
 
-    if (status === 'deleted') {
-        window.unmarkPathAsFile(path);
-        delete pathMetadata[path];
-
-        // Convert to target node instead of removing completely
-        const matchingTarget = findMatchingTarget(path);
-        if (matchingTarget) {
-            window.removeNode(path, { animate: true, convertToTarget: false }).then(() => {
-                showTargetNodeForPath(path);
+    if (status === 'notbuilt') {
+        // The file has been deleted (or has never existed). Keep the
+        // node visible so the overlay system can flash and then show
+        // the 'notbuilt' state; ui_common components clear any
+        // displayed image/video on this status. We do NOT remove the
+        // node from the tree because that would lose scroll/place
+        // state and cause it to "reappear" if it ever comes back.
+        if (window.hasNode(path)) {
+            window.updateNode(path, {
+                status: 'notbuilt',
+                mimeType: metadata['mime-type'],
+                content: metadata.content,
             });
         } else {
-            window.removeNode(path, { animate: true });
+            // Path was never shown as a file; surface as target.
+            showTargetNodeForPath(path);
         }
     } else {
         const isNew = !window.isFilePath(path);

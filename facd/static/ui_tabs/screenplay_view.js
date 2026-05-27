@@ -596,7 +596,7 @@
 
         function renderBoard(beats) {
             if (!container) return;
-            SN.clearRegisteredPaths(registeredPaths);
+            SN.clearRegisteredPaths(board, registeredPaths);
             while (board.firstChild) board.removeChild(board.firstChild);
 
             if (beats.length === 0) {
