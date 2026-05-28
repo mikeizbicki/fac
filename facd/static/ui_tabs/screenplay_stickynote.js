@@ -272,7 +272,7 @@
             editBtn.dataset.editTrigger = targetPath;
             editBtn.addEventListener('click', e => {
                 e.stopPropagation();
-                startStickyTextEdit(targetPath);
+                startStickyTextEdit(targetPath, editBtn);
             });
             menu.appendChild(editBtn);
         }
@@ -304,12 +304,12 @@
     // Inline-edit a text-backed sticky-media wrapper. Mirrors the
     // flow in build.js for tree-node text editing, but operates on
     // the .sticky-text-content element inside the wrapper. Edits
-    // every matching wrapper across the DOM (vertical + horizontal
-    // views) but only one edit session is active per path at a time;
-    // we use the first wrapper as the editing surface.
-    function startStickyTextEdit(targetPath) {
-        const wrapper = document.querySelector(
-            `.sticky-media-wrapper[data-path="${targetPath}"]`);
+    // the specific wrapper containing the edit button that was
+    // clicked (located via closest()), so clicking the button in
+    // either view edits that view's wrapper.
+    function startStickyTextEdit(targetPath, triggerEl) {
+        const wrapper = triggerEl
+            && triggerEl.closest('.sticky-media-wrapper');
         if (!wrapper) return;
         const textContainer = wrapper.querySelector('.sticky-text-content');
         if (!textContainer) return;
