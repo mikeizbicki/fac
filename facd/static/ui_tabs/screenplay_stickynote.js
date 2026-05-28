@@ -64,17 +64,15 @@
         const { field, currentValue, beat, beats, orientation, onSelect } = opts;
 
         let menu = null;
-        let hideTimer = null;
+        let outsideClickHandler = null;
 
-        function cancelHide() {
-            if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-        }
-        function scheduleHide() {
-            cancelHide();
-            hideTimer = setTimeout(() => {
-                if (menu && menu.parentElement) menu.parentElement.removeChild(menu);
-                menu = null;
-            }, 150);
+        function closeMenu() {
+            if (menu && menu.parentElement) menu.parentElement.removeChild(menu);
+            menu = null;
+            if (outsideClickHandler) {
+                document.removeEventListener('mousedown', outsideClickHandler, true);
+                outsideClickHandler = null;
+            }
         }
 
         function buildMenu() {
@@ -141,14 +139,10 @@
                     e.stopPropagation();
                     if (entry.beat_id === (currentValue || '')) return;
                     onSelect(entry.beat_id);
-                    if (menu && menu.parentElement) menu.parentElement.removeChild(menu);
-                    menu = null;
+                    closeMenu();
                 });
                 m.appendChild(item);
             });
-
-            m.addEventListener('mouseenter', cancelHide);
-            m.addEventListener('mouseleave', scheduleHide);
 
             row.appendChild(m);
 
@@ -208,11 +202,23 @@
 
         }
 
-        row.addEventListener('mouseenter', () => {
-            cancelHide();
-            if (!menu) menu = buildMenu();
+        row.addEventListener('click', e => {
+            e.stopPropagation();
+            if (menu) {
+                closeMenu();
+                return;
+            }
+            menu = buildMenu();
+            // Install an outside-click handler that closes the menu
+            // whenever the user clicks anywhere that isn't the menu
+            // or this row.
+            outsideClickHandler = (ev) => {
+                if (!menu) return;
+                if (menu.contains(ev.target) || row.contains(ev.target)) return;
+                closeMenu();
+            };
+            document.addEventListener('mousedown', outsideClickHandler, true);
         });
-        row.addEventListener('mouseleave', scheduleHide);
         return row;
     }
 
