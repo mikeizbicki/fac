@@ -162,7 +162,50 @@
                         - (m.clientHeight / 2) + (selectedEl.offsetHeight / 2);
                 }
             }
+            clampMenuToViewport(m);
             return m;
+    // After the menu has been appended and its centering transform
+    // applied, measure where it actually sits in the viewport and
+    // nudge it (via an additional inline translate) so it is fully
+    // visible. This may shift it off-center but ensures it isn't
+    // clipped against any edge of the viewport.
+    function clampMenuToViewport(m) {
+        // Defer one frame so layout is settled.
+        requestAnimationFrame(() => {
+            const rect = m.getBoundingClientRect();
+            const vw = window.innerWidth;
+            const vh = window.innerHeight;
+            const margin = 4;
+            let dx = 0, dy = 0;
+            if (rect.left < margin) {
+                dx = margin - rect.left;
+            } else if (rect.right > vw - margin) {
+                dx = (vw - margin) - rect.right;
+            }
+            if (rect.top < margin) {
+                dy = margin - rect.top;
+            } else if (rect.bottom > vh - margin) {
+                dy = (vh - margin) - rect.bottom;
+            }
+            if (dx === 0 && dy === 0) return;
+            // Preserve the existing centering transform from the
+            // stylesheet by appending a new translate. We read the
+            // computed transform so we can compose, but since the
+            // centering is a pure translate set via CSS, we instead
+            // detect orientation and re-apply the right composition.
+            const orient = m.dataset.orientation;
+            if (orient === 'horizontal') {
+                // Original: translateX(-50%). Add pixel offsets.
+                m.style.transform =
+                    `translateX(-50%) translate(${dx}px, ${dy}px)`;
+            } else {
+                // Original: translateY(-50%). Add pixel offsets.
+                m.style.transform =
+                    `translateY(-50%) translate(${dx}px, ${dy}px)`;
+            }
+        });
+    }
+
         }
 
         row.addEventListener('mouseenter', () => {
