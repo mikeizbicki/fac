@@ -140,10 +140,11 @@ class Fac(Routable):
         # but still feels ugly not supporting the general problem).
         # It's also not clear to me that this is actually correct,
         # and we need test cases demonstrating correctness.
-        for state in self.contexts:
-            for context in set(self.contexts[state]):
-                if context.path_safe() == target:
-                    self.contexts[state].discard(context)
+        if required_for is None:
+            for state in self.contexts:
+                for context in set(self.contexts[state]):
+                    if context.path_safe() == target:
+                        self.contexts[state].discard(context)
 
         # get job info
         if required_for is None:
@@ -1093,7 +1094,7 @@ class Fac(Routable):
                     else:
                         self._set_context_state(context, 'built')
                     for postreq in context.config.get('postreqs', []):
-                        self.add_target(postreq)
+                        self.add_target(postreq, required_for=context)
                 else:
                     self._set_context_state(context, 'notbuilt')
 
@@ -1108,7 +1109,7 @@ class Fac(Routable):
                 assert os.path.exists(context.path)
                 logger.info(f'built {context.path}')
                 for postreq in context.config.get('postreqs', []):
-                    self.add_target(postreq)
+                    self.add_target(postreq, required_for=context)
                 self._set_context_state(context, 'built')
             except Exception as e:
                 # if context.build() throws FACError,
