@@ -529,7 +529,6 @@
  * wrapper must establish a positioning context. */
 .sticky-media-wrapper {
     position: relative;
-    min-height: 80px;
 }
 
 /* Header strip atop each sticky media wrapper: filename on the

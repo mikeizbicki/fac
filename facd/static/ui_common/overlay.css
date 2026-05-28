@@ -39,13 +39,20 @@
 
 .node-status-overlay-text {
     font-weight: 600;
-    font-size: 4em;
+    font-size: 2em;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: #424242;
     text-align: center;
     word-break: break-word;
 }
+.sticky-media-wrapper.has-image .node-status-overlay-text {
+    font-size: 6em;
+}
+.sticky-media-wrapper.has-video .node-status-overlay-text {
+    font-size: 6em;
+}
+
 
 /* The 'built' state alone fades the overlay completely away so the
  * underlying node content shows through. Handled at the CSS layer so
