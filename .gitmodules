@@ -25,3 +25,6 @@
 [submodule "tests/facd_test_rm"]
 	path = tests/facd_test1_rm
 	url = https://github.com/mikeizbicki/facd_test_rm
+[submodule "tests/facd_test2_edit"]
+	path = tests/facd_test2_edit
+	url = https://github.com/mikeizbicki/facd_test2_edit

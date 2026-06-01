@@ -50,6 +50,7 @@ registered_providers = {
 
 registered_models = {
     'anthropic/claude-3-haiku-20240307':    {'text/in': 0.25, 'text/out':  1.25},
+    'anthropic/claude-opus-4-8':            {'text/in': 5.00, 'text.out': 25.00},
     'anthropic/claude-opus-4-20250514':     {'text/in':15.00, 'text.out': 75.00},
     'anthropic/claude-sonnet-4-0':          {'text/in': 3.00, 'text/out': 15.00},
     'anthropic/claude-3-5-haiku-latest':    {'text/in': 0.80, 'text/out':  4.00},
@@ -61,6 +62,7 @@ registered_models = {
                                             {'text/in': 0.00, 'text/out':  0.00},
     'groq/meta-llama/llama-4-scout-17b-16e-instruct':
                                             {'text/in': 0.00, 'text/out':  0.00},
+    'openai/gpt-5.5':                       {'text/in': 2.50, 'text/out': 15.00},
     'openai/gpt-5.4':                       {'text/in': 2.50, 'text/out': 15.00},
     'openai/gpt-5':                         {'text/in': 1.25, 'text/out': 10.00},
     'openai/gpt-5-mini':                    {'text/in': 0.25, 'text/out':  2.00},
@@ -186,7 +188,8 @@ class LLM():
         #self.default_text_model = 'groq/llama-3.3-70b-versatile'
         #self.default_text_model = 'openai/gpt-4.1'
         #self.default_text_model = 'openai/gpt-4.1-mini'
-        self.default_text_model = 'openai/gpt-5'
+        self.default_text_model = 'openai/gpt-5.5'
+        #self.default_text_model = 'openai/gpt-5'
         #self.default_text_model = 'openai/gpt-5.4'
         #self.default_text_model = 'openai/gpt-5-nano'
         #self.default_text_model = 'groq/llama-3.3-70b-versatile'
