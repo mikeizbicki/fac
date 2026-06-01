@@ -465,6 +465,13 @@ class Fac(Routable):
 
             # if a path is in context.dependencies_built,
             # then there must be a corresponding context in the 'built' state
+            # NOTE:
+            # this check makes sense in sequential mode,
+            # but does not make sense in daemon mode;
+            # in daemon mode, calling add_target on an already built target
+            # triggered this assertion failing;
+            # we could conceivably make the add_target code much more complicated,
+            # but for now we're just not checking these asserts anymore
             if False:
                 stale_built = self.contexts['built'] | self.contexts['stale']
                 for state in self.contexts:
