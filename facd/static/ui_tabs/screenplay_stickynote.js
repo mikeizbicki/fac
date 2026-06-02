@@ -108,28 +108,83 @@
     // Item order matches first-appearance order in /list_targets.
     function processBeatTargets(targetsData, beat_id, knownPaths) {
         const prefix = 'beats/$BEAT_ID/';
-        // Collect (suffix-parts, path, mimeType) tuples in
-        // first-appearance order.
+        // Build the entry list in /list_targets order. For each
+        // target pattern, immediately follow it with the alphabetic
+        // list of concrete paths (from SSE) that resolve it, so the
+        // resolutions visually sit underneath their pattern.
         const entries = [];
+        const claimedPaths = new Set();
+        const targetEntries = []; // [{ target, suffix, path, mimeType }, ...]
         for (const [target, config] of Object.entries(targetsData || {})) {
             if (!target.startsWith(prefix)) continue;
             const suffix = target.substring(prefix.length);
             const path = target.replace(/\$BEAT_ID/g, beat_id);
             const mimeType = (config && config['mime-type']) || '';
-            entries.push({ parts: suffix.split('/'), path, mimeType });
+            targetEntries.push({ target, suffix, path, mimeType });
         }
-        // Append concrete paths discovered via SSE that aren't
-        // already represented by a target-pattern entry. These are
-        // the resolutions of variable target patterns and should
-        // appear inside the matching folder structure.
-        if (knownPaths) {
-            const seen = new Set(entries.map(e => e.path));
+
+        // Build a regex per target pattern (anchored, $VAR -> [^/]+).
+        function targetToRegex(targetSuffix) {
+            const escaped = targetSuffix
+                .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+                .replace(/\\\$[A-Z_][A-Z0-9_]*/g, '([^/]+)');
+            return new RegExp('^' + escaped + '$');
+        }
+
+        const beatPrefix = 'beats/' + beat_id + '/';
+        for (const te of targetEntries) {
+            entries.push({
+                parts: te.suffix.split('/'),
+                path: te.path,
+                mimeType: te.mimeType,
+            });
+            if (!knownPaths) continue;
+            // Find resolutions of this target pattern: concrete
+            // paths under beats/<beat_id>/ whose suffix matches the
+            // target's regex but that aren't equal to the (already-
+            // emitted) literal target path.
+            const re = targetToRegex(te.suffix);
+            const resolutions = [];
             for (const [p, mt] of knownPaths) {
-                if (seen.has(p)) continue;
-                const suffix = p.substring(('beats/' + beat_id + '/').length);
-                entries.push({ parts: suffix.split('/'), path: p, mimeType: mt });
+                if (claimedPaths.has(p)) continue;
+                if (p === te.path) continue;
+                if (!p.startsWith(beatPrefix)) continue;
+                const sfx = p.substring(beatPrefix.length);
+                if (!re.test(sfx)) continue;
+                resolutions.push({ p, mt, sfx });
+                claimedPaths.add(p);
+            }
+            resolutions.sort((a, b) => a.p < b.p ? -1 : a.p > b.p ? 1 : 0);
+            for (const r of resolutions) {
+                entries.push({
+                    parts: r.sfx.split('/'),
+                    path: r.p,
+                    mimeType: r.mt,
+                });
             }
         }
+
+        // Any concrete paths that didn't match any target pattern
+        // (shouldn't normally happen, but be safe) are appended at
+        // the end in alphabetic order.
+        if (knownPaths) {
+            const leftovers = [];
+            for (const [p, mt] of knownPaths) {
+                if (claimedPaths.has(p)) continue;
+                if (!p.startsWith(beatPrefix)) continue;
+                leftovers.push({ p, mt });
+            }
+            leftovers.sort((a, b) => a.p < b.p ? -1 : a.p > b.p ? 1 : 0);
+            for (const r of leftovers) {
+                const sfx = r.p.substring(beatPrefix.length);
+                entries.push({
+                    parts: sfx.split('/'),
+                    path: r.p,
+                    mimeType: r.mt,
+                });
+            }
+        }
+
         // Recursively bucket entries into items/subfolders based on
         // the first path component. Subfolder order is the order in
         // which the subfolder name first appears.
