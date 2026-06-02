@@ -639,9 +639,12 @@
                         item.path, item.name,
                         item.mimeType, registeredPaths));
                 } else {
-                    media.appendChild(createSubfolderButton(item));
-                    media.appendChild(createSubfolderPanel(
+                    const btn = createSubfolderButton(item);
+                    // Nest the panel inside the button so its
+                    // absolute positioning is relative to the button.
+                    btn.appendChild(createSubfolderPanel(
                         item, color, registeredPaths));
+                    media.appendChild(btn);
                 }
             });
         });
