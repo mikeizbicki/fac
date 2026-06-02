@@ -491,3 +491,256 @@ def _match_single_segment(pattern_seg, input_seg):
     
     return variables
 
+
+def _target_to_regex(target):
+    """
+    Convert a target string with $VAR placeholders into a regex pattern string.
+    Each $VAR is treated as matching one or more characters within a single path segment
+    (i.e., not crossing '/').
+    """
+    regex = ''
+    pos = 0
+    while pos < len(target):
+        ch = target[pos]
+        if ch == '$':
+            var_start = pos + 1
+            var_end = var_start
+            while var_end < len(target) and (target[var_end].isalnum() or target[var_end] == '_'):
+                var_end += 1
+            if var_end == var_start:
+                # Lone '$', treat as literal
+                regex += re.escape('$')
+                pos += 1
+            else:
+                regex += '([^/]+)'
+                pos = var_end
+        else:
+            regex += re.escape(ch)
+            pos += 1
+    return regex
+
+
+def _targets_ambiguous(target_a, target_b):
+    """
+    Return True if there exists some concrete (variable-free) path string that
+    could match both target_a and target_b under variable substitution.
+
+    A variable $VAR matches one or more characters within a single path segment.
+    """
+    # If neither has variables, they are ambiguous only if they're equal strings
+    # (but in that case we still consider them ambiguous - they collide).
+    regex_a = '^' + _target_to_regex(target_a) + '$'
+    regex_b = '^' + _target_to_regex(target_b) + '$'
+
+    # We need to determine if the intersection of the two regex languages is non-empty.
+    # Since each $VAR maps to [^/]+, this is equivalent to checking whether there's
+    # an assignment of variables in each pattern such that the resulting strings are equal.
+    #
+    # A practical approach: split both targets by '/'. They must have the same number of
+    # path segments (since variables don't cross '/'). For each pair of segments, check
+    # if there's an overlap between the languages.
+
+    segs_a = target_a.split('/')
+    segs_b = target_b.split('/')
+    if len(segs_a) != len(segs_b):
+        return False
+
+    for sa, sb in zip(segs_a, segs_b):
+        if not _segments_can_overlap(sa, sb):
+            return False
+    return True
+
+
+def _segments_can_overlap(seg_a, seg_b):
+    """
+    Check if two path segments (no '/') can both match the same concrete string,
+    where $VAR matches one or more non-'/' characters.
+    """
+    # Build regex for seg_a, then try to match against seg_b treating seg_b's $VARs as wildcards too.
+    # Easiest: build regex from seg_a where $VARs become (.+), and from seg_b similarly.
+    # Then check if there's any string matching both. Since both regexes are of the form
+    # literal-and-(.+) alternations, we can check by matching seg_a's regex against a
+    # template constructed from seg_b where $VARs are replaced by a unique sentinel...
+    # Simpler: use a recursive matcher.
+    return _can_match(seg_a, seg_b)
+
+
+def _can_match(a, b):
+    """
+    Recursively determine if patterns a and b (single segments) have a common
+    concrete instantiation. $VAR (variable) matches 1+ non-'/' chars.
+    """
+    # Tokenize each into a list of ('lit', char) or ('var', name) tokens.
+    def tokenize(s):
+        tokens = []
+        i = 0
+        while i < len(s):
+            if s[i] == '$':
+                j = i + 1
+                while j < len(s) and (s[j].isalnum() or s[j] == '_'):
+                    j += 1
+                if j > i + 1:
+                    tokens.append(('var',))
+                    i = j
+                    continue
+            tokens.append(('lit', s[i]))
+            i += 1
+        return tokens
+
+    ta = tokenize(a)
+    tb = tokenize(b)
+
+    # DP: try to produce a common concrete string by emitting one character at a
+    # time. At each step we consume one character of the common string; that
+    # character is matched either by a literal token (which must then advance)
+    # or by a var token (which may stay open for more characters or advance).
+    # A var token must consume at least one character before advancing.
+    from functools import lru_cache
+
+    @lru_cache(maxsize=None)
+    def match(i, j):
+        # Both sides have the same number of tokens remaining? Not required;
+        # we just need to consume all tokens on both sides simultaneously.
+        if i == len(ta) and j == len(tb):
+            return True
+        if i == len(ta) or j == len(tb):
+            return False
+        a_tok = ta[i]
+        b_tok = tb[j]
+
+        if a_tok[0] == 'lit' and b_tok[0] == 'lit':
+            if a_tok[1] != b_tok[1]:
+                return False
+            return match(i + 1, j + 1)
+
+        if a_tok[0] == 'var' and b_tok[0] == 'lit':
+            # var on a emits b_tok[1]; either var ends now (advance i and j) or
+            # var continues (advance only j, var on a stays open and has now
+            # consumed at least one char so it may end later).
+            return match(i + 1, j + 1) or match(i, j + 1)
+
+        if a_tok[0] == 'lit' and b_tok[0] == 'var':
+            return match(i + 1, j + 1) or match(i + 1, j)
+
+        # Both vars: emit one char; at least one var must advance to make
+        # progress. The cases are: both end, only a ends, only b ends.
+        return (match(i + 1, j + 1)
+                or match(i, j + 1)
+                or match(i + 1, j))
+
+    return match(0, 0)
+
+
+def extract_ambiguous_targets(targets):
+    """
+    Given a list of target strings, return a list of groups (lists) of targets
+    that are mutually ambiguous. Two targets are ambiguous if there exists some
+    concrete path string that could match both via variable substitution.
+
+    A variable like $VAR matches one or more characters within a single path segment.
+    Targets are split by '/' into segments, and ambiguity is checked segment-by-segment.
+
+    Only groups with more than one target are returned. Groups are returned in the order
+    of first appearance of their members.
+
+    Examples:
+
+    Two targets where one's literal segment could be matched by the other's variable:
+
+        >>> extract_ambiguous_targets([
+        ...     'beats/$BEAT_ID/dialog/dialog.wav',
+        ...     'beats/$BEAT_ID/dialog/$LANG.wav',
+        ... ])
+        [['beats/$BEAT_ID/dialog/dialog.wav', 'beats/$BEAT_ID/dialog/$LANG.wav']]
+
+    Two unrelated literal targets are not ambiguous:
+
+        >>> extract_ambiguous_targets(['example.png', 'example.mp4'])
+        []
+
+    Different segment counts means not ambiguous:
+
+        >>> extract_ambiguous_targets(['/example.png', '/example.mp4'])
+        []
+        >>> extract_ambiguous_targets(['a/b', 'a/b/c'])
+        []
+
+    Identical targets are reported as ambiguous:
+
+        >>> extract_ambiguous_targets(['a/b.txt', 'a/b.txt'])
+        [['a/b.txt', 'a/b.txt']]
+
+    A variable can match anything in its segment:
+
+        >>> extract_ambiguous_targets(['$X.png', 'hello.png'])
+        [['$X.png', 'hello.png']]
+        >>> extract_ambiguous_targets(['$X.png', 'hello.mp4'])
+        []
+
+    Variables don't cross path separators:
+
+        >>> extract_ambiguous_targets(['$X', 'a/b'])
+        []
+
+    More than two targets can be grouped together:
+
+        >>> sorted(extract_ambiguous_targets([
+        ...     '$A/file.txt',
+        ...     'foo/$B',
+        ...     'foo/file.txt',
+        ... ])[0])
+        ['$A/file.txt', 'foo/$B', 'foo/file.txt']
+
+    Targets in disjoint groups are reported separately:
+
+        >>> groups = extract_ambiguous_targets([
+        ...     'a/$X.png',
+        ...     'a/hello.png',
+        ...     'b/$Y.mp4',
+        ...     'b/world.mp4',
+        ... ])
+        >>> sorted(sorted(g) for g in groups)
+        [['a/$X.png', 'a/hello.png'], ['b/$Y.mp4', 'b/world.mp4']]
+
+    Empty input:
+
+        >>> extract_ambiguous_targets([])
+        []
+
+    Single target is never ambiguous:
+
+        >>> extract_ambiguous_targets(['only.txt'])
+        []
+    """
+    n = len(targets)
+    # Union-find
+    parent = list(range(n))
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(x, y):
+        rx, ry = find(x), find(y)
+        if rx != ry:
+            parent[ry] = rx
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            if _targets_ambiguous(targets[i], targets[j]):
+                union(i, j)
+
+    # Group indices by root, preserving order of first appearance.
+    groups = {}
+    order = []
+    for i in range(n):
+        r = find(i)
+        if r not in groups:
+            groups[r] = []
+            order.append(r)
+        groups[r].append(targets[i])
+
+    return [groups[r] for r in order if len(groups[r]) > 1]
+
