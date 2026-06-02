@@ -652,15 +652,18 @@
 
         const isImage = mimeType.startsWith('image/');
         const isVideo = mimeType.startsWith('video/');
+        const isAudio = mimeType.startsWith('audio/');
         const isText = mimeType.startsWith('text/');
         if (isImage) wrapper.classList.add('has-image');
         else if (isVideo) wrapper.classList.add('has-video');
+        else if (isAudio) wrapper.classList.add('has-audio');
         else if (isText) wrapper.classList.add('has-text');
 
         const mediaContainer = document.createElement('div');
         mediaContainer.className = isImage
             ? 'image-container'
-            : (isVideo ? 'video-container' : 'text-container');
+            : (isVideo ? 'video-container'
+               : (isAudio ? 'audio-container' : 'text-container'));
         wrapper.appendChild(mediaContainer);
 
         // Status overlay. data-status on .sticky-media-wrapper drives
@@ -697,6 +700,15 @@
             if (status !== 'notbuilt') {
                 _scheduleLazyFetch(wrapper, () => {
                     if (window.fetchVideo) window.fetchVideo(targetPath, false).catch(() => {});
+                });
+            }
+        } else if (isAudio) {
+            if (window.registerAudioContainer) {
+                window.registerAudioContainer(targetPath, mediaContainer, 'leaf-audio');
+            }
+            if (status !== 'notbuilt') {
+                _scheduleLazyFetch(wrapper, () => {
+                    if (window.fetchAudio) window.fetchAudio(targetPath, false).catch(() => {});
                 });
             }
         } else if (isText) {

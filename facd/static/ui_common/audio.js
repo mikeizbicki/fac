@@ -107,7 +107,14 @@
             // Fallback: create container if not present
             audioContainer = document.createElement('div');
             audioContainer.className = 'audio-container';
-            nodeEl.insertBefore(audioContainer, nodeEl.firstChild);
+            // Insert after the tree-header so the player sits below
+            // the node's title bar rather than above it.
+            const header = nodeEl.querySelector(':scope > .tree-header');
+            if (header && header.nextSibling) {
+                nodeEl.insertBefore(audioContainer, header.nextSibling);
+            } else {
+                nodeEl.appendChild(audioContainer);
+            }
             nodeEl.classList.add('has-audio');
         }
 
