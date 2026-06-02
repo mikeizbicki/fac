@@ -41,6 +41,13 @@
         const registeredPaths = new Set();
         let savingOverlay = null;
         let savingTimeout = null;
+        // Per-paper fold state. Keys are the first beat_id of each
+        // paper (which is stable across edits within an island).
+        //   foldStates: paperKey -> 'max' | 'partial' | 'full'
+        //   frontBeats: paperKey -> beat_id of the beat currently
+        //               kept visible in partial mode.
+        const foldStates = new Map();
+        const frontBeats = new Map();
 
         function showSavingOverlay(message) {
             if (!container) return;
@@ -609,6 +616,71 @@
             });
         }
 
+        // --- Fold-state helpers ---
+        //
+        // applyFoldStateToPaper reads paper.dataset.fold and updates
+        // both the .fold-front marker on the appropriate beat and
+        // the .selected class on the menu buttons. It deliberately
+        // does NOT touch paper.dataset.fold itself; callers set that
+        // first (typically in renderBoard or setPaperFold).
+        function applyFoldStateToPaper(paper) {
+            const state = paper.dataset.fold || 'max';
+            const key = paper.dataset.foldKey;
+            const beatEls = paper.querySelectorAll(':scope > .screenplay-beat');
+            beatEls.forEach(b => b.classList.remove('fold-front'));
+            if (state === 'partial' && beatEls.length > 0) {
+                const desiredId = frontBeats.get(key);
+                let target = null;
+                if (desiredId) {
+                    beatEls.forEach(b => {
+                        if (!target && b.dataset.beat_id === desiredId) target = b;
+                    });
+                }
+                if (!target) target = beatEls[0];
+                target.classList.add('fold-front');
+            }
+            paper.querySelectorAll('.screenplay-fold-menu button').forEach(b => {
+                b.classList.toggle('selected', b.dataset.foldOption === state);
+            });
+        }
+
+        function setPaperFold(paper, state) {
+            const key = paper.dataset.foldKey;
+            if (key) foldStates.set(key, state);
+            paper.dataset.fold = state;
+            applyFoldStateToPaper(paper);
+            // Folding changes sticky-note positions, so arrow
+            // geometry needs to be recomputed.
+            if (lastIslands) {
+                requestAnimationFrame(() =>
+                    drawArrows(currentBeats, lastIslands.colorOf, lastBeatColors));
+            }
+        }
+
+        function createFoldMenu(paperKey, currentState) {
+            const menu = document.createElement('div');
+            menu.className = 'screenplay-fold-menu';
+            const options = [
+                { v: 'max',     label: '🗖', title: 'Maximize (show all beats)' },
+                { v: 'partial', label: '🗗', title: 'Partial fold (one beat visible)' },
+                { v: 'full',    label: '🗕', title: 'Full fold (paper minimized)' },
+            ];
+            options.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.dataset.foldOption = opt.v;
+                btn.textContent = opt.label;
+                btn.title = opt.title;
+                if (opt.v === currentState) btn.classList.add('selected');
+                btn.addEventListener('click', e => {
+                    e.stopPropagation();
+                    const paper = btn.closest('.screenplay-paper');
+                    if (paper) setPaperFold(paper, opt.v);
+                });
+                menu.appendChild(btn);
+            });
+            return menu;
+        }
+
         function renderBoard(beats) {
             if (!container) return;
             SN.clearRegisteredPaths(board, registeredPaths);
@@ -643,6 +715,11 @@
             groups.forEach(group => {
                 const paper = document.createElement('div');
                 paper.className = 'screenplay-paper';
+                const paperKey = beats[group.start].beat_id;
+                paper.dataset.foldKey = paperKey;
+                const foldState = foldStates.get(paperKey) || 'max';
+                paper.dataset.fold = foldState;
+                paper.appendChild(createFoldMenu(paperKey, foldState));
                 for (let i = group.start; i <= group.end; i++) {
                     const beat = beats[i];
                     const color = beatColors.get(beat.beat_id);
@@ -651,6 +728,22 @@
                     paper.appendChild(
                         createBeatElement(beat, i, color, i === group.start, sep));
                 }
+                applyFoldStateToPaper(paper);
+                // In partial mode, clicking on a non-front (folded)
+                // beat brings it to the front. Buttons inside beats
+                // and the sticky note all stop propagation, so this
+                // handler only fires for "blank" clicks on the
+                // visible strip of a folded beat.
+                paper.addEventListener('click', e => {
+                    if (paper.dataset.fold !== 'partial') return;
+                    const beat = e.target.closest('.screenplay-beat');
+                    if (!beat || !paper.contains(beat)) return;
+                    if (beat.classList.contains('fold-front')) return;
+                    const beatId = beat.dataset.beat_id;
+                    if (!beatId) return;
+                    frontBeats.set(paperKey, beatId);
+                    setPaperFold(paper, 'partial');
+                });
                 rows.appendChild(paper);
             });
 
