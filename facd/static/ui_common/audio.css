@@ -1,0 +1,17 @@
+/* audio.css - Styles for audio display in the target tree */
+
+.audio-container {
+    margin-top: 8px;
+    width: 100%;
+}
+
+.leaf-audio {
+    width: 100%;
+    max-width: 600px;
+    display: block;
+}
+
+/* Hide audio container when leaf node is collapsed */
+.tree-node.leaf:not(.expanded) .audio-container {
+    display: none;
+}
