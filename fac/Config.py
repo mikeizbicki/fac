@@ -9,8 +9,10 @@ import os
 import re
 
 # internal imports
+from fac.Errors import FACError
 from fac.Logging import logger
 from fac.util.freeze import freeze, thaw
+from fac.util.targets import extract_ambiguous_targets
 
 # external lib imports
 import yaml
@@ -51,7 +53,22 @@ def load_config(path):
     with open(path) as fin:
         text = fin.read()
     targets_dict = rawyaml_to_targets(text)
+    assert_sane_config(targets_dict)
     return freeze(targets_dict)
+
+
+def assert_sane_config(targets_dict):
+    '''
+    Verify that the config is sane and provide helpful error messages if not.
+    '''
+    targets = list(targets_dict)
+    targetss = extract_ambiguous_targets(targets)
+    if len(targetss) > 0:
+        messages = []
+        for targets in targetss:
+            messages.append({'ambiguous targets': targets})
+        logger.error({'fac.yaml cannot be loaded due to ambiguous targets': messages})
+        raise FACError
 
 
 def pprint_targets(targets):

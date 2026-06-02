@@ -221,10 +221,13 @@ def main():
 
     # register state routes
     from fac.Fac import Fac
-    state = Fac(
-        allow_dirty=args.allow_dirty,
-        auto_commit=args.auto_commit,
-        )
+    try:
+        state = Fac(
+            allow_dirty=args.allow_dirty,
+            auto_commit=args.auto_commit,
+            )
+    except fac.Errors.FACError:
+        return 1
     app.state = state
     #state.path_manager.start()
 
