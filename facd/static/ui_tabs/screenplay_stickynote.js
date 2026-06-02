@@ -9,29 +9,90 @@
 // owns, so the view can unregister cleanly on re-render.
 
 (function() {
-    const BEAT_TARGETS = {
-        beat_type: 'beats/$BEAT_ID/beat_type',
-        length_seconds: 'beats/$BEAT_ID/length_seconds',
-        dialog_duration_with_padding: 'beats/$BEAT_ID/processed_config/dialog_duration_with_padding',
-        truncate_video: 'beats/$BEAT_ID/processed_config/truncate_video',
-        add_sfx: 'beats/$BEAT_ID/sfx/add_sfx',
-        sfx_model: 'beats/$BEAT_ID/sfx/model',
-        startframe: 'beats/$BEAT_ID/beat_type=standard/startframe.png',
-        video: 'beats/$BEAT_ID/raw.mp4',
-        debug_video: 'beats/$BEAT_ID/debug.mp4',
-    };
+    // Cache of the /list_targets response. The targets displayed in
+    // each sticky note are derived dynamically from this data, so as
+    // the backend's fac.yaml changes, sticky notes pick up new
+    // targets/subfolders without any code changes here.
+    let _targetsCache = null;
+    let _targetsPromise = null;
+    function getTargets() {
+        if (_targetsCache) return Promise.resolve(_targetsCache);
+        if (_targetsPromise) return _targetsPromise;
+        _targetsPromise = fetch('/list_targets')
+            .then(r => r.json())
+            .then(data => { _targetsCache = data; return data; })
+            .catch(err => {
+                console.error('Failed to load /list_targets:', err);
+                _targetsPromise = null;
+                return {};
+            });
+        return _targetsPromise;
+    }
+    // Kick off the fetch eagerly at module load time so the first
+    // sticky-note render usually finds the data already cached.
+    getTargets();
 
-    function getTargetPath(key, beat_id) {
-        return BEAT_TARGETS[key].replace('$BEAT_ID', beat_id);
+    // Global subfolder open-state. Opening a subfolder reveals it on
+    // EVERY sticky note simultaneously. To restrict this to a single
+    // sticky, swap _currentOpenSubfolder for a per-sticky local
+    // variable and update toggleSubfolder/applyOpenSubfolder
+    // accordingly.
+    let _currentOpenSubfolder = null;
+    function toggleSubfolder(name) {
+        _currentOpenSubfolder =
+            (_currentOpenSubfolder === name) ? null : name;
+        applyOpenSubfolder();
+    }
+    function closeSubfolder() {
+        _currentOpenSubfolder = null;
+        applyOpenSubfolder();
+    }
+    function applyOpenSubfolder() {
+        document.querySelectorAll('.sticky-subfolder-panel')
+            .forEach(panel => {
+                panel.classList.toggle(
+                    'open',
+                    panel.dataset.subfolder === _currentOpenSubfolder);
+            });
+    }
+
+    // Given /list_targets data and a concrete beat_id, return an
+    // ordered list describing what to render in the media section:
+    //   - { type: 'direct',    name, path, mimeType }
+    //   - { type: 'subfolder', name, targets: [{name,path,mimeType}, ...] }
+    // Targets whose path contains unsubstituted variables besides
+    // $BEAT_ID are skipped (they expand to many concrete paths).
+    // Item order matches first-appearance order in /list_targets.
+    function processBeatTargets(targetsData, beat_id) {
+        const items = [];
+        const subfolderMap = new Map();
+        const prefix = 'beats/$BEAT_ID/';
+        for (const [target, config] of Object.entries(targetsData || {})) {
+            if (!target.startsWith(prefix)) continue;
+            const suffix = target.substring(prefix.length);
+            if (/\$[A-Z_]+/.test(suffix)) continue;
+            const path = target.replace(/\$BEAT_ID/g, beat_id);
+            const mimeType = (config && config['mime-type']) || '';
+            const slashIdx = suffix.indexOf('/');
+            if (slashIdx === -1) {
+                items.push({ type: 'direct', name: suffix, path, mimeType });
+            } else {
+                const subName = suffix.substring(0, slashIdx);
+                const rest = suffix.substring(slashIdx + 1);
+                let folder = subfolderMap.get(subName);
+                if (!folder) {
+                    folder = { type: 'subfolder', name: subName, targets: [] };
+                    subfolderMap.set(subName, folder);
+                    items.push(folder);
+                }
+                folder.targets.push({ name: rest, path, mimeType });
+            }
+        }
+        return items;
     }
 
     function isBeatTargetPath(path) {
-        const match = path.match(/^beats\/([^/]+)\//);
-        if (!match) return false;
-        const beat_id = match[1];
-        return Object.values(BEAT_TARGETS).some(pattern =>
-            path === pattern.replace('$BEAT_ID', beat_id)
-        );
+        return /^beats\//.test(path);
     }
 
     function createMetaRow(label, value, options) {
@@ -108,7 +169,8 @@
                     thumb.classList.add('sticky-beatref-thumb-empty');
                     thumb.textContent = 'no beat_id';
                 } else {
-                    const targetPath = getTargetPath('startframe', entry.beat_id);
+                    const targetPath = 'beats/' + entry.beat_id
+                        + '/beat_type=standard/startframe.png';
                     thumb.dataset.path = targetPath;
                     const imgContainer = document.createElement('div');
                     imgContainer.className = 'image-container';
@@ -462,6 +524,54 @@
         return wrapper;
     }
 
+    // Build a clickable button that opens (toggles) a subfolder
+    // panel. Subfolder open-state is global, so clicking this in
+    // one sticky note reveals the subfolder in all of them.
+    function createSubfolderButton(item) {
+        const btn = document.createElement('div');
+        btn.className = 'sticky-subfolder-button';
+        btn.dataset.subfolder = item.name;
+        btn.textContent = '📁 ' + item.name + '/';
+        btn.addEventListener('click', e => {
+            e.stopPropagation();
+            toggleSubfolder(item.name);
+        });
+        return btn;
+    }
+
+    // Build the nested panel that appears when a subfolder button
+    // is clicked. Mirrors the parent sticky's color (set inline by
+    // the caller) and is distinguished from the parent by an inset
+    // box-shadow defined in screenplay_view.css.
+    function createSubfolderPanel(item, color, registeredPaths) {
+        const panel = document.createElement('div');
+        panel.className = 'sticky-subfolder-panel';
+        panel.dataset.subfolder = item.name;
+        if (color) panel.style.background = color;
+        if (_currentOpenSubfolder === item.name) panel.classList.add('open');
+
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'sticky-subfolder-close';
+        closeBtn.textContent = '✕';
+        closeBtn.title = 'Close';
+        closeBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            closeSubfolder();
+        });
+        panel.appendChild(closeBtn);
+
+        const title = document.createElement('div');
+        title.className = 'sticky-subfolder-title';
+        title.textContent = item.name + '/';
+        panel.appendChild(title);
+
+        item.targets.forEach(t => {
+            panel.appendChild(createMediaNode(
+                t.path, t.name, t.mimeType, registeredPaths));
+        });
+        return panel;
+    }
+
     // Build a sticky note element for a given beat. The background
     // color is set inline so callers can supply per-island colors.
     function createStickyNote(beat, color, registeredPaths, context) {
@@ -504,30 +614,30 @@
 
         const media = document.createElement('div');
         media.className = 'sticky-media-section';
-        // Text-backed targets first, so they appear above images/videos.
-        const textTargets = [
-            ['beat_type',                     'beat_type'],
-            ['length_seconds',                'length_seconds'],
-            ['dialog_duration_with_padding',  'dialog_duration_with_padding'],
-            ['truncate_video',                'truncate_video'],
-            ['add_sfx',                       'add_sfx'],
-            ['sfx_model',                     'sfx_model'],
-        ];
-        textTargets.forEach(([key, label]) => {
-            media.appendChild(createMediaNode(
-                getTargetPath(key, beat.beat_id),
-                label, 'text/plain', registeredPaths));
-        });
-        media.appendChild(createMediaNode(
-            getTargetPath('startframe', beat.beat_id),
-            'startframe.png', 'image/png', registeredPaths));
-        media.appendChild(createMediaNode(
-            getTargetPath('video', beat.beat_id),
-            'raw.mp4', 'video/mp4', registeredPaths));
-        media.appendChild(createMediaNode(
-            getTargetPath('debug_video', beat.beat_id),
-            'debug.mp4', 'video/mp4', registeredPaths));
         sticky.appendChild(media);
+
+        // Targets are loaded dynamically from /list_targets so that
+        // whatever the backend currently defines for this beat shows
+        // up here automatically. The fetch is cached so this Promise
+        // typically resolves synchronously on the microtask queue.
+        // The media element may have been detached by the time the
+        // promise resolves (if the view re-rendered), so we guard
+        // with isConnected before mutating.
+        getTargets().then(data => {
+            if (!media.isConnected) return;
+            const items = processBeatTargets(data, beat.beat_id);
+            items.forEach(item => {
+                if (item.type === 'direct') {
+                    media.appendChild(createMediaNode(
+                        item.path, item.name,
+                        item.mimeType, registeredPaths));
+                } else {
+                    media.appendChild(createSubfolderButton(item));
+                    media.appendChild(createSubfolderPanel(
+                        item, color, registeredPaths));
+                }
+            });
+        });
 
         return sticky;
     }
@@ -623,6 +733,5 @@
         clearRegisteredPaths,
         handleTargetUpdate,
         isBeatTargetPath,
-        getTargetPath,
     };
 })();

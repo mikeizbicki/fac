@@ -524,6 +524,68 @@
     gap: 8px;
 }
 
+/* Clickable subfolder entry shown in the media section. Clicking it
+ * opens the corresponding .sticky-subfolder-panel (globally, across
+ * every sticky note). */
+.sticky-subfolder-button {
+    display: flex;
+    align-items: center;
+    padding: 4px 8px;
+    background: rgba(0, 0, 0, 0.06);
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 3px;
+    cursor: pointer;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 9pt;
+    font-weight: bold;
+    color: #333;
+}
+.sticky-subfolder-button:hover {
+    background: rgba(0, 0, 0, 0.12);
+}
+
+/* Nested "child" sticky panel. Inherits its parent sticky's color
+ * (set inline by createSubfolderPanel) and is visually distinguished
+ * by an inset shadow. Hidden by default; toggled via .open. */
+.sticky-subfolder-panel {
+    display: none;
+    padding: 12px;
+    margin-top: 4px;
+    box-shadow: inset 2px 2px 6px rgba(0, 0, 0, 0.25),
+                2px 2px 6px rgba(0, 0, 0, 0.2);
+    border-radius: 2px;
+    position: relative;
+    flex-direction: column;
+    gap: 8px;
+}
+.sticky-subfolder-panel.open {
+    display: flex;
+}
+.sticky-subfolder-title {
+    font-weight: bold;
+    font-size: 9pt;
+    color: #333;
+    padding-right: 28px;
+    margin-bottom: 4px;
+}
+.sticky-subfolder-close {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 22px;
+    height: 22px;
+    background: rgba(0, 0, 0, 0.12);
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+    z-index: 2;
+}
+.sticky-subfolder-close:hover {
+    background: rgba(0, 0, 0, 0.22);
+}
+
 /* Each sticky-media-wrapper hosts a media container plus a
  * .node-status-overlay; the overlay is absolutely positioned, so the
  * wrapper must establish a positioning context. */
