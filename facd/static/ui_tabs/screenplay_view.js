@@ -24,6 +24,11 @@
     const C = window.ScreenplayCommon;
     const SN = window.ScreenplayStickyNote;
 
+    // Shared across views: the beat_id currently considered "centered"
+    // in whichever view the user was last interacting with. Used to
+    // sync scroll position when switching between vertical/horizontal.
+    let _lastCenteredBeatId = null;
+
     // Arrow routing tuning.
     const ARROW_BASE_OFFSET    = 30;
     const ARROW_LANE_DEPTH     = 14;
@@ -41,6 +46,7 @@
         const registeredPaths = new Set();
         let savingOverlay = null;
         let savingTimeout = null;
+        let scrollListenerAttached = false;
         // Per-paper fold state. Keys are the first beat_id of each
         // paper (which is stable across edits within an island).
         //   foldStates: paperKey -> 'max' | 'partial' | 'full'
@@ -48,6 +54,58 @@
         //               kept visible in partial mode.
         const foldStates = new Map();
         const frontBeats = new Map();
+
+        // Find which beat is currently closest to the center of the
+        // container's viewport. Used to record "what the user is
+        // looking at" so the other view can scroll there on switch.
+        function findCenteredBeatId() {
+            if (!container || !board) return null;
+            const cRect = container.getBoundingClientRect();
+            const cx = cRect.left + cRect.width / 2;
+            const cy = cRect.top + cRect.height / 2;
+            let best = null;
+            let bestDist = Infinity;
+            board.querySelectorAll('.screenplay-beat').forEach(el => {
+                const r = el.getBoundingClientRect();
+                if (r.width === 0 || r.height === 0) return;
+                const dx = (r.left + r.right) / 2 - cx;
+                const dy = (r.top + r.bottom) / 2 - cy;
+                const d = dx * dx + dy * dy;
+                if (d < bestDist) {
+                    bestDist = d;
+                    best = el.dataset.beat_id;
+                }
+            });
+            return best;
+        }
+
+        function recordCenteredBeat() {
+            const id = findCenteredBeatId();
+            if (id) _lastCenteredBeatId = id;
+        }
+
+        function scrollToBeat(beatId) {
+            if (!board || !beatId) return false;
+            const el = board.querySelector(
+                `.screenplay-beat[data-beat_id="${beatId}"]`);
+            if (!el) return false;
+            el.scrollIntoView({
+                behavior: 'auto',
+                block: 'center',
+                inline: 'center',
+            });
+            return true;
+        }
+
+        function attachScrollListener() {
+            if (scrollListenerAttached || !container) return;
+            scrollListenerAttached = true;
+            container.addEventListener('scroll', () => {
+                // Only record when this view is actually visible.
+                const r = container.getBoundingClientRect();
+                if (r.width > 0 && r.height > 0) recordCenteredBeat();
+            }, { passive: true });
+        }
 
         function showSavingOverlay(message) {
             if (!container) return;
@@ -801,7 +859,8 @@
                 paper.className = 'screenplay-paper';
                 const paperKey = beats[group.start].beat_id;
                 paper.dataset.foldKey = paperKey;
-                const foldState = foldStates.get(paperKey) || 'max';
+                const defaultFold = isHorizontal ? 'partial' : 'max';
+                const foldState = foldStates.get(paperKey) || defaultFold;
                 paper.dataset.fold = foldState;
                 paper.appendChild(createFoldMenu(paperKey, foldState));
                 for (let i = group.start; i <= group.end; i++) {
@@ -858,6 +917,7 @@
             container = document.createElement('div');
             container.className = 'screenplay-container';
             container.dataset.orientation = orientation;
+            container.tabIndex = -1;
             tabContainer.appendChild(container);
 
             board = document.createElement('div');
@@ -875,7 +935,12 @@
                 const rect = container.getBoundingClientRect();
                 const visible = rect.width > 0 && rect.height > 0;
                 if (visible && !wasVisible) {
+                    attachScrollListener();
                     drawArrows(currentBeats, lastIslands.colorOf, lastBeatColors);
+                    // Sync to the beat the user was looking at in the
+                    // other view. Defer one frame so layout settles.
+                    const target = _lastCenteredBeatId;
+                    if (target) requestAnimationFrame(() => scrollToBeat(target));
                 }
                 wasVisible = visible;
             };
