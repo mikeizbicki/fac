@@ -531,7 +531,14 @@
         const btn = document.createElement('div');
         btn.className = 'sticky-subfolder-button';
         btn.dataset.subfolder = item.name;
-        btn.textContent = '📁 ' + item.name + '/';
+        const icon = document.createElement('span');
+        icon.className = 'sticky-subfolder-icon';
+        icon.textContent = '📁';
+        btn.appendChild(icon);
+        const label = document.createElement('span');
+        label.className = 'sticky-subfolder-label';
+        label.textContent = ' ' + item.name + '/';
+        btn.appendChild(label);
         btn.addEventListener('click', e => {
             e.stopPropagation();
             toggleSubfolder(item.name);

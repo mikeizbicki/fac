@@ -529,6 +529,7 @@
  * opens the corresponding .sticky-subfolder-panel (globally, across
  * every sticky note). */
 .sticky-subfolder-button {
+    position: relative;
     display: flex;
     align-items: center;
     padding: 4px 8px;
@@ -545,8 +546,17 @@
     background: rgba(0, 0, 0, 0.12);
 }
 
+.sticky-subfolder-icon {
+    /* The folder icon stays visible even when the overlay panel is
+     * open (the panel is positioned to leave room for it). */
+    position: relative;
+    z-index: 51;
+}
+
 /* Nested "child" sticky panel. Rendered as an overlay on top of the
- * parent sticky note: absolutely positioned so opening/closing it
+ * subfolder button that opens it: positioned so its top aligns with
+ * the button and it is shifted right just enough that only the
+ * button's folder icon peeks out from underneath. Opening/closing
  * does not shift any surrounding layout. Inherits its parent
  * sticky's color (set inline by createSubfolderPanel) and is
  * visually distinguished by a stronger drop shadow. Hidden by
@@ -554,9 +564,9 @@
 .sticky-subfolder-panel {
     display: none;
     position: absolute;
-    top: 8px;
-    left: 8px;
-    right: 8px;
+    top: 0;
+    left: 28px;
+    right: -8px;
     z-index: 50;
     padding: 12px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35),
@@ -564,7 +574,7 @@
     border-radius: 2px;
     flex-direction: column;
     gap: 8px;
-    max-height: calc(100% - 16px);
+    max-height: 400px;
     overflow-y: auto;
     box-sizing: border-box;
 }
