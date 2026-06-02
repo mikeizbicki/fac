@@ -32,6 +32,49 @@
     // sticky-note render usually finds the data already cached.
     getTargets();
 
+    // Shared IntersectionObserver: defers blob fetches for media
+    // wrappers until they actually scroll into view. Without this,
+    // initial screenplay load fires hundreds of fetchImage/fetchVideo
+    // calls at once (across both vertical and horizontal views),
+    // which bogs down the browser for many seconds. Each registered
+    // element carries a _lazyFetch callback we invoke once when it
+    // first becomes visible, then we stop observing it.
+    let _lazyObserver = null;
+    function _getLazyObserver() {
+        if (_lazyObserver) return _lazyObserver;
+        if (typeof IntersectionObserver === 'undefined') return null;
+        _lazyObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (!entry.isIntersecting) return;
+                const el = entry.target;
+                const fn = el._lazyFetch;
+                if (fn) {
+                    el._lazyFetch = null;
+                    try { fn(); } catch (e) { console.error(e); }
+                }
+                _lazyObserver.unobserve(el);
+            });
+        }, { rootMargin: '200px' });
+        return _lazyObserver;
+    }
+    function _scheduleLazyFetch(el, fn) {
+        const obs = _getLazyObserver();
+        if (!obs) {
+            // No IntersectionObserver support: fall back to a small
+            // setTimeout so we at least don't block the initial paint.
+            setTimeout(fn, 0);
+            return;
+        }
+        el._lazyFetch = fn;
+        obs.observe(el);
+    }
+    function _cancelLazyFetch(el) {
+        if (!el) return;
+        el._lazyFetch = null;
+        const obs = _lazyObserver;
+        if (obs) obs.unobserve(el);
+    }
+
     // Global subfolder open-state. Opening a subfolder reveals it on
     // EVERY sticky note simultaneously. To restrict this to a single
     // sticky, swap _currentOpenSubfolder for a per-sticky local
@@ -641,16 +684,20 @@
             if (window.registerImageContainer) {
                 window.registerImageContainer(targetPath, mediaContainer, 'leaf-image');
             }
-            if (status !== 'notbuilt' && window.fetchImage) {
-                window.fetchImage(targetPath, false).catch(() => {});
+            if (status !== 'notbuilt') {
+                _scheduleLazyFetch(wrapper, () => {
+                    if (window.fetchImage) window.fetchImage(targetPath, false).catch(() => {});
+                });
             }
         } else if (isVideo) {
             if (window.registerVideoContainer) {
                 window.registerImageContainer(targetPath, mediaContainer, 'leaf-image');
                 window.registerVideoContainer(targetPath, mediaContainer, 'leaf-video');
             }
-            if (status !== 'notbuilt' && window.fetchVideo) {
-                window.fetchVideo(targetPath, false).catch(() => {});
+            if (status !== 'notbuilt') {
+                _scheduleLazyFetch(wrapper, () => {
+                    if (window.fetchVideo) window.fetchVideo(targetPath, false).catch(() => {});
+                });
             }
         } else if (isText) {
             // Text targets: render the file content (or em-dash if
@@ -856,6 +903,7 @@
             board.querySelectorAll('.sticky-media-wrapper').forEach(w => {
                 const path = w.dataset.path;
                 if (!path) return;
+                _cancelLazyFetch(w);
                 const img = w.querySelector('.image-container');
                 const vid = w.querySelector('.video-container');
                 if (img && window.unregisterImageContainer) {
