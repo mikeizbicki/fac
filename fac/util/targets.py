@@ -590,48 +590,45 @@ def _can_match(a, b):
     ta = tokenize(a)
     tb = tokenize(b)
 
-    # Convert to regex where var = .+ and check intersection by building a regex from
-    # one and matching against all possible "expansions" of the other. Instead, use
-    # a 2D DP: can we align ta[i:] with tb[j:] producing some common string?
+    # DP: try to produce a common concrete string by emitting one character at a
+    # time. At each step we consume one character of the common string; that
+    # character is matched either by a literal token (which must then advance)
+    # or by a var token (which may stay open for more characters or advance).
+    # A var token must consume at least one character before advancing.
     from functools import lru_cache
 
     @lru_cache(maxsize=None)
-    def match(i, j, a_var_consumed, b_var_consumed):
-        # a_var_consumed: have we consumed at least one char for a current var at position i?
-        # b_var_consumed: same for b.
+    def match(i, j):
+        # Both sides have the same number of tokens remaining? Not required;
+        # we just need to consume all tokens on both sides simultaneously.
         if i == len(ta) and j == len(tb):
-            # Both done; any active vars must have consumed at least one char.
             return True
-        # If one side is exhausted, the other can only have a trailing var (with consumed=True ok, but it still has to emit chars matching the other side which is empty -> only ok if no more tokens).
-        if i == len(ta):
-            # Remaining tb tokens must all be... nothing. No more chars available.
-            return False
-        if j == len(tb):
+        if i == len(ta) or j == len(tb):
             return False
         a_tok = ta[i]
         b_tok = tb[j]
-        # Emit one character of the common string. Determine what char each side emits.
-        # Case: both literals
+
         if a_tok[0] == 'lit' and b_tok[0] == 'lit':
             if a_tok[1] != b_tok[1]:
                 return False
-            return match(i + 1, j + 1, False, False)
-        if a_tok[0] == 'var' and b_tok[0] == 'lit':
-            # var on a emits b_tok[1]. Options: consume the var (advance i) or stay (continue var).
-            ok = match(i + 1, j + 1, False, False)  # var emits exactly this one char then ends
-            ok = ok or match(i, j + 1, True, False)  # var continues, emits this char
-            return ok
-        if a_tok[0] == 'lit' and b_tok[0] == 'var':
-            ok = match(i + 1, j + 1, False, False)
-            ok = ok or match(i + 1, j, False, True)
-            return ok
-        # both vars: emit one char; either can end or continue
-        return (match(i + 1, j + 1, False, False)
-                or match(i, j + 1, True, False)
-                or match(i + 1, j, False, True)
-                or match(i, j, True, True))
+            return match(i + 1, j + 1)
 
-    return match(0, 0, False, False)
+        if a_tok[0] == 'var' and b_tok[0] == 'lit':
+            # var on a emits b_tok[1]; either var ends now (advance i and j) or
+            # var continues (advance only j, var on a stays open and has now
+            # consumed at least one char so it may end later).
+            return match(i + 1, j + 1) or match(i, j + 1)
+
+        if a_tok[0] == 'lit' and b_tok[0] == 'var':
+            return match(i + 1, j + 1) or match(i + 1, j)
+
+        # Both vars: emit one char; at least one var must advance to make
+        # progress. The cases are: both end, only a ends, only b ends.
+        return (match(i + 1, j + 1)
+                or match(i, j + 1)
+                or match(i + 1, j))
+
+    return match(0, 0)
 
 
 def extract_ambiguous_targets(targets):
