@@ -327,6 +327,12 @@
     //                  line).
     //   - null:        no direct ref on the later beat; no decorative
     //                  divider is drawn.
+    //
+    // Semantically a 'continues' separator (dotted) means the two
+    // adjacent beats are a single continuous shot. That's only true
+    // when the later beat's continues_from_beat_id points directly at
+    // the immediately-preceding beat. Otherwise we fall back to
+    // 'includes' (dashed) to indicate "related but not contiguous".
     function computePaperGroups(beats, islandOf) {
         const groups = [];
         if (beats.length === 0) return groups;
@@ -343,8 +349,10 @@
                 separators = [];
             } else {
                 let kind = null;
-                if (cur.continues_from_beat_id) {
+                if (cur.continues_from_beat_id === prev.beat_id) {
                     kind = 'continues';
+                } else if (cur.continues_from_beat_id) {
+                    kind = 'includes';
                 } else if (cur.include_beat_id) {
                     kind = 'includes';
                 }

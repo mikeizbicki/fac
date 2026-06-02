@@ -899,6 +899,27 @@
                 void overlay.offsetWidth;
                 overlay.classList.add('status-flash');
             }
+
+            // Propagate a transient flash to any enclosing subfolder
+            // (button or inline section). The status-flash class is
+            // animation-only and self-removes after ~1s, so it gives
+            // visual feedback without leaving a persistent gray
+            // overlay on the folder itself.
+            let parent = wrapper.parentElement;
+            while (parent) {
+                if (parent.classList
+                    && (parent.classList.contains('sticky-subfolder-panel')
+                        || parent.classList.contains('sticky-subfolder-button')
+                        || parent.classList.contains('sticky-subfolder-inline'))) {
+                    parent.classList.remove('sticky-subfolder-flash');
+                    void parent.offsetWidth;
+                    parent.classList.add('sticky-subfolder-flash');
+                    setTimeout(() => {
+                        parent.classList.remove('sticky-subfolder-flash');
+                    }, 1100);
+                }
+                parent = parent.parentElement;
+            }
         });
 
         // When the targets tab already has a tree-node for this path
