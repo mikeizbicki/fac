@@ -82,6 +82,21 @@
         return _beatPaths.get(beat_id) || new Map();
     }
 
+    // Register a global SSE handler so we learn about every
+    // beats/<beat_id>/... path the backend reports, even before any
+    // sticky note for that beat has been rendered. Without this, the
+    // per-view path handler in screenplay_view.js only forwards
+    // events for paths already in its registeredPaths set, which
+    // never includes resolved variable-target paths until they
+    // appear on screen -- a chicken-and-egg.
+    if (window.registerPathHandler) {
+        window.registerPathHandler(function(path, metadata) {
+            if (!/^beats\//.test(path)) return;
+            const r = _recordBeatPath(path, metadata && metadata['mime-type']);
+            if (r && r.isNew) _repopulateBeatStickies(r.beat_id);
+        });
+    }
+
     // Given /list_targets data and a concrete beat_id, return an
     // ordered list describing what to render in the media section:
     //   - { type: 'direct',    name, path, mimeType }
@@ -797,17 +812,6 @@
     }
 
     function handleTargetUpdate(path, metadata) {
-        // Record any beats/<beat_id>/... path we see so future
-        // sticky-note renders include it. If this path is new and a
-        // sticky note for the beat is already on screen, schedule a
-        // re-population so the new path appears in its folder tree.
-        let recorded = null;
-        if (/^beats\//.test(path)) {
-            recorded = _recordBeatPath(path, metadata['mime-type']);
-            if (recorded && recorded.isNew) {
-                _repopulateBeatStickies(recorded.beat_id);
-            }
-        }
         // Update every sticky-media-wrapper for this path: refresh
         // data-status (which the overlay CSS keys off), set the
         // overlay text, and re-trigger the flash animation.
