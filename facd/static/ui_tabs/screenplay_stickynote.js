@@ -56,6 +56,32 @@
             });
     }
 
+    // Track every concrete path we've seen via SSE that lives under
+    // beats/<beat_id>/... . These are the "resolved" paths for
+    // variable target patterns like beats/$BEAT_ID/dialog/$LANG.wav,
+    // and we want to display them inside the sticky-note folder tree
+    // alongside the (still-variable) target patterns from
+    // /list_targets.
+    //
+    // Map: beat_id -> Map(path -> mimeType)
+    const _beatPaths = new Map();
+    function _recordBeatPath(path, mimeType) {
+        const m = path.match(/^beats\/([^/]+)\/(.+)$/);
+        if (!m) return null;
+        const beat_id = m[1];
+        let inner = _beatPaths.get(beat_id);
+        if (!inner) {
+            inner = new Map();
+            _beatPaths.set(beat_id, inner);
+        }
+        const existed = inner.has(path);
+        inner.set(path, mimeType || '');
+        return { beat_id, isNew: !existed };
+    }
+    function _getBeatPaths(beat_id) {
+        return _beatPaths.get(beat_id) || new Map();
+    }
+
     // Given /list_targets data and a concrete beat_id, return an
     // ordered list describing what to render in the media section:
     //   - { type: 'direct',    name, path, mimeType }
@@ -65,7 +91,7 @@
     // variable names visible in the path; they represent target
     // patterns rather than concrete file paths.
     // Item order matches first-appearance order in /list_targets.
-    function processBeatTargets(targetsData, beat_id) {
+    function processBeatTargets(targetsData, beat_id, knownPaths) {
         const prefix = 'beats/$BEAT_ID/';
         // Collect (suffix-parts, path, mimeType) tuples in
         // first-appearance order.
@@ -76,6 +102,18 @@
             const path = target.replace(/\$BEAT_ID/g, beat_id);
             const mimeType = (config && config['mime-type']) || '';
             entries.push({ parts: suffix.split('/'), path, mimeType });
+        }
+        // Append concrete paths discovered via SSE that aren't
+        // already represented by a target-pattern entry. These are
+        // the resolutions of variable target patterns and should
+        // appear inside the matching folder structure.
+        if (knownPaths) {
+            const seen = new Set(entries.map(e => e.path));
+            for (const [p, mt] of knownPaths) {
+                if (seen.has(p)) continue;
+                const suffix = p.substring(('beats/' + beat_id + '/').length);
+                entries.push({ parts: suffix.split('/'), path: p, mimeType: mt });
+            }
         }
         // Recursively bucket entries into items/subfolders based on
         // the first path component. Subfolder order is the order in
@@ -587,6 +625,9 @@
         panel.dataset.subfolder = item.name;
         if (color) panel.style.background = color;
         if (_currentOpenSubfolder === item.name) panel.classList.add('open');
+        // Clicks inside the panel itself should not bubble to the
+        // enclosing subfolder button (which would toggle it closed).
+        panel.addEventListener('click', e => e.stopPropagation());
 
         const closeBtn = document.createElement('button');
         closeBtn.className = 'sticky-subfolder-close';
@@ -623,15 +664,16 @@
     // Render a subfolder as an inline section within an enclosing
     // panel. Unlike createSubfolderPanel (which is a toggleable
     // overlay), this is always-visible and supports arbitrary
-    // nesting depth: a heading line followed by the child items,
-    // recursively rendering further nested subfolders inline.
+    // nesting depth. The body is collapsed by default and expands
+    // when the heading is clicked. Clicks on items inside the body
+    // do not bubble up to collapse the section.
     function createInlineSubfolderSection(item, color, registeredPaths) {
         const section = document.createElement('div');
         section.className = 'sticky-subfolder-inline';
 
         const title = document.createElement('div');
         title.className = 'sticky-subfolder-inline-title';
-        title.textContent = '📁 ' + item.name + '/';
+        title.textContent = '▸ 📁 ' + item.name + '/';
         section.appendChild(title);
 
         const body = document.createElement('div');
@@ -647,6 +689,14 @@
             }
         });
         section.appendChild(body);
+        body.addEventListener('click', e => e.stopPropagation());
+
+        title.addEventListener('click', e => {
+            e.stopPropagation();
+            const open = section.classList.toggle('open');
+            title.textContent = (open ? '▾ 📁 ' : '▸ 📁 ')
+                + item.name + '/';
+        });
         return section;
     }
 
@@ -703,7 +753,8 @@
         // with isConnected before mutating.
         getTargets().then(data => {
             if (!media.isConnected) return;
-            const items = processBeatTargets(data, beat.beat_id);
+            const items = processBeatTargets(
+                data, beat.beat_id, _getBeatPaths(beat.beat_id));
             items.forEach(item => {
                 if (item.type === 'direct') {
                     media.appendChild(createMediaNode(
@@ -718,6 +769,7 @@
                     media.appendChild(btn);
                 }
             });
+            sticky.dataset.populated = '1';
         });
 
         return sticky;
@@ -745,6 +797,17 @@
     }
 
     function handleTargetUpdate(path, metadata) {
+        // Record any beats/<beat_id>/... path we see so future
+        // sticky-note renders include it. If this path is new and a
+        // sticky note for the beat is already on screen, schedule a
+        // re-population so the new path appears in its folder tree.
+        let recorded = null;
+        if (/^beats\//.test(path)) {
+            recorded = _recordBeatPath(path, metadata['mime-type']);
+            if (recorded && recorded.isNew) {
+                _repopulateBeatStickies(recorded.beat_id);
+            }
+        }
         // Update every sticky-media-wrapper for this path: refresh
         // data-status (which the overlay CSS keys off), set the
         // overlay text, and re-trigger the flash animation.
@@ -807,6 +870,61 @@
                 }
             }
         }
+    }
+
+    // When a previously-unseen concrete path is recorded for a
+    // beat, walk every on-screen sticky for that beat and rebuild
+    // its media section so the new path appears in the correct
+    // folder. Existing media wrappers are torn down first via
+    // unregister so the blob cache stops repainting them.
+    function _repopulateBeatStickies(beat_id) {
+        const stickies = document.querySelectorAll(
+            `.screenplay-sticky-note[data-beat_id="${beat_id}"]`);
+        if (stickies.length === 0) return;
+        getTargets().then(data => {
+            stickies.forEach(sticky => {
+                if (!sticky.isConnected) return;
+                const media = sticky.querySelector('.sticky-media-section');
+                if (!media) return;
+                // Unregister all existing media wrappers under this
+                // sticky so their image/video containers drop out of
+                // the blob cache.
+                media.querySelectorAll('.sticky-media-wrapper').forEach(w => {
+                    const p = w.dataset.path;
+                    if (!p) return;
+                    const img = w.querySelector('.image-container');
+                    const vid = w.querySelector('.video-container');
+                    if (img && window.unregisterImageContainer) {
+                        window.unregisterImageContainer(p, img);
+                    }
+                    if (vid && window.unregisterVideoContainer) {
+                        window.unregisterVideoContainer(p, vid);
+                    }
+                });
+                while (media.firstChild) media.removeChild(media.firstChild);
+                const color = sticky.style.background;
+                // We don't have access to the original
+                // registeredPaths set for this sticky's view, so we
+                // use a throwaway set; the view's existing set still
+                // contains the old paths it registered (they remain
+                // valid as long as the wrappers it created stay
+                // mounted, which they will under other stickies).
+                const regSet = new Set();
+                const items = processBeatTargets(
+                    data, beat_id, _getBeatPaths(beat_id));
+                items.forEach(item => {
+                    if (item.type === 'direct') {
+                        media.appendChild(createMediaNode(
+                            item.path, item.name, item.mimeType, regSet));
+                    } else {
+                        const btn = createSubfolderButton(item);
+                        btn.appendChild(createSubfolderPanel(
+                            item, color, regSet));
+                        media.appendChild(btn);
+                    }
+                });
+            });
+        });
     }
 
     window.ScreenplayStickyNote = {

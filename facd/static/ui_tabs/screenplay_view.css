@@ -621,11 +621,19 @@
     font-size: 9pt;
     color: #333;
     font-family: 'Courier New', Courier, monospace;
+    cursor: pointer;
+    user-select: none;
+}
+.sticky-subfolder-inline-title:hover {
+    background: rgba(0, 0, 0, 0.05);
 }
 .sticky-subfolder-inline-body {
-    display: flex;
+    display: none;
     flex-direction: column;
     gap: 6px;
+}
+.sticky-subfolder-inline.open .sticky-subfolder-inline-body {
+    display: flex;
 }
 
 /* Each sticky-media-wrapper hosts a media container plus a
