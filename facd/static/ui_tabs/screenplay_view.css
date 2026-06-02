@@ -357,6 +357,7 @@
     font-size: 9pt;
     align-self: flex-start;
     width: 400px;
+    position: relative;
 }
 .screenplay-container[data-orientation="horizontal"] .screenplay-sticky-note {
     margin-top: 12px;
@@ -544,19 +545,28 @@
     background: rgba(0, 0, 0, 0.12);
 }
 
-/* Nested "child" sticky panel. Inherits its parent sticky's color
- * (set inline by createSubfolderPanel) and is visually distinguished
- * by an inset shadow. Hidden by default; toggled via .open. */
+/* Nested "child" sticky panel. Rendered as an overlay on top of the
+ * parent sticky note: absolutely positioned so opening/closing it
+ * does not shift any surrounding layout. Inherits its parent
+ * sticky's color (set inline by createSubfolderPanel) and is
+ * visually distinguished by a stronger drop shadow. Hidden by
+ * default; toggled via .open. */
 .sticky-subfolder-panel {
     display: none;
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    z-index: 50;
     padding: 12px;
-    margin-top: 4px;
-    box-shadow: inset 2px 2px 6px rgba(0, 0, 0, 0.25),
-                2px 2px 6px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35),
+                0 2px 6px rgba(0, 0, 0, 0.25);
     border-radius: 2px;
-    position: relative;
     flex-direction: column;
     gap: 8px;
+    max-height: calc(100% - 16px);
+    overflow-y: auto;
+    box-sizing: border-box;
 }
 .sticky-subfolder-panel.open {
     display: flex;
