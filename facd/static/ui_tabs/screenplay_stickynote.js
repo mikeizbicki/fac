@@ -147,7 +147,10 @@
             const resolutions = [];
             for (const [p, mt] of knownPaths) {
                 if (claimedPaths.has(p)) continue;
-                if (p === te.path) continue;
+                if (p === te.path) {
+                    claimedPaths.add(p);
+                    continue;
+                }
                 if (!p.startsWith(beatPrefix)) continue;
                 const sfx = p.substring(beatPrefix.length);
                 if (!re.test(sfx)) continue;
