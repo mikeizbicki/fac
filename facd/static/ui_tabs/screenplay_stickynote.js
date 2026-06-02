@@ -59,36 +59,67 @@
     // Given /list_targets data and a concrete beat_id, return an
     // ordered list describing what to render in the media section:
     //   - { type: 'direct',    name, path, mimeType }
-    //   - { type: 'subfolder', name, targets: [{name,path,mimeType}, ...] }
-    // Targets whose path contains unsubstituted variables besides
-    // $BEAT_ID are skipped (they expand to many concrete paths).
+    //   - { type: 'subfolder', name, items: [...] }  (recursively nested)
+    // Targets that still contain unsubstituted variables (besides
+    // $BEAT_ID) after substitution are displayed as-is with their
+    // variable names visible in the path; they represent target
+    // patterns rather than concrete file paths.
     // Item order matches first-appearance order in /list_targets.
     function processBeatTargets(targetsData, beat_id) {
-        const items = [];
-        const subfolderMap = new Map();
         const prefix = 'beats/$BEAT_ID/';
+        // Collect (suffix-parts, path, mimeType) tuples in
+        // first-appearance order.
+        const entries = [];
         for (const [target, config] of Object.entries(targetsData || {})) {
             if (!target.startsWith(prefix)) continue;
             const suffix = target.substring(prefix.length);
-            if (/\$[A-Z_]+/.test(suffix)) continue;
             const path = target.replace(/\$BEAT_ID/g, beat_id);
             const mimeType = (config && config['mime-type']) || '';
-            const slashIdx = suffix.indexOf('/');
-            if (slashIdx === -1) {
-                items.push({ type: 'direct', name: suffix, path, mimeType });
-            } else {
-                const subName = suffix.substring(0, slashIdx);
-                const rest = suffix.substring(slashIdx + 1);
-                let folder = subfolderMap.get(subName);
-                if (!folder) {
-                    folder = { type: 'subfolder', name: subName, targets: [] };
-                    subfolderMap.set(subName, folder);
-                    items.push(folder);
-                }
-                folder.targets.push({ name: rest, path, mimeType });
-            }
+            entries.push({ parts: suffix.split('/'), path, mimeType });
         }
-        return items;
+        // Recursively bucket entries into items/subfolders based on
+        // the first path component. Subfolder order is the order in
+        // which the subfolder name first appears.
+        function build(entries) {
+            const items = [];
+            const subfolderMap = new Map();
+            for (const e of entries) {
+                if (e.parts.length === 1) {
+                    items.push({
+                        type: 'direct',
+                        name: e.parts[0],
+                        path: e.path,
+                        mimeType: e.mimeType,
+                    });
+                } else {
+                    const subName = e.parts[0];
+                    let folder = subfolderMap.get(subName);
+                    if (!folder) {
+                        folder = {
+                            type: 'subfolder',
+                            name: subName,
+                            _entries: [],
+                        };
+                        subfolderMap.set(subName, folder);
+                        items.push(folder);
+                    }
+                    folder._entries.push({
+                        parts: e.parts.slice(1),
+                        path: e.path,
+                        mimeType: e.mimeType,
+                    });
+                }
+            }
+            // Recurse into each subfolder.
+            for (const item of items) {
+                if (item.type === 'subfolder') {
+                    item.items = build(item._entries);
+                    delete item._entries;
+                }
+            }
+            return items;
+        }
+        return build(entries);
     }
 
     function isBeatTargetPath(path) {
@@ -572,11 +603,51 @@
         title.textContent = item.name + '/';
         panel.appendChild(title);
 
-        item.targets.forEach(t => {
-            panel.appendChild(createMediaNode(
-                t.path, t.name, t.mimeType, registeredPaths));
+        // Render the subfolder's items inline. Direct items get a
+        // media node; nested subfolders are rendered as inline
+        // folder sections within the same panel (not as new
+        // overlay panels).
+        item.items.forEach(child => {
+            if (child.type === 'direct') {
+                panel.appendChild(createMediaNode(
+                    child.path, child.name, child.mimeType,
+                    registeredPaths));
+            } else {
+                panel.appendChild(createInlineSubfolderSection(
+                    child, color, registeredPaths));
+            }
         });
         return panel;
+    }
+
+    // Render a subfolder as an inline section within an enclosing
+    // panel. Unlike createSubfolderPanel (which is a toggleable
+    // overlay), this is always-visible and supports arbitrary
+    // nesting depth: a heading line followed by the child items,
+    // recursively rendering further nested subfolders inline.
+    function createInlineSubfolderSection(item, color, registeredPaths) {
+        const section = document.createElement('div');
+        section.className = 'sticky-subfolder-inline';
+
+        const title = document.createElement('div');
+        title.className = 'sticky-subfolder-inline-title';
+        title.textContent = '📁 ' + item.name + '/';
+        section.appendChild(title);
+
+        const body = document.createElement('div');
+        body.className = 'sticky-subfolder-inline-body';
+        item.items.forEach(child => {
+            if (child.type === 'direct') {
+                body.appendChild(createMediaNode(
+                    child.path, child.name, child.mimeType,
+                    registeredPaths));
+            } else {
+                body.appendChild(createInlineSubfolderSection(
+                    child, color, registeredPaths));
+            }
+        });
+        section.appendChild(body);
+        return section;
     }
 
     // Build a sticky note element for a given beat. The background

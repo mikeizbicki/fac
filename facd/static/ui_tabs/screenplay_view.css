@@ -606,6 +606,28 @@
     background: rgba(0, 0, 0, 0.22);
 }
 
+/* Inline subfolder sections (recursive nesting inside an open
+ * subfolder panel). These do not pop up as overlays; they expand
+ * inline, distinguished by a heading and a left-indented body. */
+.sticky-subfolder-inline {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border-left: 2px solid rgba(0, 0, 0, 0.15);
+    padding-left: 8px;
+}
+.sticky-subfolder-inline-title {
+    font-weight: bold;
+    font-size: 9pt;
+    color: #333;
+    font-family: 'Courier New', Courier, monospace;
+}
+.sticky-subfolder-inline-body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
 /* Each sticky-media-wrapper hosts a media container plus a
  * .node-status-overlay; the overlay is absolutely positioned, so the
  * wrapper must establish a positioning context. */
