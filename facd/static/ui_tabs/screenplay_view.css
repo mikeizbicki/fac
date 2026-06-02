@@ -863,6 +863,78 @@
     flex-shrink: 0;
 }
 
+/* "After" fold reveal: beats positioned after the front beat show
+ * their right (horizontal mode) / bottom (vertical mode) portion
+ * instead of the default left/top portion, so the folded island
+ * visually wraps around the visible front beat on both sides like
+ * an accordion. We use align-items:flex-end which aligns flex
+ * children along the cross-axis end:
+ *   - vertical mode (beat is flex-direction:row): cross-axis is
+ *     vertical, so children push to the bottom; combined with
+ *     overflow:hidden + max-height the bottom slice is what shows.
+ *   - horizontal mode (beat is flex-direction:column): cross-axis
+ *     is horizontal, so children push to the right; combined with
+ *     overflow:hidden + width the right slice is what shows.
+ * Beats marked .fold-before keep the default flex-start alignment
+ * and therefore show their top/left slice, which matches the
+ * "folded under from the start" intuition. */
+.screenplay-paper .screenplay-beat.fold-after {
+    align-items: flex-end;
+}
+/* The sticky note pins itself to flex-start by default (so it
+ * hugs the top of the beat); override that for fold-after beats
+ * so the cross-axis alignment from the parent is respected. */
+.screenplay-paper .screenplay-beat.fold-after > .screenplay-sticky-note {
+    align-self: flex-end;
+}
+
+/* 3D layered fold effect. The front beat sits highest in the
+ * z-stack (with a stronger drop shadow); folded beats stair-step
+ * downward by an amount proportional to their index distance from
+ * the front (applied as an inline translateY by
+ * applyFoldStateToPaper), with progressively lower z-index. The
+ * combination of translate + z-index + box-shadow reads as a
+ * stack of folded paper sheets receding behind the front one.
+ *
+ * position:relative is required so z-index takes effect on a flex
+ * item; the inline transform/z-index supplied by JS does the rest. */
+.screenplay-paper .screenplay-beat.fold-front {
+    position: relative;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.30),
+                0 2px 4px  rgba(0, 0, 0, 0.20);
+    border-radius: 2px;
+}
+.screenplay-paper .screenplay-beat.fold-before,
+.screenplay-paper .screenplay-beat.fold-after {
+    position: relative;
+    background: rgba(255, 255, 255, 0.55);
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.28),
+                0 1px 2px rgba(0, 0, 0, 0.18);
+    border-radius: 2px;
+}
+
+/* Reserve layout space below each folded paper for the bottom of
+ * the staircase of translated beats. --fold-stair is set inline
+ * by applyFoldStateToPaper to (maxDist * stairPx)px; it falls
+ * back to 0 for non-folded papers, leaving their padding
+ * unchanged. We only override padding-bottom (preserving the rest
+ * of the existing padding shorthand). */
+.screenplay-paper {
+    --fold-stair: 0px;
+}
+.screenplay-container[data-orientation="vertical"]
+    .screenplay-paper[data-fold="partial"],
+.screenplay-container[data-orientation="vertical"]
+    .screenplay-paper[data-fold="full"] {
+    padding-bottom: calc(32px + var(--fold-stair));
+}
+.screenplay-container[data-orientation="horizontal"]
+    .screenplay-paper[data-fold="partial"],
+.screenplay-container[data-orientation="horizontal"]
+    .screenplay-paper[data-fold="full"] {
+    padding-bottom: calc(16px + var(--fold-stair));
+}
+
 /* In folded modes the paper still needs to host its fold menu in the
  * top-left, so reserve a little extra padding on that side so the
  * menu doesn't visually overlap the (now-tiny) beat content. */

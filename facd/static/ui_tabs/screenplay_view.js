@@ -636,25 +636,72 @@
         // --- Fold-state helpers ---
         //
         // applyFoldStateToPaper reads paper.dataset.fold and updates
-        // both the .fold-front marker on the appropriate beat and
-        // the .selected class on the menu buttons. It deliberately
-        // does NOT touch paper.dataset.fold itself; callers set that
-        // first (typically in renderBoard or setPaperFold).
+        // the per-beat fold role classes (.fold-front / .fold-before
+        // / .fold-after), the inline transform/z-index that creates
+        // the 3D staircase effect, the --fold-stair CSS variable
+        // (used by screenplay_view.css to reserve enough padding-
+        // bottom for the deepest step), and the .selected class on
+        // the menu buttons. It deliberately does NOT touch
+        // paper.dataset.fold itself; callers set that first
+        // (typically in renderBoard or setPaperFold).
         function applyFoldStateToPaper(paper) {
             const state = paper.dataset.fold || 'max';
             const key = paper.dataset.foldKey;
-            const beatEls = paper.querySelectorAll(':scope > .screenplay-beat');
-            beatEls.forEach(b => b.classList.remove('fold-front'));
-            if (state === 'partial' && beatEls.length > 0) {
-                const desiredId = frontBeats.get(key);
-                let target = null;
-                if (desiredId) {
-                    beatEls.forEach(b => {
-                        if (!target && b.dataset.beat_id === desiredId) target = b;
-                    });
+            const beatEls = Array.from(
+                paper.querySelectorAll(':scope > .screenplay-beat'));
+            // Reset any fold-driven inline styling from a previous
+            // render so 'max' returns the paper to its untouched look.
+            beatEls.forEach(b => {
+                b.classList.remove('fold-front', 'fold-before', 'fold-after');
+                b.style.transform = '';
+                b.style.zIndex = '';
+            });
+            paper.style.removeProperty('--fold-stair');
+
+            if (state !== 'max' && beatEls.length > 0) {
+                // Determine which beat (by index) acts as the
+                // "anchor" of the visual stack. In partial mode this
+                // is the user-selected front beat; in full mode no
+                // beat is shown in full, so we use index 0 as the
+                // anchor (it ends up rendered as a fold-before-
+                // styled background page at the top of the z-stack).
+                let frontIdx;
+                if (state === 'partial') {
+                    const desiredId = frontBeats.get(key);
+                    frontIdx = desiredId
+                        ? beatEls.findIndex(b => b.dataset.beat_id === desiredId)
+                        : 0;
+                    if (frontIdx < 0) frontIdx = 0;
+                } else {
+                    frontIdx = 0;
                 }
-                if (!target) target = beatEls[0];
-                target.classList.add('fold-front');
+                const STAIR_PX = 6;
+                let maxDist = 0;
+                beatEls.forEach((b, i) => {
+                    const dist = Math.abs(i - frontIdx);
+                    if (dist > maxDist) maxDist = dist;
+                    if (state === 'partial' && i === frontIdx) {
+                        b.classList.add('fold-front');
+                    } else if (i < frontIdx) {
+                        b.classList.add('fold-before');
+                    } else if (i > frontIdx) {
+                        b.classList.add('fold-after');
+                    } else {
+                        // state === 'full', i === 0: background page.
+                        b.classList.add('fold-before');
+                    }
+                    if (dist > 0) {
+                        b.style.transform =
+                            `translateY(${dist * STAIR_PX}px)`;
+                        b.style.zIndex = String(100 - dist);
+                    } else {
+                        b.style.zIndex = '100';
+                    }
+                });
+                if (maxDist > 0) {
+                    paper.style.setProperty(
+                        '--fold-stair', (maxDist * STAIR_PX) + 'px');
+                }
             }
             paper.querySelectorAll('.screenplay-fold-menu button').forEach(b => {
                 b.classList.toggle('selected', b.dataset.foldOption === state);
