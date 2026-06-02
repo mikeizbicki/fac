@@ -823,17 +823,44 @@
     .screenplay-paper[data-fold="full"] .screenplay-beat {
     max-height: 40px;
     overflow: hidden;
+    cursor: pointer;
 }
+
+/* Horizontal fold: clip the beat to a thin vertical strip but keep
+ * its contents at their natural width. We do NOT use max-width on
+ * the beat itself because that would cause children (.screenplay-
+ * beat-content, .screenplay-sticky-note, the .sticky-media-wrapper
+ * inside, and the .node-status-overlay layered on top) to reflow:
+ * text would wordwrap, images/videos with max-width:100% would
+ * shrink, and overlay text would wrap awkwardly. Instead we set the
+ * beat to a fixed width with overflow:hidden, and pin the children
+ * to their natural widths so everything renders identically to the
+ * unfolded state -- just clipped on the right. */
 .screenplay-container[data-orientation="horizontal"]
-    .screenplay-paper[data-fold="partial"] .screenplay-beat:not(.fold-front) {
+    .screenplay-paper[data-fold="partial"] .screenplay-beat:not(.fold-front),
+.screenplay-container[data-orientation="horizontal"]
+    .screenplay-paper[data-fold="full"] .screenplay-beat {
+    width: 60px;
+    min-width: 60px;
     max-width: 60px;
+    flex: 0 0 60px;
     overflow: hidden;
     cursor: pointer;
 }
 .screenplay-container[data-orientation="horizontal"]
-    .screenplay-paper[data-fold="full"] .screenplay-beat {
-    max-width: 60px;
-    overflow: hidden;
+    .screenplay-paper[data-fold="partial"] .screenplay-beat:not(.fold-front)
+    > .screenplay-beat-content,
+.screenplay-container[data-orientation="horizontal"]
+    .screenplay-paper[data-fold="full"] .screenplay-beat
+    > .screenplay-beat-content,
+.screenplay-container[data-orientation="horizontal"]
+    .screenplay-paper[data-fold="partial"] .screenplay-beat:not(.fold-front)
+    > .screenplay-sticky-note,
+.screenplay-container[data-orientation="horizontal"]
+    .screenplay-paper[data-fold="full"] .screenplay-beat
+    > .screenplay-sticky-note {
+    width: 420px;
+    flex-shrink: 0;
 }
 
 /* In folded modes the paper still needs to host its fold menu in the

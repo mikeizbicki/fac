@@ -305,6 +305,15 @@
         // Draw arrows in the gutter for non-adjacent continues_from refs.
         // Anchor edge depends on orientation: right edge for vertical,
         // bottom edge for horizontal.
+        //
+        // IMPORTANT: drawArrows positions arrows using
+        // getBoundingClientRect() of each beat's sticky note, so it
+        // MUST be re-run whenever anything changes the size or
+        // position of beats/stickies. That includes: SSE-driven
+        // re-renders (renderBoard), window resize, tab visibility
+        // transitions (handled by the ResizeObserver /
+        // IntersectionObserver in init()), and any user action that
+        // changes fold state on a paper (handled by setPaperFold).
         function drawArrows(beats, colorOf, beatColors) {
             if (!arrowLayer) return;
             while (arrowLayer.firstChild) arrowLayer.removeChild(arrowLayer.firstChild);
@@ -326,12 +335,20 @@
             beatEls.forEach(el => {
                 const sticky = el.querySelector('.screenplay-sticky-note');
                 if (!sticky) { rects.push(null); return; }
-                const r = sticky.getBoundingClientRect();
+                const sr = sticky.getBoundingClientRect();
+                // In folded modes the .screenplay-beat is the clip
+                // container (overflow:hidden + constrained
+                // width/height). The sticky inside still renders at
+                // its natural size and overflows behind subsequent
+                // beats; using its raw bbox would push arrow anchors
+                // off-screen. Intersect with the beat's bbox so
+                // anchors land on the visible portion of the sticky.
+                const br = el.getBoundingClientRect();
                 rects.push({
-                    left:   r.left   - boardRect.left,
-                    right:  r.right  - boardRect.left,
-                    top:    r.top    - boardRect.top,
-                    bottom: r.bottom - boardRect.top,
+                    left:   Math.max(sr.left,   br.left)   - boardRect.left,
+                    right:  Math.min(sr.right,  br.right)  - boardRect.left,
+                    top:    Math.max(sr.top,    br.top)    - boardRect.top,
+                    bottom: Math.min(sr.bottom, br.bottom) - boardRect.top,
                 });
             });
 
@@ -649,11 +666,17 @@
             if (key) foldStates.set(key, state);
             paper.dataset.fold = state;
             applyFoldStateToPaper(paper);
-            // Folding changes sticky-note positions, so arrow
-            // geometry needs to be recomputed.
+            // Folding changes beat/sticky sizes and therefore arrow
+            // anchor positions. Use a double-rAF so the layout
+            // engine has time to apply the new fold CSS before we
+            // read getBoundingClientRect() in drawArrows; without
+            // this the redraw happens against the previous layout
+            // and the arrows point at stale locations.
             if (lastIslands) {
-                requestAnimationFrame(() =>
-                    drawArrows(currentBeats, lastIslands.colorOf, lastBeatColors));
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => drawArrows(
+                        currentBeats, lastIslands.colorOf, lastBeatColors));
+                });
             }
         }
 
@@ -729,16 +752,22 @@
                         createBeatElement(beat, i, color, i === group.start, sep));
                 }
                 applyFoldStateToPaper(paper);
-                // In partial mode, clicking on a non-front (folded)
-                // beat brings it to the front. Buttons inside beats
-                // and the sticky note all stop propagation, so this
+                // In folded modes (partial OR full), clicking on a
+                // beat that is currently clipped brings that beat to
+                // the front by switching the paper to 'partial' with
+                // that beat as the front. Buttons inside beats and
+                // the sticky note all stopPropagation, so this
                 // handler only fires for "blank" clicks on the
-                // visible strip of a folded beat.
+                // visible strip of a folded beat. In 'partial' mode
+                // we skip clicks on the already-front beat to avoid
+                // a no-op redraw.
                 paper.addEventListener('click', e => {
-                    if (paper.dataset.fold !== 'partial') return;
+                    const foldState = paper.dataset.fold;
+                    if (foldState !== 'partial' && foldState !== 'full') return;
                     const beat = e.target.closest('.screenplay-beat');
                     if (!beat || !paper.contains(beat)) return;
-                    if (beat.classList.contains('fold-front')) return;
+                    if (foldState === 'partial'
+                        && beat.classList.contains('fold-front')) return;
                     const beatId = beat.dataset.beat_id;
                     if (!beatId) return;
                     frontBeats.set(paperKey, beatId);
