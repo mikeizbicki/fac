@@ -61,34 +61,45 @@ def assert_sane_config(targets_dict):
     '''
     Verify that the config is sane and provide helpful error messages if not.
     '''
+    errors = []
+
+    # CHECK 1
     targets = list(targets_dict)
     targetss = extract_ambiguous_targets(targets)
     if len(targetss) > 0:
-        messages = []
         for targets in targetss:
-            messages.append({'ambiguous targets': targets})
-        logger.error({'fac.yaml cannot be loaded due to ambiguous targets': messages})
-        raise FACError
+            errors.append({'the following targets are ambiguous': targets})
 
+    # CHECK 2
     targets = frozenset(targets_dict)
-    print(f'targets = {targets}')
-    unknown_dependencies = []
-    critical = False
     for target in targets_dict:
         for dep in targets_dict[target]['dependencies']:
             matches = match_pattern_starstar(targets, dep['target'])
-            if len(matches) == 0:
-                unknown_dependencies.append({'target': target, 'dep': dep['target']})
-                if '$' in dep['target']:
-                    critical = True
-    if len(unknown_dependencies) > 0:
-        if critical:
-            disp_func = logger.error
-        else:
-            disp_func = logger.warning
-        disp_func({'fac.yaml contains dependencies that are not found in targets list': unknown_dependencies})
-        if critical:
-            raise FACError
+            if len(matches) == 0 and dep.get('in_fac.yaml', True):
+                message = {'dependency not found in targets list': {
+                   'target': target,
+                   'dep["target"]': dep["target"],
+                   'HINT': [
+                       'this is likely a typo in dep["target"]',
+                       'if you want to enforce that the user must provide the dependency (i.e. it cannot be built by fac) then set dep["in_fac.yaml"] = False'
+                       ]
+                    }}
+                errors.append(message)
+            if len(matches) > 0 and not dep.get('in_fac.yaml', True):
+                message = {'in_fac.yaml set to False, but dependency found in fac.yaml': {
+                   'target': target,
+                   'dep["target"]': dep["target"],
+                   'matches': matches,
+                   'HINT': [
+                       'Only set in_fac.yaml = True on dependencies that do not match targets in fac.yaml'
+                       ]
+                    }}
+                errors.append(message)
+
+    # raise errors
+    if errors:
+        logger.error({f"{len(errors)} errors found in fac.yaml": errors})
+        raise FACError()
 
 
 def pprint_targets(targets):
@@ -375,6 +386,7 @@ def normalize_dependencies(dependencies, target):
                     'is_prompt',
                     'trigger_rebuild',
                     'rebuild_on_metapaths',
+                    'in_fac.yaml',
                     ]:
                 logger.warning(f'in target "{target}", in dependency "{dep}", unknown option "{k}"')
     return dependencies1
