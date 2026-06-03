@@ -974,9 +974,15 @@
                     parent.classList.remove('sticky-subfolder-flash');
                     void parent.offsetWidth;
                     parent.classList.add('sticky-subfolder-flash');
+                    
+                    /*
+                    // FIXME:
+                    // the code below sometimes causes the following error.
+                    // Uncaught TypeError: can't access property "classList" of null
                     setTimeout(() => {
                         parent.classList.remove('sticky-subfolder-flash');
                     }, 1100);
+                    */
                 }
                 parent = parent.parentElement;
             }
