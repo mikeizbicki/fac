@@ -470,7 +470,17 @@ def _match_single_segment(pattern_seg, input_seg):
             var_name = pattern_seg[var_start:var_end]
             var_placeholder = f"${var_name}"
             
-            if var_placeholder in input_seg:
+            # Check if var_placeholder occurs in input_seg as a complete variable
+            # (not as a prefix of a longer variable name like $CHARACTER_START)
+            def _placeholder_present(s, ph):
+                idx = 0
+                while (i := s.find(ph, idx)) != -1:
+                    end = i + len(ph)
+                    if end >= len(s) or not (s[end].isalnum() or s[end] == '_'):
+                        return True
+                    idx = i + 1
+                return False
+            if _placeholder_present(input_seg, var_placeholder):
                 regex += re.escape(var_placeholder)
             else:
                 var_names.append(var_name)
