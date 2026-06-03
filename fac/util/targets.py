@@ -254,7 +254,7 @@ def match_pattern_starstar(patterns, input_string):
         >>> match_pattern_starstar(['recursive/$TEST/$NAME', 'simple/$TEST/$NAME', 'nonrecursive/$TEST/$NAME'], 'recursive/$TEST/$DEP')
         [('recursive/$TEST/$NAME', {'NAME': '$DEP'})]
 
-    Realworls examples:
+    Realworld examples:
 
         >>> match_pattern_starstar([
         ...         'outline.json',
@@ -271,6 +271,10 @@ def match_pattern_starstar(patterns, input_string):
         ...     ],
         ...     'sub/summary_SAMEVAR.md')
         [('sub$LEVEL1/summary_SAMEVAR.md', {'LEVEL1': ''})]
+
+        >>> targets = frozenset({'beats/$BEAT_ID/raw/length_seconds', 'beats/$BEAT_ID/processed/last_frame.png', 'beats/$BEAT_ID/sfx/instructions.txt', 'language.json', 'art.md', 'video-processed.mp4', 'beats/$BEAT_ID/sfx/sfx.mp4', 'locations/$LOCATION/reference.png', 'beats/$BEAT_ID/startframe.png', 'beats/$BEAT_ID/raw/beat_type=standard/raw.mp4', 'characters/$CHARACTER/voice.json', 'beats/$BEAT_ID/raw/beat_type=avatar/animation_instructions.txt', 'beats/$BEAT_ID/misc/debug.mp4', 'beats/$BEAT_ID/dialog/$DIALOG_INDEX/$LANG.wav', 'beats/$BEAT_ID/sfx/model', 'beats/$BEAT_ID/config/beat-details.json', 'beats/$BEAT_ID/dialog/$DIALOG_INDEX/$LANG.txt', 'beats/$BEAT_ID/raw/beat_type', 'beats/$BEAT_ID/raw/beat_type=standard/model', 'beats/$BEAT_ID/dialog/$DIALOG_INDEX/voice_instructions', 'beats/$BEAT_ID/dialog/$LANG.txt', 'characters/$CHARACTER/voice_examples/$EXAMPLE/audio.wav', 'beats/$BEAT_ID/raw/beat_type=standard/animation_instructions.txt', 'beats/$BEAT_ID/sfx/processed-sfx.mp4', 'beats/$BEAT_ID/sfx/add_sfx', 'beats/$BEAT_ID/raw/raw.mp4', 'beats/$BEAT_ID/raw/beat_type=target_frame/target_frame.png', 'video-processed-sfx.mp4', 'locations/$LOCATION/about.json', 'beats/$BEAT_ID/raw/beat_type=avatar/raw.mp4', 'characters/$CHARACTER/character_sheet.png', 'beats/$BEAT_ID/dialog/$LANG.wav', 'beats/$BEAT_ID/processed/dialog_duration_with_padding', 'characters/$CHARACTER/voice_examples/$EXAMPLE/voice_instructions', 'beats/$BEAT_ID/dialog/$DIALOG_INDEX/translation/$TRANSLATION.txt', 'shooting-script.xml', 'beats/$BEAT_ID/config/startframe_llm.png', 'characters/$CHARACTER/about.json', 'video.mp4', 'beats/$BEAT_ID/misc/multilingual.mp4', 'beats/$BEAT_ID/dialog.wav', 'characters/$CHARACTER/voice_examples/$EXAMPLE/text.txt', 'beats/$BEAT_ID/raw/beat_type=target_frame/raw.mp4', 'beats/$BEAT_ID/sfx/sfx.wav', 'beats/$BEAT_ID/dialog/$LANG.srt', 'about.md', 'beats/$BEAT_ID/processed/processed.mp4', 'beats/$BEAT_ID/misc/subtitle-burned.mp4', 'beats/$BEAT_ID/config/script_text.xml', 'beats/$BEAT_ID/processed/truncate_video'})
+        >>> match_pattern_starstar(targets, 'characters/$CHARACTER_START_IN_FRAME/about.json')
+        [('characters/$CHARACTER/about.json', {'CHARACTER': '$CHARACTER_START_IN_FRAME'})]
     """
     # Check for multiple ** in input_string
     if input_string.count('**') > 1:

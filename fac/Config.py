@@ -12,7 +12,7 @@ import re
 from fac.Errors import FACError
 from fac.Logging import logger
 from fac.util.freeze import freeze, thaw
-from fac.util.targets import extract_ambiguous_targets
+from fac.util.targets import extract_ambiguous_targets, match_pattern_starstar
 
 # external lib imports
 import yaml
@@ -69,6 +69,26 @@ def assert_sane_config(targets_dict):
             messages.append({'ambiguous targets': targets})
         logger.error({'fac.yaml cannot be loaded due to ambiguous targets': messages})
         raise FACError
+
+    targets = frozenset(targets_dict)
+    print(f'targets = {targets}')
+    unknown_dependencies = []
+    critical = False
+    for target in targets_dict:
+        for dep in targets_dict[target]['dependencies']:
+            matches = match_pattern_starstar(targets, dep['target'])
+            if len(matches) == 0:
+                unknown_dependencies.append({'target': target, 'dep': dep['target']})
+                if '$' in dep['target']:
+                    critical = True
+    if len(unknown_dependencies) > 0:
+        if critical:
+            disp_func = logger.error
+        else:
+            disp_func = logger.warning
+        disp_func({'fac.yaml contains dependencies that are not found in targets list': unknown_dependencies})
+        if critical:
+            raise FACError
 
 
 def pprint_targets(targets):
