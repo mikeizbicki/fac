@@ -96,6 +96,29 @@ def assert_sane_config(targets_dict):
                     }}
                 errors.append(message)
 
+    # CHECK 3
+    for target in targets_dict:
+        for dep in targets_dict[target]['dependencies']:
+            for option in dep:
+                if option not in [
+                        'target',
+                        'in_fac.yaml',
+                        # FIXME:
+                        # existing test cases cover the options above;
+                        # we need to add tests for the options below
+                        'include',
+                        'allow_create',
+                        'is_prompt',
+                        'trigger_rebuild',
+                        'rebuild_on_metapaths',
+                        ]:
+                    message = {'unknown dependency option': {
+                        'target': target,
+                        'dep["target"]': dep["target"],
+                        'option': option,
+                        }}
+                    errors.append(message)
+
     # raise errors
     if errors:
         logger.error({f"{len(errors)} errors found in fac.yaml": errors})
@@ -378,17 +401,6 @@ def normalize_dependencies(dependencies, target):
             dep = {'target': dep}
         assert type(dep) == dict
         dependencies1.append(dep)
-        for k in dep:
-            if k not in [
-                    'target',
-                    'include',
-                    'allow_create',
-                    'is_prompt',
-                    'trigger_rebuild',
-                    'rebuild_on_metapaths',
-                    'in_fac.yaml',
-                    ]:
-                logger.warning(f'in target "{target}", in dependency "{dep}", unknown option "{k}"')
     return dependencies1
 
 
