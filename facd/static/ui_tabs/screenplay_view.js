@@ -637,13 +637,19 @@
         //
         // applyFoldStateToPaper reads paper.dataset.fold and updates
         // the per-beat fold role classes (.fold-front / .fold-before
-        // / .fold-after), the inline transform/z-index that creates
-        // the 3D staircase effect, the --fold-stair CSS variable
-        // (used by screenplay_view.css to reserve enough padding-
-        // bottom for the deepest step), and the .selected class on
-        // the menu buttons. It deliberately does NOT touch
-        // paper.dataset.fold itself; callers set that first
-        // (typically in renderBoard or setPaperFold).
+        // / .fold-after), the inline z-index / cross-axis margins
+        // that create the 3D layered shrink effect, and the
+        // .selected class on the menu buttons. It deliberately does
+        // NOT touch paper.dataset.fold itself; callers set that
+        // first (typically in renderBoard or setPaperFold).
+        //
+        // The shrink is implemented as symmetric cross-axis margin:
+        // in vertical orientation we add equal margin-left/-right;
+        // in horizontal orientation we add equal margin-top/-bottom.
+        // This is the cross-axis of the paper's flex container, so
+        // it does not push neighboring beats apart along the main
+        // flow direction -- it just makes the folded beat visually
+        // narrower (or shorter) on both ends.
         function applyFoldStateToPaper(paper) {
             const state = paper.dataset.fold || 'max';
             const key = paper.dataset.foldKey;
@@ -653,10 +659,12 @@
             // render so 'max' returns the paper to its untouched look.
             beatEls.forEach(b => {
                 b.classList.remove('fold-front', 'fold-before', 'fold-after');
-                b.style.transform = '';
                 b.style.zIndex = '';
+                b.style.marginTop = '';
+                b.style.marginBottom = '';
+                b.style.marginLeft = '';
+                b.style.marginRight = '';
             });
-            paper.style.removeProperty('--fold-stair');
 
             if (state !== 'max' && beatEls.length > 0) {
                 // Determine which beat (by index) acts as the
@@ -675,11 +683,9 @@
                 } else {
                     frontIdx = 0;
                 }
-                const STAIR_PX = 6;
-                let maxDist = 0;
+                const SHRINK_PX = 6;
                 beatEls.forEach((b, i) => {
                     const dist = Math.abs(i - frontIdx);
-                    if (dist > maxDist) maxDist = dist;
                     if (state === 'partial' && i === frontIdx) {
                         b.classList.add('fold-front');
                     } else if (i < frontIdx) {
@@ -691,17 +697,22 @@
                         b.classList.add('fold-before');
                     }
                     if (dist > 0) {
-                        b.style.transform =
-                            `translateY(${dist * STAIR_PX}px)`;
                         b.style.zIndex = String(100 - dist);
+                        const shrink = dist * SHRINK_PX;
+                        // Cross-axis margin = visual shrink on both
+                        // ends. In vertical layout the paper is a
+                        // column, so cross-axis is horizontal.
+                        if (isHorizontal) {
+                            b.style.marginTop = shrink + 'px';
+                            b.style.marginBottom = shrink + 'px';
+                        } else {
+                            b.style.marginLeft = shrink + 'px';
+                            b.style.marginRight = shrink + 'px';
+                        }
                     } else {
                         b.style.zIndex = '100';
                     }
                 });
-                if (maxDist > 0) {
-                    paper.style.setProperty(
-                        '--fold-stair', (maxDist * STAIR_PX) + 'px');
-                }
             }
             paper.querySelectorAll('.screenplay-fold-menu button').forEach(b => {
                 b.classList.toggle('selected', b.dataset.foldOption === state);
