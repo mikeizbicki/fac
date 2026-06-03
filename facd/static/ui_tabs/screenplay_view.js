@@ -637,19 +637,21 @@
         //
         // applyFoldStateToPaper reads paper.dataset.fold and updates
         // the per-beat fold role classes (.fold-front / .fold-before
-        // / .fold-after), the inline z-index / cross-axis margins
-        // that create the 3D layered shrink effect, and the
+        // / .fold-after), the inline z-index and transform:scale()
+        // that create the 3D "farther away" effect, and the
         // .selected class on the menu buttons. It deliberately does
         // NOT touch paper.dataset.fold itself; callers set that
         // first (typically in renderBoard or setPaperFold).
         //
-        // The shrink is implemented as symmetric cross-axis margin:
-        // in vertical orientation we add equal margin-left/-right;
-        // in horizontal orientation we add equal margin-top/-bottom.
-        // This is the cross-axis of the paper's flex container, so
-        // it does not push neighboring beats apart along the main
-        // flow direction -- it just makes the folded beat visually
-        // narrower (or shorter) on both ends.
+        // Shrinking is done via transform: scale(), which scales
+        // both the visible (main-axis) extent and the cross-axis
+        // extent uniformly, so text, images, and overlays all get
+        // smaller together (rather than being clipped). The scale
+        // origin is set to the cross-axis center of the beat so it
+        // appears to shrink toward its own midline -- giving an
+        // even, symmetric "receding into the distance" look on
+        // both ends of the beat. transforms don't affect layout,
+        // so neighboring beats stay put.
         function applyFoldStateToPaper(paper) {
             const state = paper.dataset.fold || 'max';
             const key = paper.dataset.foldKey;
@@ -660,10 +662,8 @@
             beatEls.forEach(b => {
                 b.classList.remove('fold-front', 'fold-before', 'fold-after');
                 b.style.zIndex = '';
-                b.style.marginTop = '';
-                b.style.marginBottom = '';
-                b.style.marginLeft = '';
-                b.style.marginRight = '';
+                b.style.transform = '';
+                b.style.transformOrigin = '';
             });
 
             if (state !== 'max' && beatEls.length > 0) {
@@ -683,7 +683,8 @@
                 } else {
                     frontIdx = 0;
                 }
-                const SHRINK_PX = 6;
+                // Each step further from the front shrinks by this much.
+                const SHRINK_PER_STEP = 0.08;
                 beatEls.forEach((b, i) => {
                     const dist = Math.abs(i - frontIdx);
                     if (state === 'partial' && i === frontIdx) {
@@ -698,17 +699,21 @@
                     }
                     if (dist > 0) {
                         b.style.zIndex = String(100 - dist);
-                        const shrink = dist * SHRINK_PX;
-                        // Cross-axis margin = visual shrink on both
-                        // ends. In vertical layout the paper is a
-                        // column, so cross-axis is horizontal.
-                        if (isHorizontal) {
-                            b.style.marginTop = shrink + 'px';
-                            b.style.marginBottom = shrink + 'px';
-                        } else {
-                            b.style.marginLeft = shrink + 'px';
-                            b.style.marginRight = shrink + 'px';
-                        }
+                        // Clamp to a minimum scale so very deep
+                        // beats stay visible rather than collapsing
+                        // to a sliver.
+                        const scale = Math.max(0.4, 1 - dist * SHRINK_PER_STEP);
+                        // transform-origin: shrink toward the
+                        // cross-axis center so the beat appears to
+                        // recede evenly on both sides of its
+                        // mid-line. In vertical mode (beat is a row),
+                        // cross-axis is vertical -> origin "center".
+                        // In horizontal mode (beat is a column),
+                        // cross-axis is horizontal -> origin "center".
+                        // Both happen to be "center center" since we
+                        // also want the main-axis to shrink in place.
+                        b.style.transformOrigin = 'center center';
+                        b.style.transform = `scale(${scale})`;
                     } else {
                         b.style.zIndex = '100';
                     }

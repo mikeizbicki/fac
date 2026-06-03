@@ -889,16 +889,14 @@
 }
 
 /* 3D layered fold effect. The front beat sits highest in the
- * z-stack (with a stronger drop shadow); folded beats are shrunk
- * symmetrically on both cross-axis ends -- proportional to their
- * index distance from the front -- by inline margin applied in
- * applyFoldStateToPaper. In vertical mode that means equal left
- * and right margin (the beat is shorter horizontally); in
- * horizontal mode it means equal top and bottom margin (the beat
- * is shorter vertically). Combined with progressively lower
- * z-index and box-shadows, this reads as a stack of folded paper
- * sheets receding behind the front one without any clipping
- * artifacts at the far edges.
+ * z-stack (with a stronger drop shadow); folded beats are scaled
+ * down via an inline CSS transform whose factor depends on the
+ * beat's index distance from the front (set in
+ * applyFoldStateToPaper). The scale is applied via transform:
+ * scale() so the entire beat -- including its sticky note, media,
+ * and overlay text -- shrinks uniformly, reading as paper sheets
+ * receding into the distance. Combined with progressively lower
+ * z-index and box-shadows, this gives a proper 3D layered look.
  *
  * position:relative is required so z-index takes effect on a flex
  * item; the inline transform/z-index supplied by JS does the rest. */
