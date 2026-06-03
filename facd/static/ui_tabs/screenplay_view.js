@@ -643,15 +643,16 @@
         // NOT touch paper.dataset.fold itself; callers set that
         // first (typically in renderBoard or setPaperFold).
         //
-        // Shrinking is done via transform: scale(), which scales
-        // both the visible (main-axis) extent and the cross-axis
-        // extent uniformly, so text, images, and overlays all get
-        // smaller together (rather than being clipped). The scale
-        // origin is set to the cross-axis center of the beat so it
-        // appears to shrink toward its own midline -- giving an
-        // even, symmetric "receding into the distance" look on
-        // both ends of the beat. transforms don't affect layout,
-        // so neighboring beats stay put.
+        // Shrinking is done via a cross-axis-only scale transform:
+        // scaleY() in horizontal mode (the cross-axis is vertical)
+        // and scaleX() in vertical mode (the cross-axis is
+        // horizontal). Scaling only along the cross-axis keeps
+        // folded beats flush with their neighbors on the main flow
+        // axis -- a uniform scale() would leave visible gaps because
+        // CSS transforms don't affect layout. The trade-off is a
+        // mild distortion on far-away beats, which is acceptable
+        // since they're not meant to be read. transform-origin is
+        // centered so the shrink is symmetric on both ends.
         function applyFoldStateToPaper(paper) {
             const state = paper.dataset.fold || 'max';
             const key = paper.dataset.foldKey;
@@ -703,17 +704,14 @@
                         // beats stay visible rather than collapsing
                         // to a sliver.
                         const scale = Math.max(0.4, 1 - dist * SHRINK_PER_STEP);
-                        // transform-origin: shrink toward the
-                        // cross-axis center so the beat appears to
-                        // recede evenly on both sides of its
-                        // mid-line. In vertical mode (beat is a row),
-                        // cross-axis is vertical -> origin "center".
-                        // In horizontal mode (beat is a column),
-                        // cross-axis is horizontal -> origin "center".
-                        // Both happen to be "center center" since we
-                        // also want the main-axis to shrink in place.
                         b.style.transformOrigin = 'center center';
-                        b.style.transform = `scale(${scale})`;
+                        // Cross-axis-only scale: horizontal mode
+                        // scales Y (cross-axis is vertical),
+                        // vertical mode scales X (cross-axis is
+                        // horizontal).
+                        b.style.transform = isHorizontal
+                            ? `scaleY(${scale})`
+                            : `scaleX(${scale})`;
                     } else {
                         b.style.zIndex = '100';
                     }
