@@ -9,6 +9,7 @@ import sys
 import threading
 import time
 
+from fac.Logging import logger, with_subtree
 import fac.Errors
 
 import git
@@ -258,12 +259,8 @@ def main():
             loop = asyncio.get_running_loop()
 
             def _handle_signal():
-                if shutdown_event.is_set():
-                    # second Ctrl-C / SIGTERM: force exit
-                    print('\nForce exiting...', flush=True)
-                    os._exit(1)
-                print('\nShutting down (press Ctrl-C again to force exit)...', flush=True)
-                shutdown_event.set()
+                logger.error('Force exiting...')
+                os._exit(1)
 
             for sig in (signal.SIGINT, signal.SIGTERM):
                 loop.add_signal_handler(sig, _handle_signal)
