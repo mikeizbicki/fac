@@ -248,7 +248,15 @@ def main():
         from hypercorn.config import Config
         config = Config()
         config.bind = ['0.0.0.0:8000']
-        asyncio.run(serve(app, config))
+
+        async def _run():
+            shutdown_event = asyncio.Event()
+            loop = asyncio.get_running_loop()
+            for sig in (signal.SIGINT, signal.SIGTERM):
+                loop.add_signal_handler(sig, shutdown_event.set)
+            await serve(app, config, shutdown_trigger=shutdown_event.wait)
+
+        asyncio.run(_run())
 
     elif args.server == 'uvicorn':
         import uvicorn
