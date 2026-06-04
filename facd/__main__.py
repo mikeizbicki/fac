@@ -250,9 +250,11 @@ def main():
         from hypercorn.asyncio import serve
         from hypercorn.config import Config
         config = Config()
-        config.bind = ['0.0.0.0:8000']
-        # Don't wait forever for never-ending SSE streams (e.g. /logs_stream)
-        # to complete during graceful shutdown.
+        # NOTE:
+        # There was a bad bug when using IPv4 that caused connections to localhost
+        # to sometimes break in very heisenbugish ways.  Binding to IPv6 seems to
+        # solve this problem.
+        config.bind = ['[::]:8000']
         config.graceful_timeout = 2.0
 
         async def _run():
@@ -273,8 +275,8 @@ def main():
         import uvicorn
         uvicorn.run(
                 app,
-                host='localhost',
-                port=8080,
+                host='::',
+                port=8000,
                 timeout_graceful_shutdown=5,
                 log_level='warning',
                 )
