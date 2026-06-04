@@ -269,12 +269,12 @@
                 videoContainer.className = 'video-container';
                 div.insertBefore(videoContainer, div.firstChild);
                 div.classList.add('has-video');
-            }
             } else if (mimeType.startsWith('audio/')) {
                 const audioContainer = document.createElement('div');
                 audioContainer.className = 'audio-container';
                 div.insertBefore(audioContainer, div.firstChild);
                 div.classList.add('has-audio');
+            }
         }
 
         // Register the node
