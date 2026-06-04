@@ -123,14 +123,15 @@
 
         window.registerImageContainer(path, imageContainer, 'leaf-image');
 
-        // Only fetch when the backend reports the file as 'built'.
-        // Fetching for other statuses (notbuilt, stale, buildable,
-        // waiting, etc.) just produces noisy 404s in the console
-        // because the file does not yet exist on disk. The component
-        // will be re-invoked with status='built' once the file is
-        // ready, at which point updateImageForStatus will fetch it.
-        const initialStatus = nodeEl.dataset.status;
-        if (initialStatus === 'built') {
+        // Only fetch when the backend reports the file as existing
+        // on disk (data-exists='true'). The build 'status' doesn't
+        // directly mean the file is or isn't there -- a stale/
+        // unresolved/etc. file may still be downloadable, and a
+        // 'built' status with the file already deleted shouldn't
+        // trigger a fetch. Gating on exists avoids the 404 storm
+        // we used to see when fetching for any non-'notbuilt' status.
+        const exists = nodeEl.dataset.exists === 'true';
+        if (exists) {
             window.fetchImage(path, false).then(url => {
                 refreshAllContainers(path, url);
             }).catch(() => {});
@@ -146,20 +147,21 @@
         const path = nodeEl.dataset.path;
         if (!path) return;
 
-        if (status === 'built') {
-            // Force-refresh: a freshly-built file may have the same
-            // path as an older one already cached in the browser, so
-            // we explicitly bust the cache here.
-            window.fetchImage(path, true).then(url => {
+        const exists = nodeEl.dataset.exists === 'true';
+        if (exists) {
+            // Force-refresh only on a 'built' transition: a freshly-
+            // built file may have the same path as an older cached
+            // copy, so we explicitly bust the cache there. For other
+            // status changes (where the bytes haven't necessarily
+            // changed) a non-forcing fetch will hit the in-memory
+            // cache if we already have it.
+            const force = status === 'built';
+            window.fetchImage(path, force).then(url => {
                 refreshAllContainers(path, url);
             }).catch(() => {});
-        } else if (status === 'notbuilt') {
+        } else {
             window.clearImageFromContainers(path);
         }
-        // For any other backend state (stale, unresolved, waiting,
-        // phantom, buildable, build_required, command_sent(...), ...)
-        // the currently-displayed image stays as-is until the next
-        // 'built' transition refreshes it.
     }
 
     // Allow views that build their own leaf-style media elements

@@ -118,13 +118,11 @@
 
         window.registerVideoContainer(path, videoContainer, 'leaf-video');
 
-        // Only fetch when the backend reports the file as 'built'.
-        // Fetching for other statuses just produces noisy 404s in the
-        // console because the file does not yet exist on disk. The
-        // component will be re-invoked with status='built' once the
-        // file is ready.
-        const initialStatus = nodeEl.dataset.status;
-        if (initialStatus === 'built') {
+        // Only fetch when the backend reports the file as existing
+        // on disk (data-exists='true'). See images.js for the
+        // rationale.
+        const exists = nodeEl.dataset.exists === 'true';
+        if (exists) {
             window.fetchVideo(path, false).then(url => {
                 refreshAllContainers(path, url);
             }).catch(() => {});
@@ -140,15 +138,15 @@
         const path = nodeEl.dataset.path;
         if (!path) return;
 
-        if (status === 'built') {
-            window.fetchVideo(path, true).then(url => {
+        const exists = nodeEl.dataset.exists === 'true';
+        if (exists) {
+            const force = status === 'built';
+            window.fetchVideo(path, force).then(url => {
                 refreshAllContainers(path, url);
             }).catch(() => {});
-        } else if (status === 'notbuilt') {
+        } else {
             window.clearVideoFromContainers(path);
         }
-        // For any other state the currently-displayed video stays
-        // until the next 'built' refresh.
     }
 
     // Allow views that build their own leaf-style media elements

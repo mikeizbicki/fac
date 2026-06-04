@@ -17,6 +17,7 @@
 //     mimeType: string,         // MIME type (paths only)
 //     status: string,           // 'fresh', 'stale', 'building', 'queued', 'deleted'
 //     content: string,          // File content for text files
+//     exists: boolean,          // Whether the file currently exists on disk
 //     isLeaf: boolean,          // Whether this is a leaf node (default: true)
 //     order: number,            // Sort order for sibling nodes
 //     parent: Element,          // Parent container to append to
@@ -169,6 +170,7 @@
             mimeType = '',
             status = '',
             content,
+            exists,
             isLeaf = true,
             order = 0,
             parent = null,
@@ -231,6 +233,9 @@
             if (mimeType) div.dataset.mimeType = mimeType;
             if (status) div.dataset.status = status;
             if (content !== undefined) div.dataset.content = content;
+            if (exists !== undefined) {
+                div.dataset.exists = exists ? 'true' : 'false';
+            }
         }
 
         // Create header
@@ -292,7 +297,7 @@
     };
 
     function convertTargetToPath(path, targetEl, options) {
-        const { mimeType = '', status = '', content, order } = options;
+        const { mimeType = '', status = '', content, exists, order } = options;
         const parent = targetEl.parentElement;
 
         // Remove target-specific attributes/classes
@@ -304,6 +309,9 @@
         if (mimeType) targetEl.dataset.mimeType = mimeType;
         if (status) targetEl.dataset.status = status;
         if (content !== undefined) targetEl.dataset.content = content;
+        if (exists !== undefined) {
+            targetEl.dataset.exists = exists ? 'true' : 'false';
+        }
 
         // Add metadata container if not present
         let metadata = targetEl.querySelector(':scope > .metadata');
@@ -454,11 +462,11 @@
         const nodeEl = nodeRegistry.get(path);
         if (!nodeEl) return false;
 
-        const { status, mimeType, content, ...rest } = metadata;
+        const { status, mimeType, content, exists, ...rest } = metadata;
 
         // If updating with path data but node is a target, convert it
         if (nodeEl.dataset.isTarget === 'true' && (mimeType || status)) {
-            convertTargetToPath(path, nodeEl, { mimeType, status, content });
+            convertTargetToPath(path, nodeEl, { mimeType, status, content, exists });
             return true;
         }
 
@@ -466,6 +474,9 @@
         if (mimeType !== undefined) nodeEl.dataset.mimeType = mimeType;
         if (status !== undefined) nodeEl.dataset.status = status;
         if (content !== undefined) nodeEl.dataset.content = content;
+        if (exists !== undefined) {
+            nodeEl.dataset.exists = exists ? 'true' : 'false';
+        }
 
         // Update metadata display
         const metadataContainer = nodeEl.querySelector(':scope > .metadata');

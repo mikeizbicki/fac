@@ -132,6 +132,7 @@ function insertPathNode(path, metadata) {
         mimeType: metadata['mime-type'],
         status: metadata.status,
         content: metadata.content,
+        exists: metadata.exists,
         isLeaf: true,
         order: orderIndex,
         parent: currentContainer,
@@ -244,6 +245,7 @@ function handlePathEvent(path, metadata) {
                 status: 'notbuilt',
                 mimeType: metadata['mime-type'],
                 content: metadata.content,
+                exists: metadata.exists,
             });
         } else {
             // Path was never shown as a file; surface as target.
@@ -268,6 +270,7 @@ function handlePathEvent(path, metadata) {
                 status: metadata.status,
                 mimeType: metadata['mime-type'],
                 content: metadata.content,
+                exists: metadata.exists,
             });
         }
     }

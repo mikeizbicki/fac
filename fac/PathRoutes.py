@@ -146,6 +146,7 @@ class PathRoutes(Routable):
             'status': self.path2status[path],
             'target': target,
             'mime-type': mime_type,
+            'exists': os.path.exists(path),
             }
 
     ##############################

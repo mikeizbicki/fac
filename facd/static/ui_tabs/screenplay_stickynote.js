@@ -396,6 +396,7 @@
                     const state = window.getPathState && window.getPathState(targetPath);
                     const status = (state && state.status) || 'notbuilt';
                     thumb.dataset.status = status;
+                    thumb.dataset.exists = (state && state.exists) ? 'true' : 'false';
                     overlayText.textContent = status.toUpperCase();
 
                     // Delegate registration + (conditional) fetch
@@ -703,6 +704,7 @@
         const state = window.getPathState && window.getPathState(targetPath);
         const status = (state && state.status) || 'notbuilt';
         wrapper.dataset.status = status;
+        wrapper.dataset.exists = (state && state.exists) ? 'true' : 'false';
         overlayText.textContent = status.toUpperCase();
 
         // Hand registration + fetching off to the ui_common
@@ -959,13 +961,14 @@
         wrappers.forEach(wrapper => {
             const status = metadata.status || 'notbuilt';
             wrapper.dataset.status = status;
+            wrapper.dataset.exists = metadata.exists ? 'true' : 'false';
             const overlayText = wrapper.querySelector('.node-status-overlay-text');
             if (overlayText) overlayText.textContent = status.toUpperCase();
 
             // For text-backed wrappers, also refresh the textual content.
             const textContainer = wrapper.querySelector('.sticky-text-content');
             if (textContainer) {
-                if (status === 'notbuilt' || !metadata.content) {
+                if (!metadata.exists || !metadata.content) {
                     textContainer.textContent = '—';
                 } else {
                     textContainer.textContent = metadata.content.trim() || '—';
