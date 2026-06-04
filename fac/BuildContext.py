@@ -814,24 +814,29 @@ class BuildContext(BaseModel):
             await process.wait()
 
             # detect all the failure modes and print error messages
+            has_error = False
             if process.returncode != 0:
                 stdout = await process.stdout.read()
                 logger.error(f"error building path '{self.path}': cmd failed with exit code {process.returncode}")
-                logger.error('script contents:', submessage=True)
-                for i, line in enumerate(self.config['cmd'].split('\n')):
-                    logger.error(f"line {i+1}: {line}", submessage=True)
-                raise CommandExecutionError(process.returncode, stdout)
+                has_error = True
 
             elif os.path.lexists(self.path) and not os.path.exists(self.path):
                 logger.error(f"error building path '{self.path}': invalid symlink")
                 logger.error(f"HINT: this is a bug in the 'cmd' field for target '{self.normalized_target}", submessage=True)
                 logger.error(f"HINT: recall that symlink targets must be specified relative to the link location and not PWD", submessage=True)
-                raise FACError()
+                has_error = True
 
             elif not os.path.exists(self.path):
                 logger.error(f"error building path '{self.path}': path not created")
                 logger.error(f"HINT: the 'cmd' field for target '{self.normalized_target} has a bug that is causing the path to not be created", submessage=True)
                 logger.error(f'HINT: you can use the "$FAC_PATH" variable within the cmd field to specify the correct path', submessage=True)
+                has_error = True
+
+            if has_error:
+                logger.error('cmd:', submessage=True)
+                for i, line in enumerate(self.config['cmd'].split('\n')):
+                    logger.error(f"  line {i+1}: {line}", submessage=True)
+                logger.error({'context': self.to_dict()}, submessage=True)
                 raise FACError()
 
         # build with llm
