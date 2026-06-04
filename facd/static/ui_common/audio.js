@@ -123,15 +123,18 @@
 
         window.registerAudioContainer(path, audioContainer, 'leaf-audio');
 
-        // Skip the initial fetch when the backend already reports the
-        // file as 'notbuilt'.
+        // Only fetch when the backend reports the file as 'built'.
+        // Fetching for other statuses just produces noisy 404s in the
+        // console because the file does not yet exist on disk. The
+        // component will be re-invoked with status='built' once the
+        // file is ready.
         const initialStatus = nodeEl.dataset.status;
-        if (initialStatus === 'notbuilt') {
-            window.clearAudioFromContainers(path);
-        } else {
+        if (initialStatus === 'built') {
             window.fetchAudio(path, false).then(url => {
                 refreshAllContainers(path, url);
             }).catch(() => {});
+        } else {
+            window.clearAudioFromContainers(path);
         }
     }
 

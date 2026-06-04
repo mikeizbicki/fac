@@ -123,17 +123,19 @@
 
         window.registerImageContainer(path, imageContainer, 'leaf-image');
 
-        // Skip the initial fetch when the backend already reports the
-        // file as 'notbuilt' (it doesn't exist), so we don't risk
-        // pulling a stale copy out of the browser cache and showing a
-        // file that's been deleted.
+        // Only fetch when the backend reports the file as 'built'.
+        // Fetching for other statuses (notbuilt, stale, buildable,
+        // waiting, etc.) just produces noisy 404s in the console
+        // because the file does not yet exist on disk. The component
+        // will be re-invoked with status='built' once the file is
+        // ready, at which point updateImageForStatus will fetch it.
         const initialStatus = nodeEl.dataset.status;
-        if (initialStatus === 'notbuilt') {
-            window.clearImageFromContainers(path);
-        } else {
+        if (initialStatus === 'built') {
             window.fetchImage(path, false).then(url => {
                 refreshAllContainers(path, url);
             }).catch(() => {});
+        } else {
+            window.clearImageFromContainers(path);
         }
     }
 
