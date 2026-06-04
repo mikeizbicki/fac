@@ -399,11 +399,26 @@
                     thumb.dataset.exists = (state && state.exists) ? 'true' : 'false';
                     overlayText.textContent = status.toUpperCase();
 
-                    // Delegate registration + (conditional) fetch
-                    // to the ui_common image component so the same
-                    // "only fetch when built" policy applies here.
-                    if (window.refreshImageNode) {
-                        window.refreshImageNode(thumb, true);
+                    // Best-effort thumbnail load: dropdown thumbs are
+                    // ephemeral and never receive SSE updates (they
+                    // aren't tracked in registeredPaths), so going
+                    // through refreshImageNode would gate the fetch
+                    // on data-exists==='true' and effectively never
+                    // load anything until something else paints the
+                    // path. Register the container so any cached
+                    // blob paints immediately, then attempt a fetch
+                    // directly; 404s for genuinely unbuilt beats are
+                    // swallowed silently.
+                    if (window.registerImageContainer) {
+                        window.registerImageContainer(
+                            targetPath, imgContainer, 'leaf-image');
+                    }
+                    if (window.fetchImage) {
+                        window.fetchImage(targetPath, false).then(url => {
+                            if (window._refreshImageContainers) {
+                                window._refreshImageContainers(targetPath, url);
+                            }
+                        }).catch(() => {});
                     }
                 }
                 item.appendChild(thumb);
