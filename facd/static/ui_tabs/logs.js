@@ -8,6 +8,11 @@
     let logsOutput = null;
     let eventSource = null;
     let autoScroll = true;
+    let isUnloading = false;
+
+    window.addEventListener('beforeunload', () => {
+        isUnloading = true;
+    });
 
     function classifyLogLine(line) {
         const lowerLine = line.toLowerCase();
@@ -61,6 +66,9 @@
         };
 
         eventSource.onerror = function(err) {
+            if (isUnloading) {
+                return;
+            }
             console.error('logs.js: SSE connection error', err);
             appendLog('[Connection lost. Reconnecting...]');
         };

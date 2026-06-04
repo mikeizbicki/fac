@@ -110,15 +110,16 @@ class BroadcastHandler(logging.Handler):
 
 # Attach handler to your build system logger
 #logger = logging.getLogger("fac")  # adjust to match your logger name
-#handler = BroadcastHandler()
-#handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-#handler.setFormatter(logging.Formatter('%(message)s'))
-#logger.addHandler(handler)
+handler = BroadcastHandler()
+handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+handler.setFormatter(logging.Formatter('%(message)s'))
+logger.addHandler(handler)
 
 async def log_generator():
     queue = asyncio.Queue(maxsize=100)
     log_queues.add(queue)
     try:
+        yield "data: connected\n\n"
         while True:
             msg = await queue.get()
             yield f"data: {msg}\n\n"
