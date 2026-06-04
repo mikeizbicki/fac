@@ -1140,14 +1140,15 @@ class Fac(Routable):
             else:
                 if os.path.exists(context.path):
                     # NOTE:
-                    # We deliberately do NOT propagate 'stale' from
-                    # dependencies here.  The dryrun cleanup in
-                    # async_build_all parks every still-existing file in
-                    # 'stale' as a placeholder when it cannot resolve
-                    # further, so a dep being in 'stale' does not actually
-                    # imply that this context is out-of-date.  get_status()
-                    # already inspects dependency mtimes/hashes for us.
-                    if 'out-of-date' in status:
+                    # has_stale_dep is required for transitive staleness:
+                    # get_status() only compares this context against the
+                    # immediate mtimes of its dependencies_built, so a
+                    # chain a -> b -> c -> d where d was modified leaves
+                    # a.get_status() reporting 'up-to-date' relative to b.
+                    # We rely on b being in 'stale' to propagate to a.
+                    stale_paths = set([context2.path for context2 in self.contexts['stale']])
+                    has_stale_dep = any([dep['target'] in stale_paths for dep in context.dependencies_built])
+                    if 'out-of-date' in status or has_stale_dep:
                         self._set_context_state(context, 'stale')
                     else:
                         self._set_context_state(context, 'built')
