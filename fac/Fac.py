@@ -215,6 +215,10 @@ class Fac(Routable):
         except asyncio.CancelledError:
             self._shutdown = True
             logger.warning('build_daemon cancelled')
+        except git.exc.GitCommandError as e:
+            # git subprocess interrupted by SIGINT (Ctrl-C); treat as shutdown
+            self._shutdown = True
+            logger.warning(f'build_daemon interrupted: {e.command} (exit {e.status})')
 
         # if there are any unknown errors in the build_all function,
         # we log them here and end the program;
