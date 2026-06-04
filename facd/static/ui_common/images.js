@@ -24,10 +24,14 @@
         if (!forceRefresh && imageCache[path]) {
             return Promise.resolve(imageCache[path]);
         }
-        if (forceRefresh && imageCache[path]) {
-            URL.revokeObjectURL(imageCache[path]);
-            delete imageCache[path];
-        }
+        // On force-refresh, keep the existing cached URL in place
+        // until the new blob actually arrives, then swap and revoke
+        // the old one. Revoking + deleting up front created a race
+        // window in which any concurrent registerImageContainer
+        // caller (e.g. screenplay re-render triggered by the same
+        // SSE 'built' event) would find imageCache[path] empty and
+        // paint nothing, leaving the container permanently blank.
+        const oldUrl = forceRefresh ? imageCache[path] : null;
         // Bypass the browser cache: file contents at a given path can
         // change rapidly (e.g. delete then rebuild) and the browser
         // will otherwise happily serve a stale cached image, leading
@@ -42,6 +46,9 @@
                 const url = URL.createObjectURL(blob);
                 imageCache[path] = url;
                 imageVersion[path] = (imageVersion[path] || 0) + 1;
+                if (oldUrl && oldUrl !== url) {
+                    URL.revokeObjectURL(oldUrl);
+                }
                 return url;
             });
     };

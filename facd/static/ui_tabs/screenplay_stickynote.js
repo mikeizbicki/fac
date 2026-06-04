@@ -125,6 +125,30 @@
         return _beatPaths.get(beat_id) || new Map();
     }
 
+    // Debounce repopulate calls. During initial SSE replay we can
+    // see hundreds of beats/* events back-to-back; calling
+    // _repopulateBeatStickies synchronously on each one pegs the
+    // main thread (each call re-walks /list_targets, tears down and
+    // re-creates DOM for every on-screen sticky for that beat, and
+    // re-registers blob-cache containers). Coalesce dirty beat_ids
+    // into a Set drained on the next macrotask so we do at most one
+    // repopulate per beat per burst.
+    const _dirtyBeats = new Set();
+    let _repopulateTimer = null;
+    function _scheduleRepopulate(beat_id) {
+        _dirtyBeats.add(beat_id);
+        if (_repopulateTimer !== null) return;
+        _repopulateTimer = setTimeout(() => {
+            _repopulateTimer = null;
+            const ids = Array.from(_dirtyBeats);
+            _dirtyBeats.clear();
+            for (const id of ids) {
+                try { _repopulateBeatStickies(id); }
+                catch (e) { console.error(e); }
+            }
+        }, 100);
+    }
+
     // Register a global SSE handler so we learn about every
     // beats/<beat_id>/... path the backend reports, even before any
     // sticky note for that beat has been rendered. Without this, the
@@ -136,7 +160,7 @@
         window.registerPathHandler(function(path, metadata) {
             if (!/^beats\//.test(path)) return;
             const r = _recordBeatPath(path, metadata && metadata['mime-type']);
-            if (r && r.isNew) _repopulateBeatStickies(r.beat_id);
+            if (r && r.isNew) _scheduleRepopulate(r.beat_id);
         });
     }
 

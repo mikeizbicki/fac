@@ -23,10 +23,10 @@
         if (!forceRefresh && videoCache[path]) {
             return Promise.resolve(videoCache[path]);
         }
-        if (forceRefresh && videoCache[path]) {
-            URL.revokeObjectURL(videoCache[path]);
-            delete videoCache[path];
-        }
+        // Keep the existing URL cached until the refreshed blob
+        // arrives, so concurrent registerVideoContainer callers can
+        // still paint with the old URL instead of an empty cache.
+        const oldUrl = forceRefresh ? videoCache[path] : null;
         // Bypass the browser cache: file contents at a given path can
         // change rapidly (e.g. delete then rebuild) and the browser
         // will otherwise happily serve a stale cached video.
@@ -39,6 +39,9 @@
             .then(blob => {
                 const url = URL.createObjectURL(blob);
                 videoCache[path] = url;
+                if (oldUrl && oldUrl !== url) {
+                    URL.revokeObjectURL(oldUrl);
+                }
                 return url;
             });
     };

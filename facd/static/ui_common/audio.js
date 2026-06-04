@@ -21,10 +21,10 @@
         if (!forceRefresh && audioCache[path]) {
             return Promise.resolve(audioCache[path]);
         }
-        if (forceRefresh && audioCache[path]) {
-            URL.revokeObjectURL(audioCache[path]);
-            delete audioCache[path];
-        }
+        // Keep the existing URL cached until the refreshed blob
+        // arrives, so concurrent registerAudioContainer callers can
+        // still paint with the old URL instead of an empty cache.
+        const oldUrl = forceRefresh ? audioCache[path] : null;
         // Bypass the browser cache: file contents at a given path can
         // change rapidly (e.g. delete then rebuild) and the browser
         // will otherwise happily serve a stale cached audio file.
@@ -37,6 +37,9 @@
             .then(blob => {
                 const url = URL.createObjectURL(blob);
                 audioCache[path] = url;
+                if (oldUrl && oldUrl !== url) {
+                    URL.revokeObjectURL(oldUrl);
+                }
                 return url;
             });
     };
