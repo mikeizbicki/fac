@@ -8,7 +8,7 @@
 // window.registerPathHandler(callback) - Register a callback for path events:
 //   callback(path, metadata) called on each SSE message
 //   - path: string path of the file
-//   - metadata: { target, status, "mime-type", content }
+//   - metadata: { target, status, "mime-type", content, exists }
 //
 // window.getPathState(path) - Return the most recent metadata for `path`
 //   that we've ever seen on the SSE stream, or undefined. This lets
@@ -53,7 +53,8 @@
                 target: data.target,
                 status: data.status,
                 'mime-type': data['mime-type'],
-                content: data.content
+                content: data.content,
+                exists: data.exists,
             };
 
             pathStates.set(path, metadata);
