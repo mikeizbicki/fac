@@ -3,6 +3,7 @@ from importlib.resources import files
 from typing import Optional, Set, Any, Literal
 import asyncio
 import logging
+import os
 import signal
 import sys
 import threading
@@ -248,12 +249,24 @@ def main():
         from hypercorn.config import Config
         config = Config()
         config.bind = ['0.0.0.0:8000']
+        # Don't wait forever for never-ending SSE streams (e.g. /logs_stream)
+        # to complete during graceful shutdown.
+        config.graceful_timeout = 2.0
 
         async def _run():
             shutdown_event = asyncio.Event()
             loop = asyncio.get_running_loop()
+
+            def _handle_signal():
+                if shutdown_event.is_set():
+                    # second Ctrl-C / SIGTERM: force exit
+                    print('\nForce exiting...', flush=True)
+                    os._exit(1)
+                print('\nShutting down (press Ctrl-C again to force exit)...', flush=True)
+                shutdown_event.set()
+
             for sig in (signal.SIGINT, signal.SIGTERM):
-                loop.add_signal_handler(sig, shutdown_event.set)
+                loop.add_signal_handler(sig, _handle_signal)
             await serve(app, config, shutdown_trigger=shutdown_event.wait)
 
         asyncio.run(_run())
