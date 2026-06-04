@@ -38,6 +38,7 @@ class FacSettings(BaseSettings):
     do_merge_contexts: bool = True
     print_prompt: bool = False
     print_states_when_building: bool = False
+    halt_on_error: bool = False
 
     class Config:
         env_prefix = "FAC_"
@@ -89,6 +90,7 @@ class Fac(Routable):
             'buildable': set(),
             'build_required': set(),
             'built': set(),
+            'build_error': set(),
         }
         self.path2context = {}
         self.path_routes = PathRoutes(self.targets_dict)
@@ -306,6 +308,8 @@ class Fac(Routable):
 
                 # perform duplicate state check
                 if state0 in state_hashes:
+                    has_error = len(self.contexts['build_error']) > 0
+                    print("len(self.contexts['build_error'])=", len(self.contexts['build_error']))
                     all_dryrun = True
                     for context in itertools.chain(
                             self.contexts['buildable'],
@@ -314,7 +318,7 @@ class Fac(Routable):
                             ):
                         if len(context.tasks) > 0:
                             all_dryrun = False
-                    if not all_dryrun:
+                    if not all_dryrun and not has_error:
                         logger.error('duplicate state detected --- this is a bug in fac')
                     else:
                         # NOTE:
@@ -427,6 +431,7 @@ class Fac(Routable):
         self.jobs['running'] = set()
         for job in jobs_running:
             done = True
+            has_error = False
             for context in job.contexts:
                 if context in self.contexts['unresolved']:
                     done = False
@@ -434,10 +439,23 @@ class Fac(Routable):
                     done = False
                 if context in self.contexts['waiting'] and len(context.tasks) > 0:
                     done = False
+                if context in self.contexts['build_error']:
+                    has_error = True
+                    # FIXME:
+                    # This code never gets triggered,
+                    # and so jobs are never registered as failed.
+                    # Somehow the context is not getting added to the job?
+                    # Manual inspection makes it seem like some contexts
+                    # with the right path get added and some don't,
+                    # and I'm not sure why.
             if done:
-                logger.info(f'finalizing job {job.job_id}')
-                job.finalize()
-                self.jobs['succeeded'].add(job)
+                if has_error:
+                    logger.warning(f'cannot finalize job {job.job_id}; has_error=True')
+                    self.jobs['failed'].add(job)
+                else:
+                    logger.info(f'finalizing job {job.job_id}')
+                    job.finalize()
+                    self.jobs['succeeded'].add(job)
                 self.run_jobs_callbacks()
             else:
                 self.jobs['running'].add(job)
@@ -690,21 +708,6 @@ class Fac(Routable):
                 else:
                     self._set_context_state(rdep_context, 'notbuilt')
                     logger.warning(f'notbuilt: rdep={rdep}')
-            '''
-            if os.path.exists(rdep_context.path):
-                stale_paths = set([context2.path for context2 in self.contexts['stale']])
-                has_stale_dep = any([dep['target'] in stale_paths for dep in rdep_context.dependencies_built])
-
-                if do_build or 'out-of-date' in status or has_stale_dep:
-                    self._set_context_state(rdep_context, 'stale')
-                    logger.warning(f'stale: rdep={rdep}')
-                else:
-                    self._set_context_state(rdep_context, 'built')
-                    logger.warning(f'stale: rdep={rdep}')
-            else:
-                self._set_context_state(rdep_context, 'notbuilt')
-                logger.warning(f'stale: rdep={rdep}')
-            '''
 
         self.assert_invariants()
         #self.assert_invariants_io()
@@ -1159,7 +1162,7 @@ class Fac(Routable):
                 # something unexpected happened and we want to see the exception
                 if not isinstance (e, FACError):
                     logger.error(f'failed to build {context.path}: {e}')
-                self._set_context_state(context, 'notbuilt')
+                self._set_context_state(context, 'build_error')
                 failures.append((context, e))
 
         num_contexts = len(self.contexts['build_required'])
@@ -1186,8 +1189,9 @@ class Fac(Routable):
         if failures:
             paths = [ctx.path for ctx, _ in failures]
             logger.error(f'{len(failures)} build(s) failed: {paths}')
-            # Re-raise the first exception after all builds complete
-            raise failures[0][1]
+
+            if self.settings.halt_on_error:
+                raise FACError(failures[0][1])
 
     def process_all_dependencies(self):
         contexts = self.contexts['unresolved']
