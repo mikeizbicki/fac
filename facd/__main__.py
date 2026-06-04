@@ -18,7 +18,7 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-import uvicorn
+import hypercorn
 
 from fastapi.responses import FileResponse
 from facd import git_routes
@@ -214,6 +214,7 @@ def str2bool(v):
 def main():
     import argparse
     parser = argparse.ArgumentParser()
+    parser.add_argument('--server', choices=['hypercorn', 'uvicorn'], default='hypercorn')
     parser.add_argument('--allow_dirty', action='store_true')
     parser.add_argument('--auto_commit', default=True, type=str2bool)
     args = parser.parse_args()
@@ -242,13 +243,22 @@ def main():
     app.include_router(monitor_jobs.router)
 
     # start the web server
-    uvicorn.run(
-            app,
-            host='localhost',
-            port=8080,
-            timeout_graceful_shutdown=5,
-            log_level='warning',
-            )
+    if args.server == 'hypercorn':
+        from hypercorn.asyncio import serve
+        from hypercorn.config import Config
+        config = Config()
+        config.bind = ['0.0.0.0:8000']
+        asyncio.run(serve(app, config))
+
+    elif args.server == 'uvicorn':
+        import uvicorn
+        uvicorn.run(
+                app,
+                host='localhost',
+                port=8080,
+                timeout_graceful_shutdown=5,
+                log_level='warning',
+                )
 
 if __name__ == '__main__':
     main()
