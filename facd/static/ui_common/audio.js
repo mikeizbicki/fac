@@ -156,6 +156,19 @@
         // until the next 'built' refresh.
     }
 
+    // Allow views that build their own leaf-style media elements
+    // (notably the screenplay sticky notes) to plug into the same
+    // setup/update flow used for tree-node leaves. The element
+    // must expose data-path / data-mime-type / data-status and
+    // contain a child .audio-container.
+    window.refreshAudioNode = function(nodeEl, isNew) {
+        if (isNew) {
+            setupLeafAudio(nodeEl);
+        } else {
+            updateAudioForStatus(nodeEl, nodeEl.dataset.status);
+        }
+    };
+
     window.registerComponent(function(nodeEl, status, isNew) {
         if (nodeEl.classList.contains('leaf') && nodeEl.classList.contains('path')) {
             if (isNew) {

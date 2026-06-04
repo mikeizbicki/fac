@@ -162,6 +162,20 @@
         // 'built' transition refreshes it.
     }
 
+    // Allow views that build their own leaf-style media elements
+    // (notably the screenplay sticky notes) to plug into the same
+    // setup/update flow used for tree-node leaves, so the
+    // "only fetch on built" policy lives in exactly one place. The
+    // element must expose data-path / data-mime-type / data-status
+    // and contain a child .image-container.
+    window.refreshImageNode = function(nodeEl, isNew) {
+        if (isNew) {
+            setupLeafImage(nodeEl);
+        } else {
+            updateImageForStatus(nodeEl, nodeEl.dataset.status);
+        }
+    };
+
     function getDescendantImagePaths(nodeEl) {
         const paths = [];
         const leafNodes = nodeEl.querySelectorAll('.tree-node.path.leaf');

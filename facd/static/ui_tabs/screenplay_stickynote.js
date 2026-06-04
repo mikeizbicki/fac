@@ -381,6 +381,7 @@
                     const targetPath = 'beats/' + entry.beat_id
                         + '/beat_type=standard/startframe.png';
                     thumb.dataset.path = targetPath;
+                    thumb.dataset.mimeType = 'image/png';
                     const imgContainer = document.createElement('div');
                     imgContainer.className = 'image-container';
                     thumb.appendChild(imgContainer);
@@ -397,15 +398,11 @@
                     thumb.dataset.status = status;
                     overlayText.textContent = status.toUpperCase();
 
-                    if (window.registerImageContainer) {
-                        window.registerImageContainer(targetPath, imgContainer, 'leaf-image');
-                    }
-                    if (status !== 'notbuilt' && window.fetchImage) {
-                        window.fetchImage(targetPath, false).then(url => {
-                            if (window._refreshImageContainers) {
-                                window._refreshImageContainers(targetPath, url);
-                            }
-                        }).catch(() => {});
+                    // Delegate registration + (conditional) fetch
+                    // to the ui_common image component so the same
+                    // "only fetch when built" policy applies here.
+                    if (window.refreshImageNode) {
+                        window.refreshImageNode(thumb, true);
                     }
                 }
                 item.appendChild(thumb);
@@ -708,60 +705,29 @@
         wrapper.dataset.status = status;
         overlayText.textContent = status.toUpperCase();
 
-        // Register the media container so any blob-cache refresh
-        // (typically triggered by the targets tab when an SSE event
-        // arrives) repaints us automatically.
-        if (isImage) {
-            if (window.registerImageContainer) {
-                window.registerImageContainer(targetPath, mediaContainer, 'leaf-image');
-            }
-            if (status !== 'notbuilt') {
-                _scheduleLazyFetch(wrapper, () => {
-                    if (!window.fetchImage) return;
-                    window.fetchImage(targetPath, false).then(url => {
-                        // registerImageContainer only paints
-                        // synchronously when the blob cache is
-                        // already warm. The first lazy fetch for a
-                        // path must therefore explicitly refresh
-                        // every registered container, otherwise
-                        // both this sticky AND the targets-tab
-                        // tree-node (which share the same
-                        // registered-container map) stay blank.
-                        if (window._refreshImageContainers) {
-                            window._refreshImageContainers(targetPath, url);
-                        }
-                    }).catch(() => {});
-                });
-            }
-        } else if (isVideo) {
-            if (window.registerVideoContainer) {
-                window.registerImageContainer(targetPath, mediaContainer, 'leaf-image');
-                window.registerVideoContainer(targetPath, mediaContainer, 'leaf-video');
-            }
-            if (status !== 'notbuilt') {
-                _scheduleLazyFetch(wrapper, () => {
-                    if (!window.fetchVideo) return;
-                    window.fetchVideo(targetPath, false).then(url => {
-                        if (window._refreshVideoContainers) {
-                            window._refreshVideoContainers(targetPath, url);
-                        }
-                    }).catch(() => {});
-                });
-            }
-        } else if (isAudio) {
-            if (window.registerAudioContainer) {
-                window.registerAudioContainer(targetPath, mediaContainer, 'leaf-audio');
-            }
-            if (status !== 'notbuilt') {
-                _scheduleLazyFetch(wrapper, () => {
-                    if (!window.fetchAudio) return;
-                    window.fetchAudio(targetPath, false).then(url => {
-                        if (window._refreshAudioContainers) {
-                            window._refreshAudioContainers(targetPath, url);
-                        }
-                    }).catch(() => {});
-                });
-            }
+        // Hand registration + fetching off to the ui_common
+        // components. They alone decide WHEN to fetch (only on
+        // status === 'built'), which is what avoids the 404 storm
+        // we used to get from fetching for non-built statuses.
+        // Earlier versions reimplemented the fetch policy here with
+        // a buggy `status !== 'notbuilt'` predicate, so any sticky
+        // for a stale / waiting / phantom / command_sent target hit
+        // /contents and got a 404. The sticky wrapper carries
+        // data-path / data-mime-type / data-status and contains the
+        // right child container (image/video/audio), so the
+        // refresh*Node helpers can treat it like a tree-node leaf.
+        if (isImage && window.refreshImageNode) {
+            _scheduleLazyFetch(wrapper, () => {
+                window.refreshImageNode(wrapper, true);
+            });
+        } else if (isVideo && window.refreshVideoNode) {
+            _scheduleLazyFetch(wrapper, () => {
+                window.refreshVideoNode(wrapper, true);
+            });
+        } else if (isAudio && window.refreshAudioNode) {
+            _scheduleLazyFetch(wrapper, () => {
+                window.refreshAudioNode(wrapper, true);
+            });
         } else if (isText) {
             // Text targets: render the file content (or em-dash if
             // not yet built) directly in the container. The
@@ -1044,41 +1010,26 @@
         });
 
         // When the targets tab already has a tree-node for this path
-        // its updateNode -> images.js/videos.js callback chain
-        // refreshes the blob cache (and thus every container, sticky
-        // or otherwise, registered for that path). When no tree-node
-        // exists yet -- e.g. the screenplay rendered before the
-        // targets tab finished its initial build -- we kick off the
-        // refresh ourselves so the sticky still shows the right thing.
+        // its updateNode -> ui_common callback chain refreshes the
+        // blob cache (and thus every registered container, sticky or
+        // otherwise) for us. When no tree-node exists yet -- e.g.
+        // the screenplay rendered before the targets tab finished
+        // its initial build -- we kick the same ui_common helpers
+        // ourselves. We only need to invoke them once per path; they
+        // update every registered container internally.
         if (!window.hasNode || !window.hasNode(path)) {
-            const mimeType = metadata['mime-type'] || '';
-            if (metadata.status === 'built') {
-                if (mimeType.startsWith('image/') && window.fetchImage) {
-                    window.fetchImage(path, true).then(url => {
-                        if (window._refreshImageContainers) {
-                            window._refreshImageContainers(path, url);
-                        }
-                    }).catch(() => {});
-                } else if (mimeType.startsWith('video/') && window.fetchVideo) {
-                    window.fetchVideo(path, true).then(url => {
-                        if (window._refreshVideoContainers) {
-                            window._refreshVideoContainers(path, url);
-                        }
-                    }).catch(() => {});
-                } else if (mimeType.startsWith('audio/') && window.fetchAudio) {
-                    window.fetchAudio(path, true).then(url => {
-                        if (window._refreshAudioContainers) {
-                            window._refreshAudioContainers(path, url);
-                        }
-                    }).catch(() => {});
-                }
-            } else if (metadata.status === 'notbuilt') {
-                if (mimeType.startsWith('image/') && window.clearImageFromContainers) {
-                    window.clearImageFromContainers(path);
-                } else if (mimeType.startsWith('video/') && window.clearVideoFromContainers) {
-                    window.clearVideoFromContainers(path);
-                } else if (mimeType.startsWith('audio/') && window.clearAudioFromContainers) {
-                    window.clearAudioFromContainers(path);
+            const first = wrappers[0];
+            if (first) {
+                const mimeType = first.dataset.mimeType || '';
+                if (mimeType.startsWith('image/')
+                    && window.refreshImageNode) {
+                    window.refreshImageNode(first, false);
+                } else if (mimeType.startsWith('video/')
+                    && window.refreshVideoNode) {
+                    window.refreshVideoNode(first, false);
+                } else if (mimeType.startsWith('audio/')
+                    && window.refreshAudioNode) {
+                    window.refreshAudioNode(first, false);
                 }
             }
         }
