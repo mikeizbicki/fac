@@ -401,7 +401,11 @@
                         window.registerImageContainer(targetPath, imgContainer, 'leaf-image');
                     }
                     if (status !== 'notbuilt' && window.fetchImage) {
-                        window.fetchImage(targetPath, false).catch(() => {});
+                        window.fetchImage(targetPath, false).then(url => {
+                            if (window._refreshImageContainers) {
+                                window._refreshImageContainers(targetPath, url);
+                            }
+                        }).catch(() => {});
                     }
                 }
                 item.appendChild(thumb);
@@ -713,7 +717,20 @@
             }
             if (status !== 'notbuilt') {
                 _scheduleLazyFetch(wrapper, () => {
-                    if (window.fetchImage) window.fetchImage(targetPath, false).catch(() => {});
+                    if (!window.fetchImage) return;
+                    window.fetchImage(targetPath, false).then(url => {
+                        // registerImageContainer only paints
+                        // synchronously when the blob cache is
+                        // already warm. The first lazy fetch for a
+                        // path must therefore explicitly refresh
+                        // every registered container, otherwise
+                        // both this sticky AND the targets-tab
+                        // tree-node (which share the same
+                        // registered-container map) stay blank.
+                        if (window._refreshImageContainers) {
+                            window._refreshImageContainers(targetPath, url);
+                        }
+                    }).catch(() => {});
                 });
             }
         } else if (isVideo) {
@@ -723,7 +740,12 @@
             }
             if (status !== 'notbuilt') {
                 _scheduleLazyFetch(wrapper, () => {
-                    if (window.fetchVideo) window.fetchVideo(targetPath, false).catch(() => {});
+                    if (!window.fetchVideo) return;
+                    window.fetchVideo(targetPath, false).then(url => {
+                        if (window._refreshVideoContainers) {
+                            window._refreshVideoContainers(targetPath, url);
+                        }
+                    }).catch(() => {});
                 });
             }
         } else if (isAudio) {
@@ -732,7 +754,12 @@
             }
             if (status !== 'notbuilt') {
                 _scheduleLazyFetch(wrapper, () => {
-                    if (window.fetchAudio) window.fetchAudio(targetPath, false).catch(() => {});
+                    if (!window.fetchAudio) return;
+                    window.fetchAudio(targetPath, false).then(url => {
+                        if (window._refreshAudioContainers) {
+                            window._refreshAudioContainers(targetPath, url);
+                        }
+                    }).catch(() => {});
                 });
             }
         } else if (isText) {
