@@ -254,7 +254,7 @@ def main():
         # There was a bad bug when using IPv4 that caused connections to localhost
         # to sometimes break in very heisenbugish ways.  Binding to IPv6 seems to
         # solve this problem.
-        config.bind = ['[::]:8000']
+        config.bind = ['[::]:8080']
         config.graceful_timeout = 2.0
 
         async def _run():
@@ -276,7 +276,7 @@ def main():
         uvicorn.run(
                 app,
                 host='::',
-                port=8000,
+                port=8080,
                 timeout_graceful_shutdown=5,
                 log_level='warning',
                 )
