@@ -26,6 +26,11 @@
 
     window.registerPathHandler = function(callback) {
         pathHandlers.push(callback);
+        setTimeout(() => {
+            for (const [path, metadata] of pathStates.entries()) {
+                callback(path, metadata);
+            }
+        }, 0);
     };
 
     window.getPathState = function(path) {

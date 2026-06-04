@@ -967,6 +967,7 @@
                 const path = w.dataset.path;
                 if (!path) return;
                 _cancelLazyFetch(w);
+                const aud = w.querySelector('.audio-container');
                 const img = w.querySelector('.image-container');
                 const vid = w.querySelector('.video-container');
                 if (img && window.unregisterImageContainer) {
@@ -974,6 +975,9 @@
                 }
                 if (vid && window.unregisterVideoContainer) {
                     window.unregisterVideoContainer(path, vid);
+                }
+                if (aud && window.unregisterAudioContainer) {
+                    window.unregisterAudioContainer(path, aud);
                 }
             });
         }
@@ -1061,12 +1065,20 @@
                             window._refreshVideoContainers(path, url);
                         }
                     }).catch(() => {});
+                } else if (mimeType.startsWith('audio/') && window.fetchAudio) {
+                    window.fetchAudio(path, true).then(url => {
+                        if (window._refreshAudioContainers) {
+                            window._refreshAudioContainers(path, url);
+                        }
+                    }).catch(() => {});
                 }
             } else if (metadata.status === 'notbuilt') {
                 if (mimeType.startsWith('image/') && window.clearImageFromContainers) {
                     window.clearImageFromContainers(path);
                 } else if (mimeType.startsWith('video/') && window.clearVideoFromContainers) {
                     window.clearVideoFromContainers(path);
+                } else if (mimeType.startsWith('audio/') && window.clearAudioFromContainers) {
+                    window.clearAudioFromContainers(path);
                 }
             }
         }
@@ -1093,12 +1105,16 @@
                     const p = w.dataset.path;
                     if (!p) return;
                     const img = w.querySelector('.image-container');
+                    const aud = w.querySelector('.audio-container');
                     const vid = w.querySelector('.video-container');
                     if (img && window.unregisterImageContainer) {
                         window.unregisterImageContainer(p, img);
                     }
                     if (vid && window.unregisterVideoContainer) {
                         window.unregisterVideoContainer(p, vid);
+                    }
+                    if (aud && window.unregisterAudioContainer) {
+                        window.unregisterAudioContainer(p, aud);
                     }
                 });
                 while (media.firstChild) media.removeChild(media.firstChild);

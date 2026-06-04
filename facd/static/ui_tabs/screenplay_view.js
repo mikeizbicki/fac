@@ -968,6 +968,11 @@
                 }
             });
 
+            const screenplayState = window.getPathState
+                && window.getPathState('shooting-script.xml');
+            if (screenplayState) {
+                handleScreenplayUpdate(screenplayState.content);
+            }
             renderBoard(currentBeats);
         }
 

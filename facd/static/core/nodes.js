@@ -270,6 +270,11 @@
                 div.insertBefore(videoContainer, div.firstChild);
                 div.classList.add('has-video');
             }
+            } else if (mimeType.startsWith('audio/')) {
+                const audioContainer = document.createElement('div');
+                audioContainer.className = 'audio-container';
+                div.insertBefore(audioContainer, div.firstChild);
+                div.classList.add('has-audio');
         }
 
         // Register the node
@@ -319,6 +324,11 @@
                 videoContainer.className = 'video-container';
                 targetEl.insertBefore(videoContainer, targetEl.firstChild);
                 targetEl.classList.add('has-video');
+            } else if (mimeType.startsWith('audio/') && !targetEl.querySelector('.audio-container')) {
+                const audioContainer = document.createElement('div');
+                audioContainer.className = 'audio-container';
+                targetEl.insertBefore(audioContainer, targetEl.firstChild);
+                targetEl.classList.add('has-audio');
             }
         }
 
@@ -342,7 +352,7 @@
         delete nodeEl.dataset.mimeType;
         delete nodeEl.dataset.status;
         delete nodeEl.dataset.content;
-        nodeEl.classList.remove('path', 'has-image', 'has-video');
+        nodeEl.classList.remove('path', 'has-image', 'has-video', 'has-audio');
         nodeEl.classList.add('target');
 
         // Add target attribute
@@ -366,6 +376,13 @@
                 window.unregisterVideoContainer(path, videoContainer);
             }
             videoContainer.remove();
+        }
+        const audioContainer = nodeEl.querySelector('.audio-container');
+        if (audioContainer) {
+            if (window.unregisterAudioContainer) {
+                window.unregisterAudioContainer(path, audioContainer);
+            }
+            audioContainer.remove();
         }
 
         // Unmark as file path
