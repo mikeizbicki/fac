@@ -147,6 +147,16 @@ class Fac(Routable):
                 for context in set(self.contexts[state]):
                     if context.path_safe() == target:
                         self.contexts[state].discard(context)
+            # Also reset _contexts_history.  BuildContext equality is
+            # structural, so the contexts we are about to create will hash
+            # to the same keys as the contexts we just discarded (and as
+            # their transformed descendants from the previous run).  If we
+            # leave the old history in place, _add_context will see that
+            # the target state is already in _contexts_history[context] and
+            # silently drop the new context (when force_add is False),
+            # making the target vanish from every state.  This mirrors the
+            # same workaround used in _update_rdeps_state.
+            self._contexts_history = defaultdict(lambda: [])
 
         # get job info
         if required_for is None:
@@ -1129,10 +1139,15 @@ class Fac(Routable):
                 self._set_context_state(context, 'build_required')
             else:
                 if os.path.exists(context.path):
-                    stale_paths = set([context2.path for context2 in self.contexts['stale']])
-                    has_stale_dep = any([dep['target'] in stale_paths for dep in context.dependencies_built])
-
-                    if 'out-of-date' in status or has_stale_dep:
+                    # NOTE:
+                    # We deliberately do NOT propagate 'stale' from
+                    # dependencies here.  The dryrun cleanup in
+                    # async_build_all parks every still-existing file in
+                    # 'stale' as a placeholder when it cannot resolve
+                    # further, so a dep being in 'stale' does not actually
+                    # imply that this context is out-of-date.  get_status()
+                    # already inspects dependency mtimes/hashes for us.
+                    if 'out-of-date' in status:
                         self._set_context_state(context, 'stale')
                     else:
                         self._set_context_state(context, 'built')
