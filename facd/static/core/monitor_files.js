@@ -23,6 +23,11 @@
 (function() {
     const pathHandlers = [];
     const pathStates = new Map();
+    let isUnloading = false;
+
+    window.addEventListener('beforeunload', () => {
+        isUnloading = true;
+    });
 
     window.registerPathHandler = function(callback) {
         pathHandlers.push(callback);
@@ -59,6 +64,9 @@
         };
 
         eventSource.onerror = () => {
+            if (isUnloading) {
+                return;
+            }
             console.error('monitor_files SSE connection error, reconnecting...');
             eventSource.close();
             setTimeout(monitorFiles, 3000);

@@ -16,6 +16,11 @@
   let eventSource = null;
   let commits = [];
   let container = null;
+  let isUnloading = false;
+
+  window.addEventListener('beforeunload', () => {
+    isUnloading = true;
+  });
 
   // Colors for different branch lanes
   const LANE_COLORS = [
@@ -60,6 +65,9 @@
     };
 
     eventSource.onerror = function() {
+      if (isUnloading) {
+        return;
+      }
       console.error('Git events connection error, reconnecting...');
       setTimeout(connectToGitEvents, 3000);
     };
