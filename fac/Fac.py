@@ -1024,40 +1024,18 @@ class Fac(Routable):
                         dependencies_building1.append(dep_building)
 
                 else:
-                    # some dependencies will never resolve to files;
-                    # this happens when the required variables
-                    # are not defined within the context
-                    # but instead within the dependency;
-                    # to determine if these dependencies are actually built,
-                    # we search through all context_* states
-                    # and check if there are any non-built matches
-                    all_targets_built = True
-                    for loop_context in itertools.chain(
-                            self.contexts['unresolved'],
-                            self.contexts['buildable'],
-                            self.contexts['waiting'],
-                            waiting0,
-                            ):
-                        if denormalized_target == loop_context.normalized_target and loop_context != context:
-                            all_targets_built = False
-                    if not all_targets_built:
-                        dependencies_building1.append(dep_building)
-                    else:
-                        for loop_context in self.contexts['built']:
-                            matches = match_pattern_starstar(freeze([dep_building['target']]), loop_context.path)
-                            #matches = match_pattern_starstar(dep_targets, loop_context.path)
-                            if len(matches) == 1:
-                                # FIXME:
-                                # the if statement is needed for when fac builds more than one target at a time
-                                # (either through demon mode or multiple cmd line args)
-                                # in that case, states['built'] will contain paths that do not necessarily correspond to the current context,
-                                # and the if statement ensures that only those paths for this context will be added;
-                                # the problem (and thing to fix) is that the match_pattern_starstar function is slow
-                                # and should not be in an inner loop
-                                dep1 = dict(dep_building)
-                                dep1['target'] = loop_context.path
-                                dependencies_built1.append(freeze(dep1))
-                                assert '$' not in dep1['target']
+                    for loop_context in self.contexts['built']:
+                        matches = match_pattern_starstar(frozenset([dep_building['target']]), loop_context.path)
+                        if len(matches) == 1:
+                            # NOTE:
+                            # the if statement is needed for when fac builds more than one target at a time
+                            # (either through demon mode or multiple cmd line args)
+                            # in that case, states['built'] will contain paths that do not necessarily correspond to the current context,
+                            # and the if statement ensures that only those paths for this context will be added
+                            dep1 = dict(dep_building)
+                            dep1['target'] = loop_context.path
+                            dependencies_built1.append(freeze(dep1))
+                            assert '$' not in dep1['target']
         context1 = context.model_copy(update={
             'dependencies_built': dependencies_built1,
             'dependencies_building': dependencies_building1,
