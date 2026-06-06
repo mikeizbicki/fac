@@ -188,7 +188,7 @@ def with_buffered_logs(logger_obj):
 class CustomFormatter(logging.Formatter):
     # ANSI color codes
     COLORS = {
-        #'DEBUG': '\033[36m',      # Cyan
+        'DEBUG': '\033[36m',      # Cyan
         #'INFO': '\033[32m',       # Green
         #'WARNING': '\033[33m',    # Yellow/Orange
         'WARNING': '\033[38;5;208m',    # Yellow/Orange
@@ -226,7 +226,7 @@ logger.addHandler(stream_handler)
 #file_handler.setLevel('TRACE')
 #logger.addHandler(file_handler)
 logger.propagate = False
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 # add custom TRACE log level that sits below DEBUG
 TRACE_LEVEL = 5

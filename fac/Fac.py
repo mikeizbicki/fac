@@ -96,6 +96,10 @@ class Fac(Routable):
         self.path_routes = PathRoutes(self.targets_dict)
         self._contexts_history = defaultdict(lambda: [])
 
+        # store paths that fac builds;
+        # this ensures that the awatch task does not process them
+        self._awatch_build_paths = set()
+
         # every built context has a dependencies_built field that stores the paths
         # that were needed to build the context;
         # self.rdeps is a lookup for the reverse direction;
@@ -217,24 +221,16 @@ class Fac(Routable):
                 # the code below will raise an exception if self._watch_files
                 # generated an exception
                 if watch_task.done():
-                    logger.error(f"error in _watch_files")
                     watch_task.result()
 
                 # run build_all in executor so it doesn't block the event loop
                 #await loop.run_in_executor(None, self.build_all)
                 await self.async_build_all()
                 await asyncio.sleep(1)
-        except asyncio.CancelledError:
-            self._shutdown = True
-            logger.warning('build_daemon cancelled')
-        except git.exc.GitCommandError as e:
-            # git subprocess interrupted by SIGINT (Ctrl-C); treat as shutdown
-            self._shutdown = True
-            logger.warning(f'build_daemon interrupted: {e.command} (exit {e.status})')
 
         # if there are any unknown errors in the build_all function,
         # we log them here and end the program;
-        # we call os.kill twice to ensure that the uvicorn server actually ends
+        # we call os.kill twice to ensure that the server actually ends
         except Exception as e:
             logger.error(f"build_daemon crashed: {e}", exc_info=e)
             os.kill(os.getpid(), signal.SIGTERM)
@@ -330,6 +326,7 @@ class Fac(Routable):
                             all_dryrun = False
                     if not all_dryrun and not has_error:
                         logger.error('duplicate state detected --- this is a bug in fac')
+                        sys.exit(1)
                     else:
                         # NOTE:
                         # There is no theoretical need to clean up these contexts.
@@ -611,7 +608,6 @@ class Fac(Routable):
                 if path in self.path2context:
                     if change_type == Change.added:
                         change_str = 'added'
-                        continue
                     elif change_type == Change.modified:
                         change_str = 'modified'
                     elif change_type == Change.deleted:
@@ -626,8 +622,29 @@ class Fac(Routable):
                         #assert not os.path.exists(abs_path)
                     else:
                         assert False, 'unknown change_type'
-                    logger.warning(f"change_detected ({change_str}): path={path}")
-                    self._update_rdeps_state(path)
+
+                    # only update rdeps if the change was not caused by fac
+                    if path not in self._awatch_build_paths:
+                        logger.warning(f"change detected ({change_str}): path={path}")
+                        self._update_rdeps_state(path)
+                    else:
+                        logger.debug(f"awatch detected a change by fac ({change_str}): path={path}")
+                        self._awatch_build_paths.remove(path)
+
+    def _path_to_state(self, path):
+        '''
+        Returns the state of a given path
+        (or None if no context matches that path).
+
+        FIXME:
+        Current implementation is O(n),
+        but this could be reduced to O(1) by caching.
+        '''
+        current_state = None
+        for state in self.contexts:
+            for context in self.contexts[state]:
+                if path == context.path_safe():
+                    return state
 
     def _update_rdeps_state(self, path):
         '''
@@ -684,16 +701,7 @@ class Fac(Routable):
         # set the state of any rdep to stale/notbuilt
         for rdep in rdeps:
             rdep_context = self.path2context[rdep]
-
-            # the state that we move to depends on whether we need to build;
-            # we could always just ask the context if we need to build,
-            # but this requires moderately expensive git calculations,
-            # and we hard-code that we always need to build if path was deleted
-            if path_rm:
-                do_build = True
-                status = 'none'
-            else:
-                status, do_build = rdep_context.get_status()
+            status, build_required = rdep_context.get_status()
 
             # now we actually register the path state;
             stale_paths = set([context2.path for context2 in self.contexts['stale']])
@@ -702,7 +710,7 @@ class Fac(Routable):
                 # if we edited a path, that should always be in the built state
                 self._set_context_state(rdep_context, 'built')
                 logger.warning(f'built: rdep={rdep}')
-            elif not do_build and not has_stale_dep:
+            elif not build_required and not has_stale_dep:
                 # we need to register the context so that the /monitor_paths
                 # will notify end-users of the change
                 self._set_context_state(rdep_context, 'built')
@@ -714,10 +722,10 @@ class Fac(Routable):
                     self.contexts[state].discard(rdep_context)
                 if os.path.lexists(rdep):
                     self._set_context_state(rdep_context, 'stale')
-                    logger.warning(f'stale: rdep={rdep}')
+                    logger.warning({'stale': {'rdep': rdep, 'status': status, 'has_stale_dep': has_stale_dep}})
                 else:
                     self._set_context_state(rdep_context, 'notbuilt')
-                    logger.warning(f'notbuilt: rdep={rdep}')
+                    logger.warning({'notbuilt': {'rdep': rdep, 'status': status, 'has_stale_dep': has_stale_dep}})
 
         self.assert_invariants()
         #self.assert_invariants_io()
@@ -965,7 +973,7 @@ class Fac(Routable):
             # if we've already built the context,
             # do not add it anywhere
             if context in self.contexts['built']:
-                return
+                continue
 
             # if we haven't built the context,
             # then put it in the appropriate state
@@ -1000,7 +1008,6 @@ class Fac(Routable):
     @with_subtree(logger)
     def process_waiting(self, context, waiting0):
         logger.debug('process_waiting()')
-        logger.debug({'context': context.to_dict()}, submessage=True)
         dependencies_built1 = list(context.dependencies_built)
         dependencies_building1 = []
         for dep_building in context.dependencies_building:
@@ -1017,6 +1024,11 @@ class Fac(Routable):
                         dep1['target'] = path
                         dependencies_built1.append(dep1)
                     elif path in stale_paths:
+                        # NOTE:
+                        # this should never happen;
+                        # this code was added when debugging a weird edge case;
+                        # it is retained just to log if it does happen
+                        logger.error(f'stale path {path} added to dependencies_built for path={path}')
                         dep1 = dict(dep_building)
                         dep1['target'] = path
                         dependencies_built1.append(dep1)
@@ -1024,18 +1036,53 @@ class Fac(Routable):
                         dependencies_building1.append(dep_building)
 
                 else:
-                    for loop_context in self.contexts['built']:
-                        matches = match_pattern_starstar(frozenset([dep_building['target']]), loop_context.path)
-                        if len(matches) == 1:
-                            # NOTE:
-                            # the if statement is needed for when fac builds more than one target at a time
-                            # (either through demon mode or multiple cmd line args)
-                            # in that case, states['built'] will contain paths that do not necessarily correspond to the current context,
-                            # and the if statement ensures that only those paths for this context will be added
-                            dep1 = dict(dep_building)
-                            dep1['target'] = loop_context.path
-                            dependencies_built1.append(freeze(dep1))
-                            assert '$' not in dep1['target']
+                    # FIXME:
+                    # We previously allowed targets to inherit variables from 
+                    # their dependencies.
+                    # But this made writing fac.yaml files difficult,
+                    # and so the feature was removed.
+                    # The code below was part of that feature and should also
+                    # be removed.
+                    # It doesn't seem to break anything, however,
+                    # and so hasn't been removed yet.
+                    #
+                    # NOTE:
+                    # some dependencies will never resolve to files;
+                    # this happens when the required variables
+                    # are not defined within the context
+                    # but instead within the dependency;
+                    # to determine if these dependencies are actually built,
+                    # we search through all context_* states
+                    # and check if there are any non-built matches
+                    all_targets_built = True
+                    for loop_context in itertools.chain(
+                            self.contexts['unresolved'],
+                            self.contexts['buildable'],
+                            self.contexts['waiting'],
+                            self.contexts['build_required'],
+                            self.contexts['build_error'],
+                            waiting0,
+                            ):
+                        if denormalized_target == loop_context.normalized_target and loop_context != context:
+                            all_targets_built = False
+                    if not all_targets_built:
+                        dependencies_building1.append(dep_building)
+                    else:
+                        for loop_context in self.contexts['built']:
+                            matches = match_pattern_starstar(freeze([dep_building['target']]), loop_context.path)
+                            #matches = match_pattern_starstar(dep_targets, loop_context.path)
+                            if len(matches) == 1:
+                                # FIXME:
+                                # the if statement is needed for when fac builds more than one target at a time
+                                # (either through demon mode or multiple cmd line args)
+                                # in that case, states['built'] will contain paths that do not necessarily correspond to the current context,
+                                # and the if statement ensures that only those paths for this context will be added;
+                                # the problem (and thing to fix) is that the match_pattern_starstar function is slow
+                                # and should not be in an inner loop
+                                dep1 = dict(dep_building)
+                                dep1['target'] = loop_context.path
+                                dependencies_built1.append(freeze(dep1))
+                                assert '$' not in dep1['target']
         context1 = context.model_copy(update={
             'dependencies_built': dependencies_built1,
             'dependencies_building': dependencies_building1,
@@ -1087,7 +1134,15 @@ class Fac(Routable):
                 facjson.save()
             else:
                 # determine if context needs building
-                status, do_build = context.get_status()
+                status, build_required = context.get_status()
+                do_build = build_required
+                if 'overwrite' in context.tasks:
+                    status.append('overwrite')
+                    do_build = True
+                if do_build and not (context.tasks & {'overwrite', 'build'}):
+                    if len(context.tasks) == 0:
+                        status.append('dryrun')
+                    do_build = False
 
             # print debug info
             logger.info(f'{status} {context.path}')
@@ -1126,7 +1181,7 @@ class Fac(Routable):
                     # We rely on b being in 'stale' to propagate to a.
                     stale_paths = set([context2.path for context2 in self.contexts['stale']])
                     has_stale_dep = any([dep['target'] in stale_paths for dep in context.dependencies_built])
-                    if 'out-of-date' in status or has_stale_dep:
+                    if build_required or has_stale_dep:
                         self._set_context_state(context, 'stale')
                     else:
                         self._set_context_state(context, 'built')
@@ -1139,8 +1194,10 @@ class Fac(Routable):
         logger.debug('process_all_build_required()')
 
         failures = []
+        unknown_failure = False
 
         async def _build_context(context):
+            self._awatch_build_paths.add(context.path)
             try:
                 await context.build()
                 assert os.path.exists(context.path)
@@ -1155,7 +1212,8 @@ class Fac(Routable):
                 # for all other Exceptions,
                 # something unexpected happened and we want to see the exception
                 if not isinstance (e, FACError):
-                    logger.error(f'failed to build {context.path}: {e}')
+                    logger.error(f'unknown failure when building {context.path}: see traceback below; fac will stop after all build processes complete', exc_info=e)
+                    unknown_failure = True
                 self._set_context_state(context, 'build_error')
                 failures.append((context, e))
 
@@ -1184,7 +1242,7 @@ class Fac(Routable):
             paths = [ctx.path for ctx, _ in failures]
             logger.error(f'{len(failures)} build(s) failed: {paths}')
 
-            if self.settings.halt_on_error:
+            if self.settings.halt_on_error or unknown_failure:
                 raise FACError(failures[0][1])
 
     def process_all_dependencies(self):
@@ -1193,12 +1251,10 @@ class Fac(Routable):
         logger.debug('process_all_dependencies()')
         with logger.make_subtree():
           for context in contexts:
-            logger.debug({'context': context.to_dict()})
             with logger.make_subtree():
                 dependencies_unresolved1 = []
                 dependencies_building1 = list(context.dependencies_building)
                 for dep in context.dependencies_unresolved:
-                    logger.debug(f"dep['target']={dep['target']}")
 
                     # if the dependency requires variables that are unresolved,
                     # we re-add it to the state machine to be processed later
@@ -1349,6 +1405,8 @@ class Fac(Routable):
                 context.normalized_target,
                 self.targets_dict
                 )
+            if var == 'LEVEL2':
+                logger.debug({'eval_var': {'var': var, 'value': value, 'context.normalized_target': context.normalized_target, 'context.variables_resolved': dict(context.variables_resolved)}})
 
             # create new dictionaries for the resolved/unresolved variables;
             # then transfer the variable from unresolved to resolved;

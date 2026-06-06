@@ -422,7 +422,13 @@ class BuildContext(BaseModel):
             logger.error(f"invalid mime-type: {self.config['mime-type']}")
         return mimes
 
-    @cached_property
+    # FIXME:
+    # This used to be a @cached_property.
+    # But then when we allow editing/rming files,
+    # the prompt can change for the same context.
+    # Since this is an expensive computation,
+    # we need to minimize invocations.
+    @property
     def prompt(self):
         '''
         Returns the prompt in a format suitable for passing directly to the LLM class.
@@ -652,14 +658,22 @@ class BuildContext(BaseModel):
 
         return data
 
-    @cached_property
+    @property
+    def prompt_json(self):
+        return json.dumps(self.prompt)
+
+    @property
     def prompt_hash(self):
         '''
         A hash of the prompt that will be stable across machines.
         This hash is used to determine if the prompt has changed when determining if a file needs to be rebuilt.
+
+        Note that all dependencies will be included in the prompt,
+        and so the prompt_hash will not change if a dependency's contents hasn't changed.
+        The prompt_hash is therefore used in determining whether to rebuild a file
+        to avoid an expensive rebuild if the underlying contents haven't changed.
         '''
-        encoded_prompt = json.dumps(self.prompt).encode('utf-8')
-        return hashlib.sha256(encoded_prompt).hexdigest()
+        return hashlib.sha256(self.prompt_json.encode('utf-8')).hexdigest()
 
     def get_status(self):
         '''
@@ -667,22 +681,32 @@ class BuildContext(BaseModel):
         The first entry is a list of status attributes;
         the second is True if the file should be built.
 
+        The file must be built if both:
+        1. the fac_timestamp is behind one of the dependencies
+        2. the contents of the dependency (as determined by prompt_hash) have changed
+
         NOTE:
         The results of this function should not be cached.
         It does IO to determine if files exist/have been modified.
 
-        FIXME:
-        Add explanation of how to prevent race conditions/invalid status states.
+        NOTE:
+        This function assumes that all files in self.dependencies_built
+        are actually up-to-date.
+        In particular, if this class is being used within the Fac class,
+        all of these dependencies must be in the 'built' state.
+        We do not have access to the Fac class here, however,
+        and so cannot enforce that invariant.
         '''
-        do_build = True
+        build_required = True
         file_status = []
+        facjson = FacJSON(self.path)
 
         # use build_if to determine if we should build
         build_if = self.config.get('build_options', {}).get('build_if', 'True')
         build_if = process_template(build_if, self.variables_resolved)
         if build_if.lower() == 'false':
             file_status.append('build_if:False')
-            do_build = False
+            build_required = False
 
         # build files that don't already exist
         if not os.path.exists(self.path):
@@ -704,28 +728,13 @@ class BuildContext(BaseModel):
                         updated_deps.append(path)
             if updated_deps == []:
                 file_status.append('up-to-date')
-                do_build = False
+                build_required = False
             else:
                 file_status.append('out-of-date')
                 file_status.extend(['changed:' + dep for dep in updated_deps])
 
-        # NOTE:
-        # sometimes it is not necessary to rebuild a file even if the dependencies have been updated;
-        # this can occur, for example, when the prompt depends only on part of the dependencies;
-        # we check hashes of the prompt/file to see if we can skip rebuilding
-        facjson = FacJSON(self.path)
-        try:
-            with open(self.path, 'rb') as fin:
-                hash_contents_fin = hashlib.sha256(fin.read()).hexdigest()
-                contents_changed = hash_contents_fin != facjson.get('hash_contents')
-        except FileNotFoundError:
-            contents_changed = True
-        #if not contents_changed:
-            #file_status.append('contents_unchanged')
-            #do_build = False
-
         if 'new' not in file_status and 'up-to-date' not in file_status:
-            if not self.config.get('cmd') and facjson.get('hash_prompt'):
+            if facjson.get('hash_prompt'):
                 prompt_changed = self.prompt_hash != facjson.get('hash_prompt')
                 if prompt_changed:
                     file_status.append('prompt-changed')
@@ -734,28 +743,19 @@ class BuildContext(BaseModel):
                     # this can happen, for example, if:
                     # 1. the user manually edited/committed a file
                     # 2. the previous version was created with the --include_prompt flag
+                    # but if the prompt has not changed,
+                    # we definitely do not have to rebuild the file
                 else:
                     file_status.append('prompt-same')
-                    do_build = False
+                    build_required = False
 
         # do not build if locked
-        facjson = FacJSON(self.path)
         locked = facjson.get('locked', False)
         if locked:
             file_status.append('locked')
-            do_build = False
+            build_required = False
 
-        # overwrite do_build based on tasks
-        if 'overwrite' in self.tasks:
-            file_status.append('overwrite')
-            do_build = True
-
-        if do_build and not (self.tasks & {'overwrite', 'build'}):
-            if len(self.tasks) == 0:
-                file_status.append('dryrun')
-            do_build = False
-
-        return file_status, do_build
+        return file_status, build_required
 
     async def build(self, llm=LLM()):
         '''
@@ -879,12 +879,13 @@ class BuildContext(BaseModel):
                 fout.write(buildlog_jsonl)
 
         # record new hashes for future skip-tests
-        if self.config.get('build_options', {}).get('update_meta'):
+        if self.config.get('build_options', {}).get('update_meta', True):
             facjson = FacJSON(self.path)
             with open(self.path, 'rb') as fin:
                 hash_contents = hashlib.sha256(fin.read()).hexdigest()
                 facjson.set('hash_contents', hash_contents)
             facjson.set('hash_prompt', self.prompt_hash)
+            facjson.set('prompt_json', self.prompt_json)
             facjson.save()
 
         # validate the file

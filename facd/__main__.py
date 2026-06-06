@@ -222,7 +222,6 @@ def main():
     parser.add_argument('--auto_commit', default=True, type=str2bool)
     args = parser.parse_args()
 
-
     # register state routes
     from fac.Fac import Fac
     try:
@@ -236,6 +235,7 @@ def main():
     #state.path_manager.start()
 
     # perform a dryrun to register all files with facd;
+    logger.setLevel(logging.DEBUG)
     state.add_target('**', tasks=set())
 
     # register routes

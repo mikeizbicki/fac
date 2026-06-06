@@ -42,6 +42,7 @@ class BuildSystem:
                 auto_commit=self.auto_commit,
                 print_prompt=self.print_prompt,
                 )
+        logger.setLevel('DEBUG')
         if self.debug:
             logger.setLevel('DEBUG')
         if self.trace:
