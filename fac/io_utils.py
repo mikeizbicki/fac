@@ -71,7 +71,6 @@ def validate_file(path, schema_file=None, fix=False):
 
         # reformat with pretty indentation
         if fix:
-            logger.debug('fixing JSON indentation')
             with open(path, 'r') as fin:
                 data = json.load(fin)
             with open(path, 'w', encoding='utf-8') as fout:

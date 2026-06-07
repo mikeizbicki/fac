@@ -655,7 +655,7 @@ class Fac(Routable):
 
         # BuildContext internally stores all the deps that have been built;
         # if a path has been deleted, then these deps are no longer built,
-        # and the BuildContext assert_invariants will fail;
+        # and the BuildContext assert_invariants_buildable will fail;
         # we fix this by moving all dependencies_built to dependencies_unresolved
         path_rm = not os.path.lexists(path)
         if path_rm:
@@ -701,18 +701,30 @@ class Fac(Routable):
         # set the state of any rdep to stale/notbuilt
         for rdep in rdeps:
             rdep_context = self.path2context[rdep]
-            status, build_required = rdep_context.get_status()
+            if path_rm:
+                status = ['deleted-dep']
+                build_required = True
+            else:
+                status, build_required = rdep_context.get_status()
 
             # now we actually register the path state;
             stale_paths = set([context2.path for context2 in self.contexts['stale']])
             has_stale_dep = any([dep['target'] in stale_paths for dep in rdep_context.dependencies_built])
             if rdep == path and not path_rm:
-                # if we edited a path, that should always be in the built state
+                # If we edited a path,
+                # that path should always be in the built state.
                 self._set_context_state(rdep_context, 'built')
                 logger.warning(f'built: rdep={rdep}')
             elif not build_required and not has_stale_dep:
-                # we need to register the context so that the /monitor_paths
-                # will notify end-users of the change
+                # Counter intuitively, rdeps can transfer into the built state
+                # when their dependencies are modified.
+                # For example: let a depend on b and both be in 'built'.
+                # If b is edited, then a will be marked 'stale'.
+                # But then if b is re-edited back to its original state,
+                # a is no longer stale because it has same_prompt
+                # (even though a's mtime will be behind b's,
+                # the prompt_hash will match the prompt_hash of the build)
+                # and so it should be put in the 'built' state.
                 self._set_context_state(rdep_context, 'built')
                 logger.warning(f'built: rdep={rdep}')
             else:
@@ -1405,8 +1417,6 @@ class Fac(Routable):
                 context.normalized_target,
                 self.targets_dict
                 )
-            if var == 'LEVEL2':
-                logger.debug({'eval_var': {'var': var, 'value': value, 'context.normalized_target': context.normalized_target, 'context.variables_resolved': dict(context.variables_resolved)}})
 
             # create new dictionaries for the resolved/unresolved variables;
             # then transfer the variable from unresolved to resolved;

@@ -49,6 +49,7 @@ finalize_tests() {
 
     # we do not delete the .results folder to facilitate creating .expected outputs
     git clean -fd -e .results/
+    git checkout .
 
     # ensure facd has stopped if it was started
     killall facd || true
