@@ -701,32 +701,33 @@ class Fac(Routable):
         # set the state of any rdep to stale/notbuilt
         for rdep in rdeps:
             rdep_context = self.path2context[rdep]
-            if path_rm:
-                status = ['deleted-dep']
-                build_required = True
-            else:
-                status, build_required = rdep_context.get_status()
+            status, build_required = rdep_context.get_status()
 
-            # now we actually register the path state;
-            stale_paths = set([context2.path for context2 in self.contexts['stale']])
-            has_stale_dep = any([dep['target'] in stale_paths for dep in rdep_context.dependencies_built])
+            # If we edited a path,
+            # that path should always be in the built state.
+            # FIXME:
+            # I don't see why we need to have a special case for this.
+            # If .get_status() was working correctly,
+            # I think the if statement below should capture this condition.
+            # But we fail test cases if this check is removed.
             if rdep == path and not path_rm:
-                # If we edited a path,
-                # that path should always be in the built state.
                 self._set_context_state(rdep_context, 'built')
                 logger.warning(f'built: rdep={rdep}')
-            elif not build_required and not has_stale_dep:
-                # Counter intuitively, rdeps can transfer into the built state
-                # when their dependencies are modified.
-                # For example: let a depend on b and both be in 'built'.
-                # If b is edited, then a will be marked 'stale'.
-                # But then if b is re-edited back to its original state,
-                # a is no longer stale because it has same_prompt
-                # (even though a's mtime will be behind b's,
-                # the prompt_hash will match the prompt_hash of the build)
-                # and so it should be put in the 'built' state.
+
+            # Counter intuitively, rdeps can transfer into the built state
+            # when their dependencies are modified.
+            # For example: let a depend on b and both be in 'built'.
+            # If b is edited, then a will be marked 'stale'.
+            # But then if b is re-edited back to its original state,
+            # a is no longer stale because it has same_prompt
+            # (even though a's mtime will be behind b's,
+            # the prompt_hash will match the prompt_hash of the build)
+            # and so it should be put in the 'built' state.
+            elif not build_required and self._all_dependencies_built(rdep_context):
                 self._set_context_state(rdep_context, 'built')
                 logger.warning(f'built: rdep={rdep}')
+
+            # We now consider non-built states.
             else:
                 # we need to remove the context from whatever state it is in
                 # to prevent merging from putting us into a bad state afterward
@@ -734,13 +735,18 @@ class Fac(Routable):
                     self.contexts[state].discard(rdep_context)
                 if os.path.lexists(rdep):
                     self._set_context_state(rdep_context, 'stale')
-                    logger.warning({'stale': {'rdep': rdep, 'status': status, 'has_stale_dep': has_stale_dep}})
+                    logger.warning({'stale': {'rdep': rdep, 'status': status}})
                 else:
                     self._set_context_state(rdep_context, 'notbuilt')
-                    logger.warning({'notbuilt': {'rdep': rdep, 'status': status, 'has_stale_dep': has_stale_dep}})
+                    logger.warning({'notbuilt': {'rdep': rdep, 'status': status}})
 
         self.assert_invariants()
         #self.assert_invariants_io()
+
+    def _all_dependencies_built(self, context):
+        stale_paths = set([context2.path for context2 in self.contexts['stale']])
+        has_stale_dep = any([dep['target'] in stale_paths for dep in context.dependencies_built])
+        return not has_stale_dep and len(context.dependencies_building) == 0 and len(context.dependencies_unresolved) == 0
 
     def assert_invariants_io(self):
         '''
