@@ -1148,6 +1148,7 @@ class Fac(Routable):
             # lock/unlock files
             if 'lock' in context.tasks:
                 status = ['lock']
+                build_required = False
                 do_build = False
                 facjson = FacJSON(context.path)
                 facjson.set('locked', True)
@@ -1155,6 +1156,7 @@ class Fac(Routable):
             elif 'unlock' in context.tasks:
                 status = ['unlock']
                 do_build = False
+                build_required = False
                 facjson = FacJSON(context.path)
                 facjson.set('locked', False)
                 facjson.save()
