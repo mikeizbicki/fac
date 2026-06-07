@@ -707,12 +707,20 @@ class Fac(Routable):
             # that path should always be in the built state.
             # FIXME:
             # I don't see why we need to have a special case for this.
-            # If .get_status() was working correctly,
-            # I think the if statement below should capture this condition.
-            # But we fail test cases if this check is removed.
+            # .get_status() and ._all_dependencies_built should be able
+            # to combine together in a way that automatically detects for us
+            # when a dependency has been edited.
+            # This is important, for example, when a file is edited
+            # when facd is not currently running.
+            # (I suspect that we will have incorrect behavior in that situation
+            # right now, and that the existing test cases do not test this
+            # situation.)
             if rdep == path and not path_rm:
                 self._set_context_state(rdep_context, 'built')
                 logger.warning(f'built: rdep={rdep}')
+                logger.debug(f"status={status}", submessage=True)
+                logger.debug(f"build_required={build_required}", submessage=True)
+                logger.debug(f"self._all_dependencies_built(rdep_context)={self._all_dependencies_built(rdep_context)}", submessage=True)
 
             # Counter intuitively, rdeps can transfer into the built state
             # when their dependencies are modified.
