@@ -43,15 +43,27 @@ dotest() {
     exec >&9 2>&9
 }
 
+# we override the fac build command with a command that tracks code coverage
+shopt -s expand_aliases
+COVERAGE_DIR=$(dirname "${BASH_SOURCE[0]}")/.coverage
+COVERAGE_PATH="$COVERAGE_DIR"/"$(basename "$(pwd)")"
+mkdir -p "$COVERAGE_DIR"
+alias fac="python3 -m coverage run --parallel-mode --source=fac --data-file=$COVERAGE_PATH -m fac"
+alias facd="python3 -m coverage run --parallel-mode --source=fac --data-file=$COVERAGE_PATH -m facd"
+
 # fac has many different modes that it can be run in;
 # these modes have different runtime characteristics but they should always
 # result in the same build files and so should pass the same tests;
 # the caller can use environment variables to set which mode will be used
-shopt -s expand_aliases
-if [ -n "$FAC_TESTWITHGIT" ]; then
-    alias fac='python3 -m fac'
+
+# the default is not making git commits after each invocation;
+# specifying this var enables git commits
+if [ -z "$FAC_TESTWITHGIT" ]; then
+    alias fac='fac --auto_commit=False'
+    alias facd='facd --auto_commit=False'
 else
-    alias fac='python3 -m fac --auto_commit=False'
+    alias fac='fac --allow_dirty'
+    alias facd='facd --allow_dirty'
 fi
 
 # tests might be making git commits;
@@ -64,12 +76,14 @@ reset_git() {
     # clean repo to same state as before tests were run;
     # this is used in cleanup at the end,
     # but also inside various test scripts
-    git clean -fd -e .results/
+    git clean -fd -e .results/ -e .test_output
     git checkout .
     git checkout "$old_commit"
 }
 
 finalize_tests() {
+    echo "=== finalizing ===" >&4
+
     # close "$TEST_OUTPUT"
     exec 9>&-
 
@@ -78,23 +92,52 @@ finalize_tests() {
     git checkout "$old_branch"
 
     # ensure facd has stopped if it was started
-    killall facd || true
+    if [ -n "$facd_pid" ]; then
+        kill "$facd_pid"
+
+        # wait 5 sec for process to terminate gracefully;
+        # otherwise force kill and fail tests
+        for _ in $(seq 1 50); do
+            kill -0 "$facd_pid" 2>/dev/null || break
+            sleep 0.1
+        done
+        if kill -0 "$facd_pid" 2>/dev/null; then
+            kill -KILL "$facd_pid"
+            wait "$facd_pid" 2>/dev/null
+            return 1
+        fi
+    fi
+
+    echo "=== finalized ===" >&4
 }
 
 facd_HOST=localhost:8080
 facd_TIMEOUT=20
 facd_start() {
     echo "=== starting facd ===" >&4
-    # ensure there are no other servers running, then start the server
-    killall facd || true
-    facd --auto_commit=False &
+    # ensure there are no other servers running;
+    # this complex regex should match a plain invocation of facd
+    # or the invocation using coverage in the alias above
+    pattern='(^|/)facd( |$)|[-]m facd'
+    for _ in $(seq 1 50); do
+        pkill -f "$pattern" || true
+        pgrep -f "$pattern" >/dev/null || break
+        sleep 0.1
+    done
+    if pgrep -f "$pattern" >/dev/null; then
+        return 1
+    fi
+
+    # start the server
+    facd &
+    facd_pid=$!
 
     # ensure the webserver is running
     for i in $(seq 1 $facd_TIMEOUT); do
       sleep 1
 
       # if facd proc not running, fail
-      ps | grep facd || return 1
+      kill -0 "$facd_pid" 2>/dev/null || return 1
       
       # if web interface not responding, wait
       response=$(curl -s "$facd_HOST"/job_states) && { break; }
