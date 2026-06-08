@@ -34,36 +34,7 @@ jobs:
           SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0"
         run: |
           pip3 install -e .
-      - name: facd_test1_rm
+      - name: run tests
         run: |
-          cd tests/facd_test1_rm
-          ./run_test.sh
-      - name: fac_test1_basicproject
-        run: |
-          cd tests/fac_test1_basicproject
-          ./run_test.sh
-      - name: fac_test2_dependency_only_variables
-        run: |
-          cd tests/fac_test2_dependency_only_variables
-          ./run_test.sh
-      - name: fac_test3_postreqs
-        run: |
-          cd tests/fac_test3_postreqs
-          ./run_test.sh
-      - name: fac_test4_dependency_only_variables
-        run: |
-          cd tests/fac_test4_dependency_only_variables
-          ./run_test.sh
-      - name: fac_test5_variable_inheritance
-        run: |
-          # removed this feature
-          #cd tests/fac_test5_variable_inheritance
-          #./run_test.sh
-      - name: fac_test6_recursive_dependencies
-        run: |
-          cd tests/fac_test6_recursive_dependencies
-          ./run_test.sh
-      - name: fac_test7_locks_and_symlinks
-        run: |
-          cd tests/fac_test7_locks_and_symlinks
-          ./run_test.sh
+          cd tests
+          ./run_all_tests.sh
