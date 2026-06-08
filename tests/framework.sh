@@ -17,7 +17,7 @@ export FAC_DO_ASSERT_INVARIANTS=True
 # The test script will abort when any command errors,
 # and if we abort then $TEST_OUTPUT will contain the trace since the last checkpoint only.
 exec 3>&1 4>&2
-TEST_OUTPUT=$(pwd)/test_output
+TEST_OUTPUT=$(pwd)/.test_output
 exec 9>>"$TEST_OUTPUT"
 exec >&9 2>&9
 export PS4='[${BASH_SOURCE}:${LINENO}] ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
@@ -43,13 +43,39 @@ dotest() {
     exec >&9 2>&9
 }
 
+# fac has many different modes that it can be run in;
+# these modes have different runtime characteristics but they should always
+# result in the same build files and so should pass the same tests;
+# the caller can use environment variables to set which mode will be used
+shopt -s expand_aliases
+if [ -n "$FAC_TESTWITHGIT" ]; then
+    alias fac='python3 -m fac'
+else
+    alias fac='python3 -m fac --auto_commit=False'
+fi
+
+# tests might be making git commits;
+# therefore we need to ensure we are not on a branch
+old_branch=$(git symbolic-ref --short -q HEAD || git rev-parse HEAD)
+old_commit=$(git rev-parse HEAD)
+git checkout "$old_commit"
+
+reset_git() {
+    # clean repo to same state as before tests were run;
+    # this is used in cleanup at the end,
+    # but also inside various test scripts
+    git clean -fd -e .results/
+    git checkout .
+    git checkout "$old_commit"
+}
+
 finalize_tests() {
     # close "$TEST_OUTPUT"
     exec 9>&-
 
-    # we do not delete the .results folder to facilitate creating .expected outputs
-    git clean -fd -e .results/
-    git checkout .
+    # restore original git state
+    reset_git
+    git checkout "$old_branch"
 
     # ensure facd has stopped if it was started
     killall facd || true
