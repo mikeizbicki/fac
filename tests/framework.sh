@@ -4,11 +4,10 @@
 # we must have a clean repo for the tests to make sense.
 if ! [ -z "$(git status --porcelain)" ]; then
     echo 'ERROR: The git repo is not clean (i.e. you may have uncommitted files), but the test script requires a clean repo. You should either commit the files or delete them.'
-    echo 'HINT: You can delete all uncommitted files with the `git clean -fd` command.'
     exit 1
 fi
 
-# Asserting invariants is slow and disable by default.
+# Asserting invariants is slow and disabled by default.
 # We enable it for our tests.
 export FAC_DO_ASSERT_INVARIANTS=True
 
@@ -43,14 +42,6 @@ dotest() {
     exec >&9 2>&9
 }
 
-# we override the fac build command with a command that tracks code coverage
-shopt -s expand_aliases
-COVERAGE_DIR=$(dirname "${BASH_SOURCE[0]}")/.coverage
-COVERAGE_PATH="$COVERAGE_DIR"/"$(basename "$(pwd)")"
-mkdir -p "$COVERAGE_DIR"
-alias fac="python3 -m coverage run --parallel-mode --source=fac --data-file=$COVERAGE_PATH -m fac"
-alias facd="python3 -m coverage run --parallel-mode --source=fac --data-file=$COVERAGE_PATH -m facd"
-
 # fac has many different modes that it can be run in;
 # these modes have different runtime characteristics but they should always
 # result in the same build files and so should pass the same tests;
@@ -58,13 +49,20 @@ alias facd="python3 -m coverage run --parallel-mode --source=fac --data-file=$CO
 
 # the default is not making git commits after each invocation;
 # specifying this var enables git commits
+fac_params=''
 if [ -z "$FAC_TESTWITHGIT" ]; then
-    alias fac='fac --auto_commit=False'
-    alias facd='facd --auto_commit=False'
+    fac_params=' --auto_commit=False'
 else
-    alias fac='fac --allow_dirty'
-    alias facd='facd --allow_dirty'
+    fac_params=' --allow_dirty'
 fi
+
+# we override the fac build command with a command that tracks code coverage
+shopt -s expand_aliases
+COVERAGE_DIR=$(dirname "${BASH_SOURCE[0]}")/.coverage
+COVERAGE_PATH="$COVERAGE_DIR"/"$(basename "$(pwd)")"
+mkdir -p "$COVERAGE_DIR"
+alias fac="python3 -m coverage run --parallel-mode --source=fac --data-file=$COVERAGE_PATH -m fac $fac_params"
+alias facd="python3 -m coverage run --parallel-mode --source=fac --data-file=$COVERAGE_PATH -m facd --loglevel=TRACE $fac_params"
 
 # tests might be making git commits;
 # therefore we need to ensure we are not on a branch
@@ -102,6 +100,7 @@ finalize_tests() {
             sleep 0.1
         done
         if kill -0 "$facd_pid" 2>/dev/null; then
+            echo "=== facd force killed ===" >&4
             kill -KILL "$facd_pid"
             wait "$facd_pid" 2>/dev/null
             return 1

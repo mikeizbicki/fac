@@ -188,6 +188,7 @@ def with_buffered_logs(logger_obj):
 class CustomFormatter(logging.Formatter):
     # ANSI color codes
     COLORS = {
+        'TRACE': '\033[38;5;250m', # Gray
         'DEBUG': '\033[36m',      # Cyan
         #'INFO': '\033[32m',       # Green
         #'WARNING': '\033[33m',    # Yellow/Orange

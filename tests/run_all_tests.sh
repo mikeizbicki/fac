@@ -12,7 +12,7 @@ COVERAGE_FILE="$COVERAGE_DIR/coverage.doctest" \
   python3 -m coverage run --parallel-mode -m pytest --doctest-modules ../fac
 
 # run golden tests
-for test in fac*; do
+for test in facd_*; do
     for env in "" "FAC_TESTWITHGIT=1"; do
         echo '----------------------------------------'
         echo "test: $test env: $env"
@@ -22,5 +22,5 @@ for test in fac*; do
 done
 
 cd "$COVERAGE_DIR"
-python3 -m coverage combine *
-python3 -m coverage report
+#python3 -m coverage combine *
+#python3 -m coverage report

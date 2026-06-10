@@ -4,6 +4,7 @@ import asyncio
 import itertools
 import os
 import signal
+import sys
 
 # external imports
 import yaml
@@ -34,7 +35,7 @@ class FacSettings(BaseSettings):
     max_workers: int = 20
     clean_stalled_dryrun: bool = True
     parallel_build: bool = True
-    do_assert_invariants: bool = True
+    do_assert_invariants: bool = False
     do_merge_contexts: bool = True
     print_prompt: bool = False
     print_states_when_building: bool = False
@@ -147,10 +148,17 @@ class Fac(Routable):
         # It's also not clear to me that this is actually correct,
         # and we need test cases demonstrating correctness.
         if required_for is None:
+            logger.info(f'add_target({target}, tasks={tasks})')
+            do_update = False
+            found_match = False
             for state in self.contexts:
                 for context in set(self.contexts[state]):
                     if context.path_safe() == target:
+                        logger.info(f'discarding context in state={state}', submessage=True)
                         self.contexts[state].discard(context)
+                        found_match = True
+            if do_update and found_match:
+                self._update_rdeps_state(target)
             # Also reset _contexts_history.  BuildContext equality is
             # structural, so the contexts we are about to create will hash
             # to the same keys as the contexts we just discarded (and as
@@ -473,6 +481,7 @@ class Fac(Routable):
     ########################################
 
     def assert_invariants(self):
+
         if self.settings.do_assert_invariants:
             # no context can be in more than one state
             for state1 in self.contexts.keys():
@@ -502,11 +511,29 @@ class Fac(Routable):
             # we could conceivably make the add_target code much more complicated,
             # but for now we're just not checking these asserts anymore
             if False:
-                stale_built = self.contexts['built'] | self.contexts['stale']
+                stale_built = self.contexts['built'] #| self.contexts['stale']
                 for state in self.contexts:
                     for context in self.contexts[state]:
                         for dep in context.dependencies_built:
                             assert any([context2.path == dep['target'] for context2 in stale_built]), f"context.dependencies_built contains a target not found in built state; context.path={context.path} state={state} dep['target']={dep['target']}"
+
+            # stale path invariants
+            # FIXME:
+            # the checks below are currently *very* slow because prompt
+            # (used inside get_status)
+            # is not cached and expensive;
+            # that is why they are gated behind the if statement
+            if False:
+                for context in self.contexts['stale']:
+                    status, build_required = context.get_status()
+                    if not (build_required or not self._all_dependencies_built(context)):
+                        logger.error({'stale assert failed': {
+                            'build_required': build_required,
+                            'self._all_dependencies_built(context)': self._all_dependencies_built(context),
+                            'context.path_safe()': context.path_safe(),
+                            'self._list_stale_deps(context)': self._list_stale_deps(context),
+                            }})
+                    assert build_required or not self._all_dependencies_built(context)
 
             # every path in self.rdeps must have a corresponding context
             for path in self.rdeps:
@@ -652,12 +679,12 @@ class Fac(Routable):
         '''
         rdeps = [path] + self.get_rdeps(path)
         rdeps_set = set(rdeps)
+        path_rm = not os.path.lexists(path)
 
         # BuildContext internally stores all the deps that have been built;
         # if a path has been deleted, then these deps are no longer built,
         # and the BuildContext assert_invariants_buildable will fail;
         # we fix this by moving all dependencies_built to dependencies_unresolved
-        path_rm = not os.path.lexists(path)
         if path_rm:
             for state in self.contexts:
                 for context in list(self.contexts[state]):
@@ -703,6 +730,13 @@ class Fac(Routable):
             rdep_context = self.path2context[rdep]
             status, build_required = rdep_context.get_status()
 
+            debug_dict = {
+                'rdep': rdep,
+                'status': status,
+                'build_required': build_required,
+                'self._list_stale_deps(rdep_context)': self._list_stale_deps(rdep_context),
+                }
+
             # If we edited a path,
             # that path should always be in the built state.
             # FIXME:
@@ -717,10 +751,7 @@ class Fac(Routable):
             # situation.)
             if rdep == path and not path_rm:
                 self._set_context_state(rdep_context, 'built')
-                logger.warning(f'built: rdep={rdep}')
-                logger.debug(f"status={status}", submessage=True)
-                logger.debug(f"build_required={build_required}", submessage=True)
-                logger.debug(f"self._all_dependencies_built(rdep_context)={self._all_dependencies_built(rdep_context)}", submessage=True)
+                logger.warning({'built (path1)': debug_dict})
 
             # Counter intuitively, rdeps can transfer into the built state
             # when their dependencies are modified.
@@ -733,7 +764,7 @@ class Fac(Routable):
             # and so it should be put in the 'built' state.
             elif not build_required and self._all_dependencies_built(rdep_context):
                 self._set_context_state(rdep_context, 'built')
-                logger.warning(f'built: rdep={rdep}')
+                logger.warning({'built (path2)': debug_dict})
 
             # We now consider non-built states.
             else:
@@ -743,18 +774,24 @@ class Fac(Routable):
                     self.contexts[state].discard(rdep_context)
                 if os.path.lexists(rdep):
                     self._set_context_state(rdep_context, 'stale')
-                    logger.warning({'stale': {'rdep': rdep, 'status': status}})
+                    logger.warning({'stale': debug_dict})
                 else:
                     self._set_context_state(rdep_context, 'notbuilt')
-                    logger.warning({'notbuilt': {'rdep': rdep, 'status': status}})
+                    logger.warning({'notbuilt': debug_dict})
 
         self.assert_invariants()
         #self.assert_invariants_io()
 
     def _all_dependencies_built(self, context):
+        return self._list_stale_deps(context) == [] and len(context.dependencies_building) == 0 and len(context.dependencies_unresolved) == 0
+
+    def _list_stale_deps(self, context):
+        # FIXME:
+        # current implementation is O(n);
+        # we could track stale_paths to make this O(1)
         stale_paths = set([context2.path for context2 in self.contexts['stale']])
-        has_stale_dep = any([dep['target'] in stale_paths for dep in context.dependencies_built])
-        return not has_stale_dep and len(context.dependencies_building) == 0 and len(context.dependencies_unresolved) == 0
+        stale_deps = [dep['target'] for dep in context.dependencies_built if dep['target'] in stale_paths]
+        return stale_deps
 
     def assert_invariants_io(self):
         '''
@@ -879,37 +916,10 @@ class Fac(Routable):
         else:
             return ValueError('unknown format')
 
-    def debug_short(self, submessage=False):
-        logger.debug({'BuildState': {
-            'len(self.contexts[unresolved])': len(self.contexts['unresolved']),
-            'len(self.contexts[buildable])': len(self.contexts['buildable']),
-            'len(self.contexts[waiting])': len(self.contexts['waiting']),
-            'len(self.contexts[built])': len(self.contexts['built']),
-            }}, submessage=submessage)
-
-    def _state_as_dict(self, longform=True):
-        '''
-        Convert the internal state into dictionary suitable for yaml conversion.
-        '''
-        if longform:
-            yaml_dict = {k: [context.to_dict() for context in contexts] for k, contexts in self.contexts.items()}
-        else:
-            yaml_dict = {k: sorted([context.denormalized_target() for context in contexts]) for k, contexts in self.contexts}
-        return yaml_dict
-
-    def debug_print(self, msg=None):
-        '''
-        Shows a human-readable yaml-like version of the state that each context is in.
-        '''
-        if msg:
-            msg_str = f'({msg[:21]})'
-            msg_str += ' ' * (23 - len(msg_str))
-        else:
-            msg_str = ' '*23
-        print(40 * '=')
-        print(f'|| BuildState {msg_str} ||')
-        print(40 * '=')
-        print(yaml.dump(self._state_as_dict(), default_flow_style=False, sort_keys=False))
+    def trace_state(self, submessage=False):
+        logger.trace({'BuildState': {
+            f'len(self.contexts[{state}])': len(self.contexts[state])
+            for state in self.contexts}}, submessage=submessage)
 
     ########################################
     # state transition methods
@@ -1022,18 +1032,16 @@ class Fac(Routable):
                 self._set_context_state(context, state)
 
     def process_all_waiting(self):
-        logger.debug('process_all_waiting()')
-        self.debug_short(submessage=True)
+        logger.trace('process_all_waiting()')
+        self.trace_state(submessage=True)
         waiting0 = self.contexts['waiting']
         self.contexts['waiting'] = set()
         for context in sorted(waiting0, key=lambda x: x.path_safe() or ''):
             self.process_waiting(context, waiting0)
-        self.debug_short(submessage=True)
         self.assert_invariants()
 
     @with_subtree(logger)
     def process_waiting(self, context, waiting0):
-        logger.debug('process_waiting()')
         dependencies_built1 = list(context.dependencies_built)
         dependencies_building1 = []
         for dep_building in context.dependencies_building:
@@ -1044,7 +1052,7 @@ class Fac(Routable):
                 if '$' not in denormalized_target:
                     path = denormalized_target
                     built_paths = [context.path for context in self.contexts['built']]
-                    stale_paths = [context.path for context in self.contexts['stale']]
+                    stale_paths = {context.path: context for context in self.contexts['stale']}
                     if path in built_paths:
                         dep1 = dict(dep_building)
                         dep1['target'] = path
@@ -1054,11 +1062,14 @@ class Fac(Routable):
                         # this should never happen;
                         # this code was added when debugging a weird edge case;
                         # it is retained just to log if it does happen
-                        logger.error(f'stale path {path} added to dependencies_built for path={path}')
+                        logger.error(f'stale path {path} added to dependencies_built for context.normalized_target={context.normalized_target}')
                         dep1 = dict(dep_building)
                         dep1['target'] = path
                         dependencies_built1.append(dep1)
                     else:
+                        #if path in stale_paths:
+                            #self._set_context_state(stale_paths[path], 'unresolved')
+                            #logger.warning(f'stale path {path} needed for target={context.normalized_target} moved from stale -> unresolved')
                         dependencies_building1.append(dep_building)
 
                 else:
@@ -1140,7 +1151,8 @@ class Fac(Routable):
         return ret
 
     def process_all_buildable(self):
-        logger.debug('process_all_buildable()')
+        logger.trace('process_all_buildable()')
+        self.trace_state(submessage=True)
 
         buildable = self.contexts['buildable']
         self.contexts['buildable'] = set()
@@ -1207,10 +1219,10 @@ class Fac(Routable):
                     # chain a -> b -> c -> d where d was modified leaves
                     # a.get_status() reporting 'up-to-date' relative to b.
                     # We rely on b being in 'stale' to propagate to a.
-                    stale_paths = set([context2.path for context2 in self.contexts['stale']])
-                    has_stale_dep = any([dep['target'] in stale_paths for dep in context.dependencies_built])
-                    if build_required or has_stale_dep:
+                    stale_deps = self._list_stale_deps(context)
+                    if build_required or stale_deps:
                         self._set_context_state(context, 'stale')
+                        logger.warning({'context marked stale': {'status': status, 'build_required': build_required, 'stale_deps': stale_deps}}, submessage=True)
                     else:
                         self._set_context_state(context, 'built')
                     for postreq in context.config.get('postreqs', []):
@@ -1219,7 +1231,8 @@ class Fac(Routable):
                     self._set_context_state(context, 'notbuilt')
 
     async def process_all_build_required(self):
-        logger.debug('process_all_build_required()')
+        logger.trace('process_all_build_required()')
+        self.trace_state(submessage=True)
 
         failures = []
         unknown_failure = False
@@ -1274,9 +1287,10 @@ class Fac(Routable):
                 raise FACError(failures[0][1])
 
     def process_all_dependencies(self):
+        logger.trace('process_all_dependencies()')
+        self.trace_state(submessage=True)
         contexts = self.contexts['unresolved']
         self.contexts['unresolved'] = set()
-        logger.debug('process_all_dependencies()')
         with logger.make_subtree():
           for context in contexts:
             with logger.make_subtree():

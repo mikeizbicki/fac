@@ -9,6 +9,7 @@ import sys
 import threading
 import time
 
+from fac.Fac import Fac
 from fac.Logging import logger, with_subtree
 import fac.Errors
 
@@ -38,7 +39,7 @@ async def lifespan(app: FastAPI):
     # This happens when the daemon is in the middle of a CPU-heavy task.
     # Multithreading fixes the issue,
     # but the build daemon isn't thread-safe :(
-    multithread = False
+    multithread = True
     if multithread:
         def run_daemon_in_thread():
             asyncio.run(app.state.build_daemon())
@@ -219,11 +220,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--server', choices=['hypercorn', 'uvicorn'], default='hypercorn')
     parser.add_argument('--allow_dirty', action='store_true')
+    parser.add_argument('--dryrun_target', default='**')
+    parser.add_argument('--loglevel', choices=['WARNING', 'INFO', 'DEBUG', 'TRACE'], default='INFO')
     parser.add_argument('--auto_commit', default=True, type=str2bool)
     args = parser.parse_args()
+    logger.setLevel(args.loglevel)
 
     # register state routes
-    from fac.Fac import Fac
     try:
         state = Fac(
             allow_dirty=args.allow_dirty,
@@ -235,8 +238,7 @@ def main():
     #state.path_manager.start()
 
     # perform a dryrun to register all files with facd;
-    logger.setLevel(logging.DEBUG)
-    state.add_target('**', tasks=set())
+    state.add_target(args.dryrun_target, tasks=set())
 
     # register routes
     app.include_router(state.router)
@@ -263,6 +265,7 @@ def main():
 
             def _handle_signal():
                 logger.error('Force exiting...')
+                shutdown_event.set()
                 os._exit(1)
 
             for sig in (signal.SIGINT, signal.SIGTERM):
