@@ -15,6 +15,7 @@ class CLISettings(FacSettings):
     model_config = SettingsConfigDict(
         cli_parse_args=True,
         cli_prog_name='fac',
+        cli_implicit_flags=True,
         env_prefix='FAC_',
     )
     targets: CliPositionalArg[list[str]] = []
@@ -25,6 +26,8 @@ class CLISettings(FacSettings):
     include_prompt: str | None = None
     include_old: bool = False
     include_paths: list[str] | None = None
+
+    print_context_states: bool = False
 
 def main():
     settings = CLISettings()
@@ -46,9 +49,13 @@ def main():
                 include_prompt=settings.include_prompt,
                 include_old=settings.include_old,
                 include_paths=settings.include_paths,
-                tasks=tasks,
+                tasks=frozenset(tasks),
                 )
     fac.build_all()
+
+    if settings.print_context_states:
+        print(fac.context_states())
+
 
 if __name__ == '__main__':
     main()

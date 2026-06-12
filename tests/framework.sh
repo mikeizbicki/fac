@@ -62,7 +62,7 @@ dotest() {
 # specifying this var enables git commits
 fac_params=''
 if [ -z "$FAC_TESTWITHGIT" ]; then
-    fac_params=' --auto_commit=False'
+    fac_params=' --no-auto_commit'
 else
     fac_params=' --allow_dirty'
 fi

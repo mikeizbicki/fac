@@ -7,7 +7,7 @@ import signal
 
 # external imports
 from pathlib import Path
-from pydantic import model_validator
+from pydantic import model_validator, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from watchfiles import awatch, Change
 import yaml
@@ -32,21 +32,33 @@ from fac.Logging import logger, with_subtree
 logger.setLevel(logging.INFO)
 
 
+class FacSettingsDebug(BaseSettings):
+    '''
+    These settings are only for developers when debugging.
+    They should never be specified by end users.
+    Changing these values generally results in the system breaking.
+    '''
+    halt_on_error: bool = False
+    do_assert_invariants: bool = True
+    do_merge_contexts: bool = True
+    clean_stalled_dryrun: bool = True
+
+
 class FacSettings(BaseSettings):
-    # build configuration (also exposed via CLI)
     allow_dirty: bool = False
     auto_commit: bool = True
     loglevel: str = 'INFO'
 
     config_file: Path = 'fac.yaml'
     max_workers: int = 20
-    clean_stalled_dryrun: bool = True
     parallel_build: bool = True
-    do_assert_invariants: bool = True
-    do_merge_contexts: bool = True
     print_prompt: bool = False
     print_states_when_building: bool = False
-    halt_on_error: bool = False
+
+    debug: FacSettingsDebug = Field(
+        default_factory=FacSettingsDebug,
+        exclude=True,
+        )
 
     @model_validator(mode='after')
     def _propagate(self):
@@ -56,6 +68,7 @@ class FacSettings(BaseSettings):
 
     class Config:
         env_prefix = "FAC_"
+        cli_avoid_json = True
 
 
 class Fac(Routable):
@@ -347,7 +360,7 @@ class Fac(Routable):
                         #    and this is a mildly nice feature to see what
                         #    files could in principle be built by fac
                         #    that haven't already been built.
-                        if self.settings.clean_stalled_dryrun:
+                        if self.settings.debug.clean_stalled_dryrun:
                             logger.warning('evaluated as far as dryrun will allow; removing dryrun contexts')
                             states = ('buildable', 'waiting', 'unresolved')
                             pairs = ((s, c) for s in states for c in self.contexts[s])
@@ -477,7 +490,7 @@ class Fac(Routable):
     ########################################
 
     def assert_invariants(self):
-        if self.settings.do_assert_invariants:
+        if self.settings.debug.do_assert_invariants:
             # no context can be in more than one state
             for state1 in self.contexts.keys():
                 for state2 in self.contexts.keys():
@@ -544,7 +557,7 @@ class Fac(Routable):
                     #context0 = path_contexts[path][0]
                     #context1 = path_contexts[path][1]
                     #merge_context(context0, context1)
-                if self.settings.do_merge_contexts:
+                if self.settings.debug.do_merge_contexts:
                     assert len(states) == 1, f'path={path} states={states}'
 
             # self.path2context invariants
@@ -927,7 +940,7 @@ class Fac(Routable):
         # two contexts will be in conflict if they both resolve to the same path;
         # if there are any conflicting conflicts,
         # we merge these contexts and then add the merged context;
-        if self.settings.do_merge_contexts:
+        if self.settings.debug.do_merge_contexts:
             if context.path_safe() and context.path in self.path2context:
                 oldcontext = self.path2context[context.path]
                 for loop_state in self.contexts:
@@ -1274,7 +1287,7 @@ class Fac(Routable):
             paths = [ctx.path for ctx, _ in failures]
             logger.error(f'{len(failures)} build(s) failed: {paths}')
 
-            if self.settings.halt_on_error or unknown_failure:
+            if self.settings.debug.halt_on_error or unknown_failure:
                 raise FACError(failures[0][1])
 
     def process_all_dependencies(self):
