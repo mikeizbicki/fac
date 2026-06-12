@@ -9,7 +9,7 @@ import sys
 import threading
 import time
 
-from fac.Fac import Fac
+from fac.Fac import Fac, FacSettings
 from fac.Logging import logger, with_subtree
 import fac.Errors
 
@@ -20,12 +20,29 @@ from fastapi.responses import HTMLResponse
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, CliApp, SettingsConfigDict
 import hypercorn
 
 from fastapi.responses import FileResponse
 from facd import git_routes
 from facd import monitor_jobs
+
+
+################################################################################
+# CLI / settings
+################################################################################
+
+class FacdSettings(FacSettings):
+    '''Settings for the facd daemon, including server and build options.'''
+    model_config = SettingsConfigDict(
+        cli_parse_args=True,
+        cli_prog_name='facd',
+        env_prefix='FAC_',
+    )
+    server: Literal['hypercorn', 'uvicorn'] = 'hypercorn'
+    unsafe_multithread: bool = False
+    dryrun_target: str = '**'
 
 ################################################################################
 # FastAPI setup
@@ -197,51 +214,26 @@ def add_target_endpoint(request: AddTargetRequest):
 # run the server
 ################################################################################
 
-def str2bool(v):
-    '''
-    For use with argparse and creating boolean parameters.
-    '''
-    if isinstance(v, bool):
-        return v
-    if v.lower() in ('yes', 'true', 't', 'y', '1'):
-        return True
-    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-        return False
-    else:
-        raise argparse.ArgumentTypeError('Boolean value expected.')
-
 def main():
-    import argparse
-    parser = argparse.ArgumentParser()
+    settings = FacdSettings()
 
-    server_group = parser.add_argument_group('server', 'Server configuration')
-    server_group.add_argument('--server', choices=['hypercorn', 'uvicorn'], default='hypercorn')
-    server_group.add_argument('--unsafe_multithread', action='store_true', help='...')
-    server_group.add_argument('--dryrun_target', default='**')
-
-    build_group = parser.add_argument_group('build', 'Build configuration')
-    build_group.add_argument('--allow_dirty', action='store_true')
-    build_group.add_argument('--auto_commit', default=True, type=str2bool)
-    build_group.add_argument('--loglevel', choices=['WARNING', 'INFO', 'DEBUG', 'TRACE'], default='INFO')
-
-    args = parser.parse_args()
-
-    app.args = args
-    logger.setLevel(args.loglevel)
+    app.args = settings
+    logger.setLevel(settings.loglevel)
 
     # register state routes
     try:
         state = Fac(
-            allow_dirty=args.allow_dirty,
-            auto_commit=args.auto_commit,
-            )
+            allow_dirty=settings.allow_dirty,
+            auto_commit=settings.auto_commit,
+            settings=settings,
+        )
     except fac.Errors.FACError:
         return 1
     app.state = state
     #state.path_manager.start()
 
     # perform a dryrun to register all files with facd;
-    state.add_target(args.dryrun_target, tasks=set())
+    state.add_target(settings.dryrun_target, tasks=set())
 
     # register routes
     app.include_router(state.router)
@@ -251,7 +243,7 @@ def main():
     app.include_router(monitor_jobs.router)
 
     # start the web server
-    if args.server == 'hypercorn':
+    if settings.server == 'hypercorn':
         from hypercorn.asyncio import serve
         from hypercorn.config import Config
         config = Config()
@@ -277,7 +269,7 @@ def main():
 
         asyncio.run(_run())
 
-    elif args.server == 'uvicorn':
+    elif settings.server == 'uvicorn':
         import uvicorn
         uvicorn.run(
                 app,

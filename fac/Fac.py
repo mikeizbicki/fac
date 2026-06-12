@@ -7,7 +7,7 @@ import signal
 
 # external imports
 import yaml
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from watchfiles import awatch, Change
 
 # project imports
@@ -31,6 +31,11 @@ logger.setLevel(logging.INFO)
 
 
 class FacSettings(BaseSettings):
+    # build configuration (also exposed via CLI)
+    allow_dirty: bool = False
+    auto_commit: bool = True
+    loglevel: str = 'INFO'
+
     max_workers: int = 20
     clean_stalled_dryrun: bool = True
     parallel_build: bool = True
