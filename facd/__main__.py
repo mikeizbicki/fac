@@ -81,12 +81,12 @@ templates = Jinja2Templates(directory=str(templates_path))
 
 
 @app.get("/", response_class=HTMLResponse)
-def home(request: Request):
+async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
 @app.get("/favicon.ico")
-def favicon():
+async def favicon():
     return FileResponse(static_path / "favicon.ico")
 
 
@@ -133,7 +133,7 @@ async def stream_logs():
     )
 
 @app.get('/list_targets', response_model=dict[str, Any])
-def list_targets():
+async def list_targets():
     '''
     Returns a dictionary of targets defined in the 'fac.yaml' file.
     The keys are targets and values are config information describing how to build the targets.
@@ -172,7 +172,7 @@ class AddTargetRequest(BaseModel):
 
 
 @app.post('/add_target')
-def add_target_endpoint(request: AddTargetRequest):
+async def add_target_endpoint(request: AddTargetRequest):
     '''
     Registers a target with the build system.
 
@@ -204,6 +204,7 @@ class FacdSettings(FacSettings):
     model_config = SettingsConfigDict(
         cli_parse_args=True,
         cli_prog_name='facd',
+        cli_implicit_flags=True,
         env_prefix='FAC_',
     )
     server: Literal['hypercorn', 'uvicorn'] = 'hypercorn'
