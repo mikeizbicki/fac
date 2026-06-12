@@ -54,7 +54,9 @@ def main():
     fac.build_all()
 
     if settings.print_context_states:
-        print(fac.context_states())
+        import json
+        states = json.dumps(fac.context_states(), indent=2)
+        print(states)
 
 
 if __name__ == '__main__':

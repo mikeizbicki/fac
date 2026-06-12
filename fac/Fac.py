@@ -332,7 +332,6 @@ class Fac(Routable):
                 # perform duplicate state check
                 if state0 in state_hashes:
                     has_error = len(self.contexts['build_error']) > 0
-                    print("len(self.contexts['build_error'])=", len(self.contexts['build_error']))
                     all_dryrun = True
                     for context in itertools.chain(
                             self.contexts['buildable'],
