@@ -1,30 +1,58 @@
 # This file should be sourced from the ./run_test.sh script in the test repo.
 
+set -e
+
+####################
+# git setup
+####################
+
 # Because fac dependency checking relies on git state,
-# we must have a clean repo for the tests to make sense.
+# we must have a clean test repo for the tests to make sense.
 if ! [ -z "$(git status --porcelain)" ]; then
     echo 'ERROR: The git repo is not clean (i.e. you may have uncommitted files), but the test script requires a clean repo. You should either commit the files or delete them.'
     exit 1
 fi
 
-# Asserting invariants is slow and disabled by default.
-# We enable it for our tests.
-export FAC_DO_ASSERT_INVARIANTS=True
+# tests might be making git commits;
+# therefore we need to ensure we are not on a branch
+old_branch=$(git symbolic-ref --short -q HEAD || git rev-parse HEAD)
+old_commit=$(git rev-parse HEAD)
+git -c advice.detachedHead=false checkout "$old_commit"
 
+reset_git() {
+    # clean repo to same state as before tests were run;
+    # this is used in cleanup at the end,
+    # but also inside various test scripts
+    git clean -fd -e .results/ -e .test_output
+    git checkout .
+    git checkout "$old_commit"
+}
+
+####################
+# test framework code
+# ------------------
 # We use set -x and PS4 to trace all output of the test script.
 # Each call to dotest represents a checkpoint.
-# The test script will abort when any command errors,
-# and if we abort then $TEST_OUTPUT will contain the trace since the last checkpoint only.
+# The output of the full run of the test can be very long,
+# so when we get a failure (from set -e),
+# we want to output only the trace since the last checkpoint.
+# We do a lot of fancy IO redirection to make this happen.
+# The important end result is:
+# 1) $TEST_OUTPUT will contain the trace since the last checkpoint only,
+# 2) this should be sufficient to understand/debug the source of the failure.
+####################
 exec 3>&1 4>&2
 TEST_OUTPUT=$(pwd)/.test_output
 exec 9>>"$TEST_OUTPUT"
 exec >&9 2>&9
 export PS4='[${BASH_SOURCE}:${LINENO}] ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+set -x
+
 on_error() {
     set +x
     local ec=$?
     echo "=== TEST FAILED (exit $ec); dumping $TEST_OUTPUT ===" >&4
-    # if facd failed (e.g. due to an assert),
+    # if facd crashed (e.g. due to an assert),
     # then we want its output in $TEST_OUTPUT;
     # but the output won't be ready for a bit;
     # we could use `wait` to wait for the process to actually stop before printing,
@@ -38,7 +66,6 @@ on_error() {
     cat "$TEST_OUTPUT" >&4
 }
 trap on_error ERR
-set -ex
 
 dotest() {
     # takes a checkpoint name as a command line arg;
@@ -49,17 +76,22 @@ dotest() {
     echo "=== ${BASH_SOURCE[1]}:${BASH_LINENO[0]} dotest succeeded: $1  ===" >&4
 
     # truncate $TEST_OUTPUT
+    # (so that the trace before passing checkpoint is deleted)
     exec 9>"$TEST_OUTPUT"
     exec >&9 2>&9
 }
 
-# fac has many different modes that it can be run in;
-# these modes have different runtime characteristics but they should always
-# result in the same build files and so should pass the same tests;
-# the caller can use environment variables to set which mode will be used
+####################
+# fac config
+####################
+
+# Asserting invariants is slow and disabled by default.
+# We enable it for tests.
+export FAC_DO_ASSERT_INVARIANTS=True
 
 # the default is not making git commits after each invocation;
-# specifying this var enables git commits
+# specifying this var enables git commits;
+# tests should always get the same output either way
 fac_params=''
 if [ -z "$FAC_TESTWITHGIT" ]; then
     fac_params=' --no-auto_commit'
@@ -74,52 +106,6 @@ COVERAGE_PATH="$COVERAGE_DIR"/"$(basename "$(pwd)")"
 mkdir -p "$COVERAGE_DIR"
 alias fac="python3 -m coverage run --parallel-mode --source=fac --data-file=$COVERAGE_PATH -m fac $fac_params"
 alias facd="python3 -m coverage run --parallel-mode --source=fac --data-file=$COVERAGE_PATH -m facd --loglevel=TRACE $fac_params"
-
-# tests might be making git commits;
-# therefore we need to ensure we are not on a branch
-old_branch=$(git symbolic-ref --short -q HEAD || git rev-parse HEAD)
-old_commit=$(git rev-parse HEAD)
-git checkout "$old_commit"
-
-reset_git() {
-    # clean repo to same state as before tests were run;
-    # this is used in cleanup at the end,
-    # but also inside various test scripts
-    git clean -fd -e .results/ -e .test_output
-    git checkout .
-    git checkout "$old_commit"
-}
-
-finalize_tests() {
-    echo "=== finalizing ===" >&4
-
-    # close "$TEST_OUTPUT"
-    exec 9>&-
-
-    # restore original git state
-    reset_git
-    git checkout "$old_branch"
-
-    # ensure facd has stopped if it was started
-    if [ -n "$facd_pid" ]; then
-        kill "$facd_pid"
-
-        # wait 5 sec for process to terminate gracefully;
-        # otherwise force kill and fail tests
-        for _ in $(seq 1 50); do
-            kill -0 "$facd_pid" 2>/dev/null || break
-            sleep 0.1
-        done
-        if kill -0 "$facd_pid" 2>/dev/null; then
-            echo "=== facd force killed ===" >&4
-            kill -KILL "$facd_pid"
-            wait "$facd_pid" 2>/dev/null
-            return 1
-        fi
-    fi
-
-    echo "=== finalized ===" >&4
-}
 
 facd_HOST=localhost:8080
 facd_TIMEOUT=20
@@ -156,6 +142,37 @@ facd_start() {
     echo "=== facd started ===" >&4
 }
 
+finalize_tests() {
+    echo "=== finalizing ===" >&4
+
+    # close "$TEST_OUTPUT"
+    exec 9>&-
+
+    # restore original git state
+    reset_git
+    git checkout "$old_branch"
+
+    # ensure facd has stopped if it was started
+    if [ -n "$facd_pid" ]; then
+        kill "$facd_pid"
+
+        # wait 5 sec for process to terminate gracefully;
+        # otherwise force kill and fail tests
+        for _ in $(seq 1 50); do
+            kill -0 "$facd_pid" 2>/dev/null || break
+            sleep 0.1
+        done
+        if kill -0 "$facd_pid" 2>/dev/null; then
+            echo "=== facd force killed ===" >&4
+            kill -KILL "$facd_pid"
+            wait "$facd_pid" 2>/dev/null
+            return 1
+        fi
+    fi
+
+    echo "=== finalized ===" >&4
+}
+
 facd_wait() {
     # Because facd is running as a background process,
     # control flow will be returned to the test scripts before
@@ -189,6 +206,10 @@ facd_wait() {
 }
 
 facd_add_target() {
-    curl -sX POST "http://$facd_HOST/add_target" -H "Content-Type: application/json" -d "{\"target\":\"$1\"}"
-    echo
+    curl -sX POST "http://$facd_HOST/add_target" -H "Content-Type: application/json" -d "{\"target\":\"$1\"}" -w '\n'
+}
+
+facd_context_states() {
+    facd_wait
+    curl -s "http://$facd_HOST/context_states" | jq
 }
