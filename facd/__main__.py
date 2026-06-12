@@ -218,14 +218,10 @@ def main():
 
     # register state routes
     try:
-        state = Fac(
-            allow_dirty=settings.allow_dirty,
-            auto_commit=settings.auto_commit,
-            settings=settings,
-        )
+        state = Fac(settings)
+        app.state = state
     except fac.Errors.FACError:
         return 1
-    app.state = state
 
     # perform a dryrun to register files with facd
     state.add_target(settings.dryrun_target, tasks=set())

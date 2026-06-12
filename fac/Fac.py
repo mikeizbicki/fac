@@ -6,9 +6,11 @@ import os
 import signal
 
 # external imports
-import yaml
+from pathlib import Path
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from watchfiles import awatch, Change
+import yaml
 
 # project imports
 from fac.BuildContext import BuildContext, context_print
@@ -36,6 +38,7 @@ class FacSettings(BaseSettings):
     auto_commit: bool = True
     loglevel: str = 'INFO'
 
+    config_file: Path = 'fac.yaml'
     max_workers: int = 20
     clean_stalled_dryrun: bool = True
     parallel_build: bool = True
@@ -44,6 +47,12 @@ class FacSettings(BaseSettings):
     print_prompt: bool = False
     print_states_when_building: bool = False
     halt_on_error: bool = False
+
+    @model_validator(mode='after')
+    def _propagate(self):
+        if not self.auto_commit:
+            self.allow_dirty = True
+        return self
 
     class Config:
         env_prefix = "FAC_"
@@ -58,27 +67,17 @@ class Fac(Routable):
     '''
     def __init__(
             self,
-            config_file='fac.yaml',
-            allow_dirty=False,
-            auto_commit=True,
-            print_prompt=False,
             settings: FacSettings | None = None,
             ):
         super().__init__()
         self._shutdown = False
 
-        # set git-related configuration
-        self.auto_commit = auto_commit
-        if not auto_commit:
-            allow_dirty = True
-        self.allow_dirty = allow_dirty
-        assert_git_sane(allow_dirty)
-
         # set default values for controlling runtime behavior
         self.settings = settings or FacSettings()
+        assert_git_sane(self.settings.allow_dirty)
 
         # create important variables
-        self.targets_dict = load_config(config_file)
+        self.targets_dict = load_config(self.settings.config_file)
 
         # the states
         #
@@ -184,7 +183,7 @@ class Fac(Routable):
             if include_paths:
                 str_include_paths = f' --include_paths={str(include_paths)}'
             build_cmd = f'fac {target}{str_mode}{str_include_prompt}{str_include_old}{str_include_paths}'
-            job = Job(build_cmd, auto_commit=self.auto_commit)
+            job = Job(build_cmd, auto_commit=self.settings.auto_commit)
             self.jobs['running'].add(job)
         else:
             job = self.context_to_job[required_for]
