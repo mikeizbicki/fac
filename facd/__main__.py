@@ -213,12 +213,17 @@ def str2bool(v):
 def main():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--server', choices=['hypercorn', 'uvicorn'], default='hypercorn')
-    parser.add_argument('--allow_dirty', action='store_true')
-    parser.add_argument('--dryrun_target', default='**')
-    parser.add_argument('--loglevel', choices=['WARNING', 'INFO', 'DEBUG', 'TRACE'], default='INFO')
-    parser.add_argument('--auto_commit', default=True, type=str2bool)
-    parser.add_argument('--unsafe_multithread', action='store_true', help='With this enabled, the FastAPI webserver and Fac.build_daemon run in different threads.  This can be useful for debugging if the build_daemon is being unresponsive and causing delays in the webserver; but the code is not thread safe and so this *will* result in errors.')
+
+    server_group = parser.add_argument_group('server', 'Server configuration')
+    server_group.add_argument('--server', choices=['hypercorn', 'uvicorn'], default='hypercorn')
+    server_group.add_argument('--unsafe_multithread', action='store_true', help='...')
+    server_group.add_argument('--dryrun_target', default='**')
+
+    build_group = parser.add_argument_group('build', 'Build configuration')
+    build_group.add_argument('--allow_dirty', action='store_true')
+    build_group.add_argument('--auto_commit', default=True, type=str2bool)
+    build_group.add_argument('--loglevel', choices=['WARNING', 'INFO', 'DEBUG', 'TRACE'], default='INFO')
+
     args = parser.parse_args()
 
     app.args = args
