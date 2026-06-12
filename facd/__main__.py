@@ -9,6 +9,7 @@ import sys
 import threading
 import time
 
+from fac.Fac import Fac
 from fac.Logging import logger, with_subtree
 import fac.Errors
 
@@ -32,14 +33,8 @@ from facd import monitor_jobs
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # FIXME:
-    # If the build daemon is run in a single thread with the FastAPI server,
-    # then the server sometimes has slow responses.
-    # This happens when the daemon is in the middle of a CPU-heavy task.
-    # Multithreading fixes the issue,
-    # but the build daemon isn't thread-safe :(
-    multithread = False
-    if multithread:
+    if app.args.unsafe_multithread:
+        logger.critical('--unsafe_multithread enabled, but build_daemon is not thread safe')
         def run_daemon_in_thread():
             asyncio.run(app.state.build_daemon())
         daemon_task = asyncio.create_task(asyncio.to_thread(run_daemon_in_thread))
@@ -50,6 +45,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # cleanup code here
+    logger.warning('FastAPI lifespan ended')
     app.state.path_routes.shutdown()
     await git_routes.shutdown_git_routes()
     await asyncio.sleep(1)
@@ -219,11 +215,16 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--server', choices=['hypercorn', 'uvicorn'], default='hypercorn')
     parser.add_argument('--allow_dirty', action='store_true')
+    parser.add_argument('--dryrun_target', default='**')
+    parser.add_argument('--loglevel', choices=['WARNING', 'INFO', 'DEBUG', 'TRACE'], default='INFO')
     parser.add_argument('--auto_commit', default=True, type=str2bool)
+    parser.add_argument('--unsafe_multithread', action='store_true', help='With this enabled, the FastAPI webserver and Fac.build_daemon run in different threads.  This can be useful for debugging if the build_daemon is being unresponsive and causing delays in the webserver; but the code is not thread safe and so this *will* result in errors.')
     args = parser.parse_args()
 
+    app.args = args
+    logger.setLevel(args.loglevel)
+
     # register state routes
-    from fac.Fac import Fac
     try:
         state = Fac(
             allow_dirty=args.allow_dirty,
@@ -235,8 +236,7 @@ def main():
     #state.path_manager.start()
 
     # perform a dryrun to register all files with facd;
-    logger.setLevel(logging.DEBUG)
-    state.add_target('**', tasks=set())
+    state.add_target(args.dryrun_target, tasks=set())
 
     # register routes
     app.include_router(state.router)
@@ -263,6 +263,7 @@ def main():
 
             def _handle_signal():
                 logger.error('Force exiting...')
+                shutdown_event.set()
                 os._exit(1)
 
             for sig in (signal.SIGINT, signal.SIGTERM):
