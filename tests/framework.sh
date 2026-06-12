@@ -4,11 +4,10 @@
 # we must have a clean repo for the tests to make sense.
 if ! [ -z "$(git status --porcelain)" ]; then
     echo 'ERROR: The git repo is not clean (i.e. you may have uncommitted files), but the test script requires a clean repo. You should either commit the files or delete them.'
-    echo 'HINT: You can delete all uncommitted files with the `git clean -fd` command.'
     exit 1
 fi
 
-# Asserting invariants is slow and disable by default.
+# Asserting invariants is slow and disabled by default.
 # We enable it for our tests.
 export FAC_DO_ASSERT_INVARIANTS=True
 
@@ -25,6 +24,17 @@ on_error() {
     set +x
     local ec=$?
     echo "=== TEST FAILED (exit $ec); dumping $TEST_OUTPUT ===" >&4
+    # if facd failed (e.g. due to an assert),
+    # then we want its output in $TEST_OUTPUT;
+    # but the output won't be ready for a bit;
+    # we could use `wait` to wait for the process to actually stop before printing,
+    # but not all errors are due to the process dying,
+    # and so we could be waiting indefinitely;
+    # we also don't want to manually kill the process
+    # because sometimes manually inspecting the process after an error is useful;
+    # sleeping provides enough time to ensure that any crash traceback will
+    # be printed to $TEST_OUTPUT without risking the script hanging
+    sleep 1
     cat "$TEST_OUTPUT" >&4
 }
 trap on_error ERR
@@ -43,14 +53,6 @@ dotest() {
     exec >&9 2>&9
 }
 
-# we override the fac build command with a command that tracks code coverage
-shopt -s expand_aliases
-COVERAGE_DIR=$(dirname "${BASH_SOURCE[0]}")/.coverage
-COVERAGE_PATH="$COVERAGE_DIR"/"$(basename "$(pwd)")"
-mkdir -p "$COVERAGE_DIR"
-alias fac="python3 -m coverage run --parallel-mode --source=fac --data-file=$COVERAGE_PATH -m fac"
-alias facd="python3 -m coverage run --parallel-mode --source=fac --data-file=$COVERAGE_PATH -m facd"
-
 # fac has many different modes that it can be run in;
 # these modes have different runtime characteristics but they should always
 # result in the same build files and so should pass the same tests;
@@ -58,13 +60,20 @@ alias facd="python3 -m coverage run --parallel-mode --source=fac --data-file=$CO
 
 # the default is not making git commits after each invocation;
 # specifying this var enables git commits
+fac_params=''
 if [ -z "$FAC_TESTWITHGIT" ]; then
-    alias fac='fac --auto_commit=False'
-    alias facd='facd --auto_commit=False'
+    fac_params=' --auto_commit=False'
 else
-    alias fac='fac --allow_dirty'
-    alias facd='facd --allow_dirty'
+    fac_params=' --allow_dirty'
 fi
+
+# we override the fac build command with a command that tracks code coverage
+shopt -s expand_aliases
+COVERAGE_DIR=$(dirname "${BASH_SOURCE[0]}")/.coverage
+COVERAGE_PATH="$COVERAGE_DIR"/"$(basename "$(pwd)")"
+mkdir -p "$COVERAGE_DIR"
+alias fac="python3 -m coverage run --parallel-mode --source=fac --data-file=$COVERAGE_PATH -m fac $fac_params"
+alias facd="python3 -m coverage run --parallel-mode --source=fac --data-file=$COVERAGE_PATH -m facd --loglevel=TRACE $fac_params"
 
 # tests might be making git commits;
 # therefore we need to ensure we are not on a branch
@@ -102,6 +111,7 @@ finalize_tests() {
             sleep 0.1
         done
         if kill -0 "$facd_pid" 2>/dev/null; then
+            echo "=== facd force killed ===" >&4
             kill -KILL "$facd_pid"
             wait "$facd_pid" 2>/dev/null
             return 1
@@ -147,19 +157,31 @@ facd_start() {
 }
 
 facd_wait() {
-    # wait until facd is in a "stable" state where all jobs have finished;
-    # this is needed to:
-    # 1. ensure that facd has had a chance to register changes to files
-    # 2. ensure that any build steps have finished
-    # fac tests do not need to call this function because fac blocks until finished
-    for i in $(seq 1 $facd_TIMEOUT); do
+    # Because facd is running as a background process,
+    # control flow will be returned to the test scripts before
+    # the build system has finished its work.
+    # This function waits until facd has finished all its work.
+    sleep 1
+    for i in $(seq 1 $facd_TIMEOUT ); do
       sleep 1
-      response=$(curl -s "$facd_HOST"/job_states) || { return 1; }
-      queued=$(echo "$response" | jq '.queued | length')
-      running=$(echo "$response" | jq '.running | length')
-      if [ "$queued" -eq 0 ] && [ "$running" -eq 0 ]; then
+      # We check that facd is finished by ensuring there are no running jobs
+      # and no contexts in a non-finalized state.
+      # In theory, both of these checks shouldn't be needed,
+      # but we add them both to ensure that the test framework is robust
+      # to any bugs in these systems.
+      # We also wait a bit longer than needed,
+      # which slows the test scripts down,
+      # but again makes them more robust.
+      response1=$(curl -s "$facd_HOST"/job_states) || return 1
+      response2=$(curl -s "$facd_HOST"/context_states) || return 1
+      counts=$(jq -n \
+        --argjson js "$response1" \
+        --argjson cs "$response2" \
+        '[$js.queued, $js.running, $cs.unresolved, $cs.waiting, $cs.buildable, $cs.build_required] | map(length) | add')
+      if [ "$counts" -eq 0 ]; then
         return 0
       fi
+
       echo "facd_wait; i=$i"
     done
     echo "facd_wait() exceeded TIMEOUT=$facd_TIMEOUT"
@@ -167,5 +189,6 @@ facd_wait() {
 }
 
 facd_add_target() {
-    curl -X POST "http://$facd_HOST/add_target" -H "Content-Type: application/json" -d "{\"target\":\"$1\"}"
+    curl -sX POST "http://$facd_HOST/add_target" -H "Content-Type: application/json" -d "{\"target\":\"$1\"}"
+    echo
 }
