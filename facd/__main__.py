@@ -30,21 +30,6 @@ from facd import monitor_jobs
 
 
 ################################################################################
-# CLI / settings
-################################################################################
-
-class FacdSettings(FacSettings):
-    '''Settings for the facd daemon, including server and build options.'''
-    model_config = SettingsConfigDict(
-        cli_parse_args=True,
-        cli_prog_name='facd',
-        env_prefix='FAC_',
-    )
-    server: Literal['hypercorn', 'uvicorn'] = 'hypercorn'
-    unsafe_multithread: bool = False
-    dryrun_target: str = '**'
-
-################################################################################
 # FastAPI setup
 ################################################################################
 
@@ -214,6 +199,17 @@ def add_target_endpoint(request: AddTargetRequest):
 # run the server
 ################################################################################
 
+class FacdSettings(FacSettings):
+    '''Settings for the facd daemon, including server and build options.'''
+    model_config = SettingsConfigDict(
+        cli_parse_args=True,
+        cli_prog_name='facd',
+        env_prefix='FAC_',
+    )
+    server: Literal['hypercorn', 'uvicorn'] = 'hypercorn'
+    unsafe_multithread: bool = False
+    dryrun_target: str = '**'
+
 def main():
     settings = FacdSettings()
 
@@ -230,9 +226,8 @@ def main():
     except fac.Errors.FACError:
         return 1
     app.state = state
-    #state.path_manager.start()
 
-    # perform a dryrun to register all files with facd;
+    # perform a dryrun to register files with facd
     state.add_target(settings.dryrun_target, tasks=set())
 
     # register routes
