@@ -9,7 +9,7 @@ import sys
 import threading
 import time
 
-from fac.Fac import Fac
+from fac.Fac import Fac, FacSettings
 from fac.Logging import logger, with_subtree
 import fac.Errors
 
@@ -20,12 +20,14 @@ from fastapi.responses import HTMLResponse
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, CliApp, SettingsConfigDict
 import hypercorn
 
 from fastapi.responses import FileResponse
 from facd import git_routes
 from facd import monitor_jobs
+
 
 ################################################################################
 # FastAPI setup
@@ -79,12 +81,12 @@ templates = Jinja2Templates(directory=str(templates_path))
 
 
 @app.get("/", response_class=HTMLResponse)
-def home(request: Request):
+async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
 @app.get("/favicon.ico")
-def favicon():
+async def favicon():
     return FileResponse(static_path / "favicon.ico")
 
 
@@ -131,7 +133,7 @@ async def stream_logs():
     )
 
 @app.get('/list_targets', response_model=dict[str, Any])
-def list_targets():
+async def list_targets():
     '''
     Returns a dictionary of targets defined in the 'fac.yaml' file.
     The keys are targets and values are config information describing how to build the targets.
@@ -170,7 +172,7 @@ class AddTargetRequest(BaseModel):
 
 
 @app.post('/add_target')
-def add_target_endpoint(request: AddTargetRequest):
+async def add_target_endpoint(request: AddTargetRequest):
     '''
     Registers a target with the build system.
 
@@ -197,46 +199,33 @@ def add_target_endpoint(request: AddTargetRequest):
 # run the server
 ################################################################################
 
-def str2bool(v):
-    '''
-    For use with argparse and creating boolean parameters.
-    '''
-    if isinstance(v, bool):
-        return v
-    if v.lower() in ('yes', 'true', 't', 'y', '1'):
-        return True
-    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-        return False
-    else:
-        raise argparse.ArgumentTypeError('Boolean value expected.')
+class FacdSettings(FacSettings):
+    '''Settings for the facd daemon, including server and build options.'''
+    model_config = SettingsConfigDict(
+        cli_parse_args=True,
+        cli_prog_name='facd',
+        cli_implicit_flags=True,
+        env_prefix='FAC_',
+    )
+    server: Literal['hypercorn', 'uvicorn'] = 'hypercorn'
+    unsafe_multithread: bool = False
+    dryrun_target: str = '**'
 
 def main():
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--server', choices=['hypercorn', 'uvicorn'], default='hypercorn')
-    parser.add_argument('--allow_dirty', action='store_true')
-    parser.add_argument('--dryrun_target', default='**')
-    parser.add_argument('--loglevel', choices=['WARNING', 'INFO', 'DEBUG', 'TRACE'], default='INFO')
-    parser.add_argument('--auto_commit', default=True, type=str2bool)
-    parser.add_argument('--unsafe_multithread', action='store_true', help='With this enabled, the FastAPI webserver and Fac.build_daemon run in different threads.  This can be useful for debugging if the build_daemon is being unresponsive and causing delays in the webserver; but the code is not thread safe and so this *will* result in errors.')
-    args = parser.parse_args()
+    settings = FacdSettings()
 
-    app.args = args
-    logger.setLevel(args.loglevel)
+    app.args = settings
+    logger.setLevel(settings.loglevel)
 
     # register state routes
     try:
-        state = Fac(
-            allow_dirty=args.allow_dirty,
-            auto_commit=args.auto_commit,
-            )
+        state = Fac(settings)
+        app.state = state
     except fac.Errors.FACError:
         return 1
-    app.state = state
-    #state.path_manager.start()
 
-    # perform a dryrun to register all files with facd;
-    state.add_target(args.dryrun_target, tasks=set())
+    # perform a dryrun to register files with facd
+    state.add_target(settings.dryrun_target, tasks=set())
 
     # register routes
     app.include_router(state.router)
@@ -246,7 +235,7 @@ def main():
     app.include_router(monitor_jobs.router)
 
     # start the web server
-    if args.server == 'hypercorn':
+    if settings.server == 'hypercorn':
         from hypercorn.asyncio import serve
         from hypercorn.config import Config
         config = Config()
@@ -272,7 +261,7 @@ def main():
 
         asyncio.run(_run())
 
-    elif args.server == 'uvicorn':
+    elif settings.server == 'uvicorn':
         import uvicorn
         uvicorn.run(
                 app,

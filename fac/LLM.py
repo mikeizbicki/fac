@@ -155,6 +155,7 @@ class ModelUsageSummary():
 
         # other API calls
         else:
+            breakpoint()
             raise ValueError('unsupported result type')
 
         # record cost
@@ -339,9 +340,11 @@ class LLM():
                 fout.write(image_bytes)
 
         elif provider == 'fal-ai':
-            #base64_urls = [binary_file_to_base64_url(path) for path in data['reference_images']]
             elements = [path for path in data.get('reference_images', [])]
             elements_urls = [self.fal_upload_file(element) for element in elements]
+
+            if model_name.startswith('openai'):
+                model = model_name
 
             # call the api and await result
             arguments={
