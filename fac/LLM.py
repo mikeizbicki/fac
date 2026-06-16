@@ -352,6 +352,7 @@ class LLM():
                 "num_images": 1,
                 "aspect_ratio": "16:9",
                 "image_urls": elements_urls,
+                "quality": 'high',
             }
             try:
                 handler = await fal_client.submit_async(model, arguments)

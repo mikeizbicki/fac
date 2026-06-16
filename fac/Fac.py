@@ -1205,7 +1205,10 @@ class Fac(Routable):
                     try:
                         logger.info(context.prompt['prompt'], submessage=True)
                     except TypeError:
-                        logger.info(context.prompt, submessage=True)
+                        try:
+                            logger.info(context.prompt[1]['content'][0]['text'], submessage=True)
+                        except TypeError:
+                            logger.info(context.prompt, submessage=True)
             if 'lock' in context.tasks:
                 logger.info('lock', submessage=True)
             if 'unlock' in context.tasks:
