@@ -896,7 +896,7 @@ class Fac(Routable):
             return ValueError('unknown format')
 
     def debug_short(self, submessage=False):
-        logger.debug({'BuildState': {
+        logger.trace({'BuildState': {
             'len(self.contexts[unresolved])': len(self.contexts['unresolved']),
             'len(self.contexts[buildable])': len(self.contexts['buildable']),
             'len(self.contexts[waiting])': len(self.contexts['waiting']),
@@ -1038,7 +1038,7 @@ class Fac(Routable):
                 self._set_context_state(context, state)
 
     def process_all_waiting(self):
-        logger.debug('process_all_waiting()')
+        logger.trace('process_all_waiting()')
         self.debug_short(submessage=True)
         waiting0 = self.contexts['waiting']
         self.contexts['waiting'] = set()
@@ -1049,7 +1049,7 @@ class Fac(Routable):
 
     @with_subtree(logger)
     def process_waiting(self, context, waiting0):
-        logger.debug('process_waiting()')
+        logger.trace('process_waiting()')
         dependencies_built1 = list(context.dependencies_built)
         dependencies_building1 = []
         for dep_building in context.dependencies_building:
@@ -1156,7 +1156,7 @@ class Fac(Routable):
         return ret
 
     def process_all_buildable(self):
-        logger.debug('process_all_buildable()')
+        logger.trace('process_all_buildable()')
 
         buildable = self.contexts['buildable']
         self.contexts['buildable'] = set()
@@ -1238,7 +1238,7 @@ class Fac(Routable):
                     self._set_context_state(context, 'notbuilt')
 
     async def process_all_build_required(self):
-        logger.debug('process_all_build_required()')
+        logger.trace('process_all_build_required()')
 
         failures = []
         unknown_failure = False
@@ -1295,7 +1295,7 @@ class Fac(Routable):
     def process_all_dependencies(self):
         contexts = self.contexts['unresolved']
         self.contexts['unresolved'] = set()
-        logger.debug('process_all_dependencies()')
+        logger.trace('process_all_dependencies()')
         with logger.make_subtree():
           for context in contexts:
             with logger.make_subtree():

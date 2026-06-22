@@ -52,6 +52,7 @@ registered_models = {
     'anthropic/claude-3-haiku-20240307':    {'text/in': 0.25, 'text/out':  1.25},
     'anthropic/claude-opus-4-8':            {'text/in': 5.00, 'text.out': 25.00},
     'anthropic/claude-opus-4-20250514':     {'text/in':15.00, 'text.out': 75.00},
+    'anthropic/claude-sonnet-4-6':          {'text/in': 3.00, 'text/out': 15.00},
     'anthropic/claude-sonnet-4-0':          {'text/in': 3.00, 'text/out': 15.00},
     'anthropic/claude-3-5-haiku-latest':    {'text/in': 0.80, 'text/out':  4.00},
     'cerebras/qwen-3-235b-a22b-instruct-2507':
@@ -64,6 +65,7 @@ registered_models = {
                                             {'text/in': 0.00, 'text/out':  0.00},
     'openai/gpt-5.5':                       {'text/in': 2.50, 'text/out': 15.00},
     'openai/gpt-5.4':                       {'text/in': 2.50, 'text/out': 15.00},
+    'openai/gpt-5.4-mini':                  {'text/in': 0.75, 'text/out':  4.50},
     'openai/gpt-5':                         {'text/in': 1.25, 'text/out': 10.00},
     'openai/gpt-5-mini':                    {'text/in': 0.25, 'text/out':  2.00},
     'openai/gpt-5-nano':                    {'text/in': 0.05, 'text/out':  0.40},
@@ -295,8 +297,8 @@ class LLM():
         logger.info(f'request_cost: ${local_usage.total_cost():0.4f}  total_cost: ${self.usage_summary.total_cost():0.4f}', submessage=True)
         return content, local_usage
 
-    async def image_async(self, path, data, *, seed=None):
-        logger.trace(f'llm.image; data.keys()={list(data.keys())}')
+    async def image_async(self, path, data, *, seed=None, dryrun=False):
+        logger.debug(f'llm.image_async("{path}")')
         client = openai.AsyncOpenAI()
         
         model = data.get('model')
@@ -306,38 +308,44 @@ class LLM():
 
         # openAI models:
         if provider == 'openai':
-            quality = data.get('quality', 'high')
+            quality = data.get('quality', 'low')
             size = '1536x1024'
             if data.get('orientation') == 'square':
                 size = '1024x1024'
             if data.get('orientation') == 'portrait':
                 size = '1024x1536'
 
-            # generate a new image
+            # log parameters and call the API
+            params = {
+                'model': model_name,
+                'size': size,
+                'quality': quality
+            }
+            params.update(data)
             if not data.get('reference_images'):
-                result = await client.images.generate(
-                    model=model_name,
-                    prompt=data['prompt'],
-                    size=size,
-                    quality=quality,
-                )
+                logger.debug({'openai_client.images.generate() params': params})
+                if dryrun:
+                    logger.warning('dryrun')
+                    return
+                result = await client.images.generate(**params)
             else:
-                result = await client.images.edit(
-                    model=model_name,
-                    prompt=data['prompt'],
-                    size=size,
-                    quality=quality,
-                    image=[open(path, 'rb') for path in data['reference_images']]
-                )
-            local_usage = ModelUsageSummary()
-            local_usage.register_result(model, result)
-            self.usage_summary.register_result(model, result)
+                params['image'] = [open(path, 'rb') for path in data['reference_images']]
+                logger.debug({'openai_client.images.edit() params': params})
+                if dryrun:
+                    logger.warning('dryrun')
+                    return
+                result = await client.images.edit(**params)
 
             # save the image
             image_base64 = result.data[0].b64_json
             image_bytes = base64.b64decode(image_base64)
             with open(path, 'wb') as fout:
                 fout.write(image_bytes)
+
+            # log model usage
+            local_usage = ModelUsageSummary()
+            local_usage.register_result(model, result)
+            self.usage_summary.register_result(model, result)
 
         elif provider == 'fal-ai':
             elements = [path for path in data.get('reference_images', [])]
@@ -347,15 +355,24 @@ class LLM():
                 model = model_name
 
             # call the api and await result
-            arguments={
-                "prompt": data['prompt'],
+            params = {
                 "num_images": 1,
                 "aspect_ratio": "16:9",
                 "image_urls": elements_urls,
-                "quality": 'high',
+                "quality": 'low',
             }
+            params.update(data)
+
+            logger.debug({'fal_client.submit_async() params': {
+                    'model': model,
+                    'params': params,
+                    }
+                })
+            if dryrun:
+                logger.warning('dryrun')
+                return
             try:
-                handler = await fal_client.submit_async(model, arguments)
+                handler = await fal_client.submit_async(model, params)
                 async for event in handler.iter_events(with_logs=True):
                     pass
                 result = await handler.get()
@@ -389,6 +406,10 @@ class LLM():
             local_usage = ModelUsageSummary()
             local_usage.register_result(model, result)
             self.usage_summary.register_result(model, result)
+
+        else:
+            logger.error(f'unknown model: {model}')
+            raise FACError()
 
         logger.info(f'request_cost: ${local_usage.total_cost():0.4f}  total_cost: ${self.usage_summary.total_cost():0.4f}', submessage=True)
         return local_usage
