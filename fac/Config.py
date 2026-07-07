@@ -16,6 +16,7 @@ from fac.util.targets import extract_ambiguous_targets, match_pattern_starstar
 
 # external lib imports
 import yaml
+from frozendict import frozendict
 
 
 def fac_targets_completer(prefix, parsed_args, **kwargs):
@@ -304,6 +305,36 @@ def _configdict_to_targets(config):
 
         # if c_name is a scope, add all subtargets within scope
         else:
+
+            # first we ensure that the scope has a sane configuration
+            valid_keys = ['targets', 'variables', 'include']
+            for key in c_value:
+                if key not in valid_keys:
+                    logger.error(f'error reading fac.yaml; key="{key}" invalid')
+                    raise FACError()
+            if 'targets' in c_value and 'include' in c_value:
+                logger.error(f'error reading fac.yaml; both "targets" and "include" key provided')
+                raise FACError()
+            elif 'targets' not in c_value and 'include' not in c_value:
+                logger.error(f'error reading fac.yaml; you must provide either a "targets" or an "include" key')
+                raise FACError()
+
+            # process include-scopes;
+            # the strategy is that we will load the included fac.yaml
+            # and directly insert the targets
+            if 'include' in c_value:
+                # FIXME:
+                # currently we assume that include provides a rel/abs path;
+                # we want to be able to support arbitrary urls
+                # and have a syntax for specifying commits of a repo
+                include_path = c_value['include'] + '/fac.yaml'
+
+                # FIXME:
+                # we need to add checks for recursion depth/infinite recursion
+                c_value = dict(c_value)
+                c_value['targets'] = thaw(load_config(include_path))
+
+            # process targets
             subtargets = _configdict_to_targets(c_value.get('targets', {}))
             for st_name, st_value in subtargets.items():
                 name = c_name + st_name
@@ -321,8 +352,7 @@ def _configdict_to_targets(config):
                     'options_audio',
                     ]
                 for field in fields_to_inherit:
-                    c_value.setdefault(field, {})
-                    for val in c_value[field]:
+                    for val in c_value.get(field, {}):
                         targets[name].setdefault(field, {})
                         if val not in targets[name][field]:
                             targets[name][field][val] = c_value[field][val]
