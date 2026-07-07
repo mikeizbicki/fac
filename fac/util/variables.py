@@ -126,6 +126,7 @@ def eval_var(expr, env, var='<unknown>', target='<unknown>', targets_dict={}, us
             logger.error('stdout: |', submessage=True)
             for line in stdout.split('\n'):
                 logger.error('  ' + line, submessage=True)
+        logger.error({'env': dict(env)}, submessage=True)
         #logger.error({'context': context.to_dict()}, submessage=True)
         raise VariableEvaluationError
 

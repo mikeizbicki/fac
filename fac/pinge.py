@@ -38,6 +38,9 @@ def main():
         help='Output file path (default: output.png)',
     )
     parser.add_argument(
+        '-a', 
+        )
+    parser.add_argument(
         '-o', '--options', action=OptionsAction, default={},
         help='Specify options for the input model',
         )
@@ -67,6 +70,8 @@ def main():
         data['model'] = args.model
     for opt in args.options:
         data[opt] = args.options[opt]
+    if args.a:
+        data['reference_images'] = [args.a]
 
     # Generate image
     llm = LLM()
