@@ -99,6 +99,7 @@ registered_models = {
     'fal-ai/veed/fabric-1.0':               {'video/out': 0.08},
     'fal-ai/veo3.1/fast/first-last-frame-to-video': {'video/out': 0.10},
     'fal-ai/veo3.1/first-last-frame-to-video': {'video/out': 0.20},
+    'fal-ai/bytedance/seedance-2.0/image-to-video': {'video/out': 0.3034},
     'openai/sora-2':                        {'video/out': 0.10},
     'openai/sora-2-pro':                    {'video/out': 0.50},
 
@@ -329,8 +330,8 @@ class LLM():
                     return
                 result = await client.images.generate(**params)
             else:
-                params['image'] = [open(path, 'rb') for path in data['reference_images']]
                 logger.debug({'openai_client.images.edit() params': params})
+                params['image'] = [open(path, 'rb') for path in data['reference_images']]
                 if dryrun:
                     logger.warning('dryrun')
                     return
@@ -451,7 +452,7 @@ class LLM():
         provider, model_name = model.split('/', 1)
 
         if provider == 'openai':
-            assert len(data['reference_images']) == 1
+            assert len(data['reference_images']) == 1, data['reference_images']
             input_reference = Path(data['reference_images'][0])
             response = openai.videos.create(
                     model=model_name,
@@ -499,12 +500,16 @@ class LLM():
             elif model in [
                     'fal-ai/kling-video/v2.5-turbo/pro/image-to-video',
                     'fal-ai/kling-video/v2.5-turbo/standard/image-to-video',
+                    'fal-ai/bytedance/seedance-2.0/image-to-video',
                     ]:
+                if model == 'fal-ai/bytedance/seedance-2.0/image-to-video':
+                    model = 'bytedance/seedance-2.0/image-to-video'
                 seconds = int(data.get('duration', 5))
                 arguments = {
                     "prompt": data['prompt'],
                     "image_url": self.fal_upload_file(data['first_frame']),
-                    "duration": str(seconds),
+                    #"end_image_url": self.fal_upload_file(data['last_frame']),
+                    "duration": seconds,
                 }
             elif model in [
                     'fal-ai/kling-video/o1/image-to-video',
