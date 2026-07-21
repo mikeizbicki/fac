@@ -23,6 +23,7 @@ import requests
 # project imports
 from fac.Errors import FACError
 from fac.Logging import logger
+from fac.util.freeze import thaw
 
 
 registered_providers = {
@@ -82,6 +83,7 @@ registered_models = {
     'fal-ai/nano-banana-pro/edit':          {'image/out': 0.15},
     'fal-ai/nano-banana-2':                 {'image/out': 0.08},
     'fal-ai/nano-banana-2/edit':            {'image/out': 0.08},
+    'fal-ai/openai/gpt-image-2':            {'text/in': 5.00, 'image/in': 08.00, 'image/out': 30.00},
 
     # image -> video
     # video prices are measured in seconds, not tokens
@@ -124,9 +126,24 @@ class ModelUsageSummary():
     def register_result(self, model, result):
         tokens = Counter()
 
-        # Video Generation calls
-        if 'get' in dir(result) and result.get('seconds'):
-            tokens['video/out'] = float(result['seconds']) * 1000000
+        # text API calls
+        if hasattr(result, 'usage') and hasattr(result.usage, 'completion_tokens'):
+            tokens['text/in'] = result.usage.completion_tokens
+            tokens['text/out'] = result.usage.prompt_tokens
+            self.model_details[model] += tokens
+
+            # only text results use tool use
+            tools = result.choices[0].message.tool_calls
+            if tools:
+                for tool in tools:
+                    self.tools_used[str(tool)] += 1
+
+        # image API calls
+        elif hasattr(result, 'usage') and hasattr(result.usage, 'input_tokens'):
+            tokens['text/in'] = result.usage.input_tokens_details.text_tokens
+            tokens['image/in'] = result.usage.input_tokens_details.image_tokens
+            tokens['image/out'] = result.usage.output_tokens
+            self.model_details[model] += tokens
 
         # FAL-AI API image calls
         elif model.startswith('fal-ai'):
@@ -137,24 +154,9 @@ class ModelUsageSummary():
             pass
             #logger.warning('TTS API does not support usage information', submessage=True)
 
-        # image API calls
-        elif hasattr(result, 'usage') and hasattr(result.usage, 'input_tokens'):
-            tokens['text/in'] = result.usage.input_tokens_details.text_tokens
-            tokens['image/in'] = result.usage.input_tokens_details.image_tokens
-            tokens['image/out'] = result.usage.output_tokens
-            self.model_details[model] += tokens
-
-        # text API calls
-        elif hasattr(result, 'usage') and hasattr(result.usage, 'completion_tokens'):
-            tokens['text/in'] = result.usage.completion_tokens
-            tokens['text/out'] = result.usage.prompt_tokens
-            self.model_details[model] += tokens
-
-            # only text results use tool use
-            tools = result.choices[0].message.tool_calls
-            if tools:
-                for tool in tools:
-                    self.tools_used[str(tool)] += 1
+        # Video Generation calls
+        elif 'get' in dir(result) and result.get('seconds'):
+            tokens['video/out'] = float(result['seconds']) * 1000000
 
         # other API calls
         else:
@@ -352,13 +354,16 @@ class LLM():
             elements = [path for path in data.get('reference_images', [])]
             elements_urls = [self.fal_upload_file(element) for element in elements]
 
-            if model_name.startswith('openai'):
-                model = model_name
+            image_size = {'width': 1024, 'height': 768}
+            if 'size' in data:
+                width, height = data['size'].split('x')
+                image_size = {'width': width, 'height': height}
 
             # call the api and await result
             params = {
                 "num_images": 1,
                 "aspect_ratio": "16:9",
+                "image_size": image_size,
                 "image_urls": elements_urls,
                 "quality": 'low',
             }
@@ -373,7 +378,10 @@ class LLM():
                 logger.warning('dryrun')
                 return
             try:
-                handler = await fal_client.submit_async(model, params)
+                model_submit = model
+                if model_name.startswith('openai'):
+                    model_submit = model_name
+                handler = await fal_client.submit_async(model_submit, params)
                 async for event in handler.iter_events(with_logs=True):
                     pass
                 result = await handler.get()
@@ -390,7 +398,7 @@ class LLM():
                 logger.error({
                     'fal_client.submit_async() parameters': {
                         'model': model,
-                        'arguments': arguments,
+                        'params': params,
                         }
                     },
                     submessage=True,

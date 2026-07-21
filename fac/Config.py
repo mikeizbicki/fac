@@ -311,6 +311,7 @@ def _configdict_to_targets(config):
             for key in c_value:
                 if key not in valid_keys:
                     logger.error(f'error reading fac.yaml; key="{key}" invalid')
+                    logger.error(f'HINT: perhaps this should be within a targets: dictionary?')
                     raise FACError()
             if 'targets' in c_value and 'include' in c_value:
                 logger.error(f'error reading fac.yaml; both "targets" and "include" key provided')

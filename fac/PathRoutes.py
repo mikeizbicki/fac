@@ -136,7 +136,7 @@ class PathRoutes(Routable):
             try:
                 with open(path, "r") as f:
                     content = f.read()
-            except FileNotFoundError:
+            except (FileNotFoundError, UnicodeDecodeError):
                 content = None
         else:
             content = None
