@@ -30,6 +30,7 @@ def main():
     )
     parser.add_argument(
         '-m', '--model',
+        default='fal-ai/openai/gpt-image-2',
         help='Model to use for image generation',
     )
     parser.add_argument(

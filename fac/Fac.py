@@ -4,6 +4,7 @@ import asyncio
 import itertools
 import os
 import signal
+import sys
 
 # external imports
 from pathlib import Path
@@ -371,6 +372,7 @@ class Fac(Routable):
                                         self._set_context_state(context, 'notbuilt')
                                     logger.warning(f'{state} - {context.path}', submessage=True)
                                     #logger.warning({'context': context.to_dict()}, submessage=True)
+                                    self._set_context_state(context, 'notbuilt')
                             self.contexts['buildable'] = set()
                             self.contexts['waiting'] = set()
                             self.contexts['unresolved'] = set()
@@ -1065,15 +1067,17 @@ class Fac(Routable):
                         dep1 = dict(dep_building)
                         dep1['target'] = path
                         dependencies_built1.append(dep1)
-                    elif path in stale_paths:
-                        # NOTE:
-                        # this should never happen;
-                        # this code was added when debugging a weird edge case;
-                        # it is retained just to log if it does happen
-                        logger.error(f'stale path {path} added to dependencies_built for path={path}')
-                        dep1 = dict(dep_building)
-                        dep1['target'] = path
-                        dependencies_built1.append(dep1)
+                    #elif path in stale_paths:
+                        ## NOTE:
+                        ## this should never happen;
+                        ## this code was added when debugging a weird edge case;
+                        ## it is retained just to log if it does happen
+                        #logger.warning(f'stale path {path} added to dependencies_built for path={path}')
+                        #logger.warning({'built_paths': built_paths, 'stale_paths': stale_paths})
+                        ##raise FACError()
+                        #dep1 = dict(dep_building)
+                        #dep1['target'] = path
+                        #dependencies_built1.append(dep1)
                     else:
                         dependencies_building1.append(dep_building)
 
@@ -1179,7 +1183,10 @@ class Fac(Routable):
             else:
                 # determine if context needs building
                 status, build_required = context.get_status()
-                do_build = build_required
+                if not os.path.exists(context.path):
+                    do_build = True
+                else:
+                    do_build = build_required
                 if 'overwrite' in context.tasks:
                     status.append('overwrite')
                     do_build = True
