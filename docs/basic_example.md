@@ -181,7 +181,8 @@ $ fac 'page/$TOPIC/about.md'
 `fac` first built `outline.json` (as a dependency), then evaluated the `TOPIC` variable.
 The command `jq -r 'keys[]' outline.json` produced the text
 
-```
+```bash
+$ jq -r 'keys[]' outline.json
 topic1
 topic2
 ```
