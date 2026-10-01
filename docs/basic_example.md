@@ -348,21 +348,21 @@ $ fac final.txt
 <...>
 $ cat final.txt
 College Thesis
-<BLANKLINE>
+<...>
 ## page/topic1/about.md
-<BLANKLINE>
+<...>
 cooking
-<BLANKLINE>
+<...>
 ## page/topic1_food/about.md
-<BLANKLINE>
+<...>
 This section will describe the traditional foods and cooking techniques of the region.
-<BLANKLINE>
+<...>
 ## page/topic2/about.md
-<BLANKLINE>
+<...>
 culture
-<BLANKLINE>
+<...>
 ## page/topic2_culture/about.md
-<BLANKLINE>
+<...>
 This section will describe the social customs and cultural rituals preserved across generations.
 ```
 
@@ -401,13 +401,13 @@ $ fac final.txt
 <...>
 $ cat final.txt
 College Thesis
-<BLANKLINE>
+<...>
 ## page/topic1_food/about.md
-<BLANKLINE>
+<...>
 This section will describe the traditional foods and cooking techniques of the region.
-<BLANKLINE>
+<...>
 ## page/topic2_culture/about.md
-<BLANKLINE>
+<...>
 This section will describe the social customs and cultural rituals preserved across generations.
 ```
 
@@ -419,21 +419,21 @@ $ git checkout master
 <...>
 $ cat final.txt
 College Thesis
-<BLANKLINE>
+<...>
 ## page/topic1/about.md
-<BLANKLINE>
+<...>
 cooking
-<BLANKLINE>
+<...>
 ## page/topic1_food/about.md
-<BLANKLINE>
+<...>
 This section will describe the traditional foods and cooking techniques of the region.
-<BLANKLINE>
+<...>
 ## page/topic2/about.md
-<BLANKLINE>
+<...>
 culture
-<BLANKLINE>
+<...>
 ## page/topic2_culture/about.md
-<BLANKLINE>
+<...>
 This section will describe the social customs and cultural rituals preserved across generations.
 ```
 
