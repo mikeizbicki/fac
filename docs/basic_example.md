@@ -217,10 +217,10 @@ page/topic2_culture/about.md
 And each generated file contains the value of `$TOPIC` that was used to build it.
 
 ```bash
-$ cat page/topic1/about.md
-topic1
-$ cat page/topic2/about.md
-topic2
+$ cat page/topic1_food/about.md
+This section will describe the traditional foods and cooking techniques of the region.
+$ cat page/topic2_culture/about.md
+This section will describe the social customs and cultural rituals preserved across generations.
 ```
 
 Each `page/.../about.md` file contains the *value* (not the key) from
@@ -348,13 +348,21 @@ $ fac final.txt
 <...>
 $ cat final.txt
 College Thesis
-
+<BLANKLINE>
+## page/topic1/about.md
+<BLANKLINE>
+cooking
+<BLANKLINE>
 ## page/topic1_food/about.md
-
-This section will describe the traditional foods and cooking techniques of the region, including seasonal dishes and regional specialties.
-
+<BLANKLINE>
+This section will describe the traditional foods and cooking techniques of the region.
+<BLANKLINE>
+## page/topic2/about.md
+<BLANKLINE>
+culture
+<BLANKLINE>
 ## page/topic2_culture/about.md
-
+<BLANKLINE>
 This section will describe the social customs and cultural rituals preserved across generations.
 ```
 
@@ -393,13 +401,13 @@ $ fac final.txt
 <...>
 $ cat final.txt
 College Thesis
-
+<BLANKLINE>
 ## page/topic1_food/about.md
-
+<BLANKLINE>
 This section will describe the traditional foods and cooking techniques of the region.
-
+<BLANKLINE>
 ## page/topic2_culture/about.md
-
+<BLANKLINE>
 This section will describe the social customs and cultural rituals preserved across generations.
 ```
 
@@ -411,13 +419,21 @@ $ git checkout master
 <...>
 $ cat final.txt
 College Thesis
-
+<BLANKLINE>
+## page/topic1/about.md
+<BLANKLINE>
+cooking
+<BLANKLINE>
 ## page/topic1_food/about.md
-
-This section will describe the traditional foods and cooking techniques of the region, including seasonal dishes and regional specialties.
-
+<BLANKLINE>
+This section will describe the traditional foods and cooking techniques of the region.
+<BLANKLINE>
+## page/topic2/about.md
+<BLANKLINE>
+culture
+<BLANKLINE>
 ## page/topic2_culture/about.md
-
+<BLANKLINE>
 This section will describe the social customs and cultural rituals preserved across generations.
 ```
 
