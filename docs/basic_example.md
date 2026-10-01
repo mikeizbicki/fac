@@ -74,7 +74,7 @@ $ cat > fac.yaml <<'EOF'
 >   - outline.json
 >   variables:
 >     TOPIC: |
->       jq -r 'keys.[]' outline.json
+>       jq -r 'keys[]' outline.json
 > EOF
 ```
 
@@ -161,29 +161,97 @@ fac.yaml
 
 ### More complex build
 
-The `page/$TOPIC/about.md` is much more interesting for two reasons.
+The `page/$TOPIC/about.md` target is much more interesting than `outline.json` for two reasons.
 
 1. There is a variable `TOPIC` inside the target that allows the target to build multiple files.
 
-    This variable will be expanded by first running the command shown in the `variables['TOPIC']` dictionary entry.
-    The results will then be broken on whitespace and each entry in the resulting list will create a new "expanded target"
+    This variable will be expanded by first running the command in the `variables['TOPIC']` entry.
+    The output will be split on newlines and each resulting line will create a new "expanded target".
 
 1. The target contains a `dependencies` list inside of it,
     and all of these dependencies will be built for us automatically when we build `page/$TOPIC/about.md`.
 
-<!--
-bash
-fac 'page/$TOPIC/about.md'
+Let's see this in action:
 
+```bash
+$ fac 'page/$TOPIC/about.md'
+<...>
+```
 
-Dependencies are automatically built before the target is built,
-and variables are automatically evaluated and substituted into the target.
+`fac` first built `outline.json` (as a dependency), then evaluated the `TOPIC` variable.
+The command `jq -r 'keys[]' outline.json` produced the text
 
-bash
-git ls-files | grep -v '/\.\|^\.' # the grep removes hidden files
+```
+topic1
+topic2
+```
+
+Since the variable contains a newline, `fac` split the output into two values and created two "expanded" targets, one for each value:
+`page/topic1/about.md` and `page/topic2/about.md`.
+It then ran the same `cmd` once per expanded target, with `$TOPIC` set to the corresponding value each time.
+This is how a single entry in `fac.yaml` can build multiple files.
+
+We can see that `outline.json` was built automatically, before the `page/...` files:
+
+```bash
+$ git ls-files | grep -v '/\.\|^\.' # the grep removes hidden files
 fac.yaml
 outline.json
 page/topic1/about.md
 page/topic2/about.md
+```
 
--->
+And each generated file contains the value of `$TOPIC` that was used to build it.
+
+```bash
+$ cat page/topic1/about.md
+topic1
+$ cat page/topic2/about.md
+topic2
+```
+
+#### Variables
+
+Variables are evaluated in a `bash` subshell, so any command that works in a shell can be used as a variable definition.
+Standard Unix tools (`jq`, `ls`, `find`, `echo`, `cat`) are the natural way to generate the value of a variable,
+and they are the most common thing to find in the `variables` section of a real `fac.yaml`.
+
+The output of the command is processed as follows before it becomes the variable value:
+
+1. The output is stripped and split on newlines.
+    Each resulting line is one value.
+    (This is why `jq -r` — "raw output" — is the standard idiom: without `-r`, `jq` emits multi-line JSON and the variable would be split at the wrong places.)
+2. Empty lines are dropped.
+    If the command returns no non-empty output, the variable has no values and any target that references it produces no paths.
+3. Integer-looking lines are zero-padded to four digits.
+    So `jq -r 'range(0; 7)'` yields `0000`, `0001`, ..., `0006`, which sorts naturally when viewed with `ls`.
+
+Multiple variables can be defined for a single target;
+`fac` will order their evaluation automatically based on which variables appear in which definitions.
+Circular variable definitions are detected and reported as errors.
+
+Because variables are shell commands, the multi-line YAML block scalar `|` is the usual way to write longer definitions:
+
+```yaml
+variables:
+  TOPIC: |
+    jq -r 'keys[]' outline.json
+```
+
+#### Dependencies
+
+Every path listed in a target's `dependencies` field is built before the target itself.
+`fac` handles dependencies recursively, so arbitrarily complex dependency graphs work without further configuration.
+
+A dependency does not have to be a declared target.
+If the path already exists in the git repo, `fac` will use it directly.
+But if the path does not exist and is not declared in `fac.yaml`, `fac` reports an error,
+because it has no way to construct the file.
+(Later tutorials show how to declare and build such files explicitly.)
+
+Dependencies serve two purposes in `fac`:
+
+1. **Build ordering.** A dependency is always built before any target that relies on it, even when that dependency is itself a target with its own dependencies.
+2. **Rebuild detection.** If the contents of a dependency change, `fac` re-runs the `cmd` of every target that depends on it, recursively.
+    Crucially, `fac` hashes the dependency's *contents*, so simply touching a file (without modifying it) will not trigger a rebuild.
+    This is one of the main improvements over `make`.
