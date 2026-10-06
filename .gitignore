@@ -1,3 +1,5 @@
+.fac.log
+
 # project specific
 fac/_version.py
 tmp
