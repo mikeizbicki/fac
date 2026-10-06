@@ -307,7 +307,8 @@ def _configdict_to_targets(config):
         else:
 
             # first we ensure that the scope has a sane configuration
-            valid_keys = ['targets', 'variables', 'include', 'dependencies']
+            valid_keys = ['targets', 'variables', 'include', 'dependencies',
+                          'options_text', 'options_image', 'options_video', 'options_audio']
             for key in c_value:
                 if key not in valid_keys:
                     logger.error(f'error reading fac.yaml; key="{key}" invalid')
