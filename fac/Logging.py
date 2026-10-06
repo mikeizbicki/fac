@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import contextvars
 import logging
+import os
 
 # external lib imports
 import yaml
@@ -199,8 +200,20 @@ class CustomFormatter(logging.Formatter):
     }
     RESET = '\033[0m'
 
+    def _supports_color(self):
+        '''
+        True unless the environment asks for plain output.  This lets a
+        subprocess (e.g. a byexample test) capture stable, greppable
+        text rather than ANSI escapes.  INFO messages are not colored
+        to begin with, so this only affects DEBUG/TRACE/WARNING/ERROR.
+        '''
+        return (
+            os.environ.get('NO_COLOR') is None
+            and os.environ.get('TERM') != 'dumb'
+        )
+
     def format(self, record):
-        if record.levelname in self.COLORS:
+        if self._supports_color() and record.levelname in self.COLORS:
             startcolor = self.COLORS[record.levelname]
             stopcolor = self.RESET
         else:

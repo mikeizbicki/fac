@@ -54,6 +54,15 @@ class Frame:
 def format_frame(frame):
     '''
     Render a Frame as a single human-readable line.
+
+    >>> format_frame(Frame(kind='fac.yaml', file='sub/fac.yaml', line=3))
+    '  at sub/fac.yaml:3'
+    >>> format_frame(Frame(kind='fac.yaml', file='sub/fac.yaml', line=3, col=7, name='foo.txt'))
+    '  at sub/fac.yaml:3:7 (foo.txt)'
+    >>> format_frame(Frame(kind='template', name='options.model'))
+    '  at <unknown> (options.model)'
+    >>> format_frame(Frame(kind='script', name='X', message='foo.txt'))
+    '  at <unknown> (X): foo.txt'
     '''
     loc = frame.file or '<unknown>'
     if frame.line is not None:
@@ -95,6 +104,29 @@ class UserError(FACError):
         present.  Idempotency matters because an error can be caught,
         re-raised, and caught again at two boundaries; without it, the
         same frame would appear twice in the rendered diagnostic.
+
+        >>> e = UserError('boom')
+        >>> e.frames
+        ()
+        >>> f = Frame(kind='fac.yaml', file='fac.yaml', line=3)
+        >>> e2 = e.add_frame(f)
+        >>> e2.frames
+        (Frame(kind='fac.yaml', file='fac.yaml', line=3, col=None, name=None, message=None),)
+        >>> e.frames  # the original is unchanged
+        ()
+
+        Adding the same frame again is a no-op (idempotent):
+
+        >>> e2.add_frame(f).frames
+        (Frame(kind='fac.yaml', file='fac.yaml', line=3, col=None, name=None, message=None),)
+        >>> e2.add_frame(Frame(kind='fac.yaml', file='fac.yaml', line=3)).frames
+        (Frame(kind='fac.yaml', file='fac.yaml', line=3, col=None, name=None, message=None),)
+
+        A structurally different frame is added as a new layer:
+
+        >>> e3 = e2.add_frame(Frame(kind='template', name='options.model'))
+        >>> len(e3.frames)
+        2
         '''
         if frame in self.frames:
             return self
@@ -122,6 +154,35 @@ def frame_scope(frame):
     async task scheduled from inside the block still carries it -- an
     alternative design based on a contextvar frame stack would lose the
     frame when the block popped.
+
+    >>> try:
+    ...     with frame_scope(Frame(kind='fac.yaml', line=10)):
+    ...         raise UserError('boom')
+    ... except UserError as e:
+    ...     print(e.message)
+    ...     print(e.frames[0].line)
+    boom
+    10
+
+    Non-UserErrors pass through unchanged:
+
+    >>> try:
+    ...     with frame_scope(Frame(kind='fac.yaml', line=10)):
+    ...         raise ValueError('not a UserError')
+    ... except ValueError:
+    ...     print('ValueError not wrapped')
+    ValueError not wrapped
+
+    Nested scopes stack inner-first, so the more specific frame comes
+    before the outer one:
+
+    >>> try:
+    ...     with frame_scope(Frame(kind='fac.yaml', line=1)):
+    ...         with frame_scope(Frame(kind='template', name='x')):
+    ...             raise UserError('boom')
+    ... except UserError as e:
+    ...     [f.kind for f in e.frames]
+    ['template', 'fac.yaml']
     '''
     try:
         yield
@@ -135,6 +196,37 @@ def render_user_error(e, logger):
     source frame, the context data, and the hint -- but no Python
     traceback (which is reserved for InternalError and unexpected
     exceptions).
+
+    The doctests use a minimal fake logger that records each call, so
+    that the diagnostic's structure can be checked without depending
+    on the real logger's formatting (colors, tree prefixes, yaml
+    rendering of non-string messages).
+
+    >>> class FakeLogger:
+    ...     def __init__(self):
+    ...         self.calls = []
+    ...     def error(self, msg, **kwargs):
+    ...         self.calls.append(msg)
+    >>> lg = FakeLogger()
+    >>> e = UserError(
+    ...     'something went wrong',
+    ...     frames=(Frame(kind='fac.yaml', file='fac.yaml', line=5),),
+    ...     hint='try fixing it',
+    ... )
+    >>> render_user_error(e, lg)
+    >>> lg.calls[0]
+    'something went wrong'
+    >>> lg.calls[1]
+    '  at fac.yaml:5'
+    >>> lg.calls[2]
+    '  hint: try fixing it'
+
+    Context key/value pairs are passed one at a time:
+
+    >>> lg = FakeLogger()
+    >>> render_user_error(UserError('boom', context={'var': 'TOPIC'}), lg)
+    >>> lg.calls
+    ['boom', {'var': 'TOPIC'}]
     '''
     logger.error(e.message or type(e).__name__)
     for frame in e.frames:
