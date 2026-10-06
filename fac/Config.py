@@ -49,25 +49,42 @@ def fac_targets_completer(prefix, parsed_args, **kwargs):
 def load_config(path):
     '''
     Loads a fac.yaml file and generates a dictionary of targets.
-    This is a simple wrapper around `rawyaml_to_targets`.
     '''
     with open(path) as fin:
         text = fin.read()
-    line_map = _line_map_for_top_level_keys(text)
-    targets_dict = rawyaml_to_targets(text)
+    line_map, targets_dict = _parse_fac_yaml(text)
     assert_sane_config(targets_dict, line_map=line_map, path=path)
     return freeze(targets_dict)
 
 
-def _line_map_for_top_level_keys(rawyaml):
+def _parse_fac_yaml(rawyaml):
     '''
-    Use yaml.compose (rather than yaml.safe_load) to recover the source
-    line of each top-level key in a fac.yaml, so that config errors can
-    point the user at the right place in the file.
+    Parse a fac.yaml string once, returning both the target dict and a
+    mapping from top-level keys to their (line, col) source locations.
 
-    Returns a dict mapping key -> (line, col), both 1-indexed.
+    We use yaml.SafeLoader directly (rather than yaml.compose followed
+    by yaml.safe_load) so that the yaml stream is only tokenized and
+    parsed once.  This is a hot path -- it happens on every facd startup
+    and on every fac invocation -- and doubling the parse was noticeable.
+
+    Returns a tuple (line_map, targets_dict).
     '''
-    node = yaml.compose(rawyaml)
+    loader = yaml.SafeLoader(rawyaml)
+    try:
+        node = loader.get_single_node()
+        if node is None:
+            return {}, {}
+        config = loader.construct_document(node)
+    finally:
+        loader.dispose()
+    return _line_map_from_node(node), _configdict_to_targets(config)
+
+
+def _line_map_from_node(node):
+    '''
+    Walk the top-level keys of a composed yaml MappingNode and record
+    each key's (line, col) source location, both 1-indexed.
+    '''
     if node is None or not isinstance(node, yaml.MappingNode):
         return {}
     result = {}

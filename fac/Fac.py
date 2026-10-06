@@ -5,6 +5,7 @@ import itertools
 import os
 import signal
 import sys
+import time
 
 # external imports
 from pathlib import Path
@@ -31,6 +32,15 @@ import logging
 from fac.Logging import logger, with_subtree
 #logger.setLevel(logging.DEBUG)
 logger.setLevel(logging.INFO)
+
+# When fac writes a file, awatch fires on that path shortly afterwards.
+# We suppress such events in _watch_files by remembering that fac
+# recently wrote the path.  A single-shot set proved too fragile: the
+# notify backend can emit more than one event for a single logical
+# write (and validate_file rewrites the file at the end of a build), so
+# a follow-up event would slip through and be treated as a user edit.
+# We instead ignore any event for a path fac wrote within this window.
+_AWATCH_BUILD_GRACE_SECONDS = 5.0
 
 
 class FacSettingsDebug(BaseSettings):
@@ -115,8 +125,11 @@ class Fac(Routable):
         self._contexts_history = defaultdict(lambda: [])
 
         # store paths that fac builds;
-        # this ensures that the awatch task does not process them
-        self._awatch_build_paths = set()
+        # the values are the time the path was last written by fac;
+        # this ensures that the awatch task does not process events
+        # caused by fac itself (including duplicate events from the
+        # notify backend, and rewrites from validate_file)
+        self._awatch_build_paths = {}
 
         # every built context has a dependencies_built field that stores the paths
         # that were needed to build the context;
@@ -652,13 +665,19 @@ class Fac(Routable):
                     else:
                         assert False, 'unknown change_type'
 
-                    # only update rdeps if the change was not caused by fac
-                    if path not in self._awatch_build_paths:
+                    # only update rdeps if the change was not caused by fac;
+                    # we use a time-based check because the notify backend
+                    # can emit several events for a single logical write by
+                    # fac (and validate_file rewrites the file at the end of
+                    # a build), so one-shot suppression is not sufficient
+                    ts = self._awatch_build_paths.get(path)
+                    if ts is not None and time.monotonic() - ts < _AWATCH_BUILD_GRACE_SECONDS:
+                        logger.debug(f"awatch detected a change by fac ({change_str}): path={path}")
+                    else:
+                        self._awatch_build_paths.pop(path, None)
                         logger.warning(f"change detected ({change_str}): path={path}")
                         self._update_rdeps_state(path)
-                    else:
-                        logger.debug(f"awatch detected a change by fac ({change_str}): path={path}")
-                        self._awatch_build_paths.remove(path)
+                    # only update rdeps if the change was not caused by fac
 
     def _path_to_state(self, path):
         '''
@@ -1262,10 +1281,15 @@ class Fac(Routable):
         unknown_failure = False
 
         async def _build_context(context):
-            self._awatch_build_paths.add(context.path)
+            self._awatch_build_paths[context.path] = time.monotonic()
             try:
                 await context.build()
                 assert os.path.exists(context.path)
+                # re-stamp the write time: the build may have taken a long
+                # time (e.g. an LLM call), and we want the grace window to
+                # start when the file was actually written, not when the
+                # build was started
+                self._awatch_build_paths[context.path] = time.monotonic()
                 logger.info(f'built {context.path}')
                 for postreq in context.config.get('postreqs', []):
                     self.add_target(postreq, required_for=context)
