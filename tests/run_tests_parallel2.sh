@@ -1,134 +1,143 @@
 #!/bin/bash
 #
-# Parallel test runner for the fac test suite.
+# Parallel runner for the fac test suite.
 #
-# Like tests/run_all_tests.sh, but:
-#   * each test runs in its own podman container, so the facd tests
-#     cannot collide on localhost:8080 and a crashed test cannot leave
-#     git state behind that affects another test;
-#   * tests run concurrently (JOBS at a time);
-#   * progress is printed one line per event (RUN / PASS / FAIL);
-#   * on failure, the log of each failing test is dumped at the end in
-#     discovery order, so the tail of the output is deterministic.
+# Every test (the doctest pass plus each tests/fac_* submodule) runs in
+# its own podman container, which:
+#   * gives each test its own network namespace, so the facd tests
+#     cannot collide on localhost:8080;
+#   * gives each test its own writable copy of the repo, so a crashed
+#     test cannot leave git state behind for another test;
+#   * never modifies the host working tree.
 #
-# The container bind-mounts the repo read-only and copies it to a
-# writable location before running the test, so submodule git state
-# (tests/<sub>/.git -> ../../.git/modules/...) resolves correctly and
-# the host working tree is never modified.
+# Tests run JOBS at a time (default: nproc).  Progress is one line per
+# event.  On failure the logs of all failing tests are dumped at the
+# end in discovery order, so the tail of the output is deterministic.
 #
-# Env:
-#   JOBS   maximum number of concurrent containers (default: nproc)
-#   IMAGE  container image tag (default: fac-test)
+# Env: JOBS (default nproc), IMAGE (default fac-test).
 
 set -uo pipefail
-cd "$(dirname "${BASH_SOURCE[0]}")"
 
-REPO_DIR=$(pwd)/..
-LOGDIR=$(pwd)/.testlogs
-COVERAGE_DIR=$(pwd)/.coverage
-
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+ROOT=$PWD
+LOGDIR=$ROOT/.testlogs
+COVERAGE_DIR=$ROOT/.coverage
 JOBS=${JOBS:-$(nproc)}
 IMAGE=${IMAGE:-fac-test}
 
 # ---------- discovery ----------
 
 tests=(doctest)
-for d in fac*; do
-    [ -d "$d" ] && [ -f "$d/run_test.sh" ] && tests+=("$d")
+for d in tests/fac*; do
+    [ -f "$d/run_test.sh" ] && tests+=("$(basename "$d")")
 done
+
+echo "discovered ${#tests[@]} tests:"
+printf '  %s\n' "${tests[@]}"
+echo
 
 # ---------- image ----------
 
-rm -rf "$LOGDIR"
-mkdir -p "$LOGDIR" "$COVERAGE_DIR"
-
 echo "==> building image $IMAGE"
-podman build -q -t "$IMAGE" "$REPO_DIR" >/dev/null \
+podman build -q -t "$IMAGE" "$ROOT" >/dev/null \
     || { echo "podman build failed" >&2; exit 1; }
 
-# ---------- container command ----------
+rm -rf "$LOGDIR" "$COVERAGE_DIR"
+mkdir -p "$LOGDIR" "$COVERAGE_DIR"
 
-# Prints the bash command that runs test $1 inside the container.
-container_cmd_for() {
-    case "$1" in
-        doctest)
-            echo 'cd /work/tests && COVERAGE_FILE=/coverage/coverage.doctest python3 -m coverage run --parallel-mode -m pytest --doctest-modules ../fac'
-            ;;
-        *)
-            echo "cd /work/tests/$1 && ./run_test.sh && FAC_TESTWITHGIT=1 ./run_test.sh"
-            ;;
-    esac
-}
+# ---------- run one test in a container ----------
+#
+# The container is given the repo read-only at /repo and the coverage
+# directory writable at /coverage.  It copies the repo to /work (so
+# submodule git state resolves), redirects tests/.coverage to
+# /coverage, and runs the test.
+#
+# safe.directory is set because inside a rootless container the bind
+# mount appears owned by a different uid than the one git runs as.
 
-# ---------- scheduler ----------
-
-declare -A STATE START_OF PID_OF
-declare -i N_PASS=0 N_FAIL=0
-
-launch() {
+run_test() {
     local t=$1 inner
-    inner=$(container_cmd_for "$t")
-    STATE[$t]=running
-    START_OF[$t]=$SECONDS
+    if [ "$t" = doctest ]; then
+        inner='cd /work/tests && COVERAGE_FILE=/coverage/coverage.doctest python3 -m coverage run --parallel-mode -m pytest --doctest-modules ../fac'
+    else
+        inner="cd /work/tests/$t && ./run_test.sh && FAC_TESTWITHGIT=1 ./run_test.sh"
+    fi
     podman run --rm \
-        -e GIT_AUTHOR_NAME=test \
-        -e GIT_AUTHOR_EMAIL=test@example.com \
-        -e GIT_COMMITTER_NAME=test \
-        -e GIT_COMMITTER_EMAIL=test@example.com \
-        -v "$REPO_DIR:/repo:ro" \
+        -v "$ROOT:/repo:ro" \
         -v "$COVERAGE_DIR:/coverage" \
         "$IMAGE" \
-        bash -c "cp -a /repo /work && rm -rf /work/tests/.coverage && ln -s /coverage /work/tests/.coverage && $inner" \
-        >"$LOGDIR/$t.log" 2>&1 &
-    PID_OF[$!]=$t
-    echo "RUN  $t"
+        bash -c "
+            set -e
+            git config --global --add safe.directory '*'
+            git config --global user.name  test
+            git config --global user.email test@example.com
+            cp -a /repo /work
+            rm -rf /work/tests/.coverage
+            ln -s /coverage /work/tests/.coverage
+            $inner
+        "
 }
 
-reap_one() {
-    local p ec t dur
-    wait -n -p p
+# ---------- parallel scheduler ----------
+#
+# We keep a plain indexed array of PIDs and a parallel array of names.
+# Each test writes its stdout+stderr to $LOGDIR/$t.log and its exit
+# code to $LOGDIR/$t.exit; because the subshell that writes the exit
+# code is the process we wait on, the file is guaranteed to be written
+# by the time reap() runs.
+
+PIDS=()
+NAMES=()
+
+launch() {
+    local t=$1
+    ( run_test "$t" >"$LOGDIR/$t.log" 2>&1
+      echo $? >"$LOGDIR/$t.exit" ) &
+    PIDS+=("$!")
+    NAMES+=("$t")
+    printf 'RUN  %s\n' "$t"
+}
+
+reap() {
+    local pid ec i t rc
+    wait -n -p pid
     ec=$?
-    t=${PID_OF[$p]}
-    unset 'PID_OF[$p]'
-    dur=$((SECONDS - START_OF[$t]))
-    if [ "$ec" -eq 0 ]; then
-        STATE[$t]=passed
-        N_PASS+=1
-        echo "PASS $t (${dur}s)"
+    t=
+    for i in "${!PIDS[@]}"; do
+        if [ "${PIDS[$i]}" = "$pid" ]; then
+            t=${NAMES[$i]}
+            unset 'PIDS[$i]' 'NAMES[$i]'
+            break
+        fi
+    done
+    [ -z "$t" ] && return
+    rc=$(cat "$LOGDIR/$t.exit" 2>/dev/null || echo "$ec")
+    if [ "$rc" = 0 ]; then
+        printf 'PASS %s\n' "$t"
     else
-        STATE[$t]=failed
-        N_FAIL+=1
-        echo "FAIL $t (${dur}s, exit=$ec)  log=.testlogs/$t.log"
+        printf 'FAIL %s (exit=%s)  log=.testlogs/%s.log\n' "$t" "$rc" "$t"
     fi
 }
 
 for t in "${tests[@]}"; do
-    while [ "${#PID_OF[@]}" -ge "$JOBS" ]; do reap_one; done
+    while [ "${#PIDS[@]}" -ge "$JOBS" ]; do reap; done
     launch "$t"
 done
-while [ "${#PID_OF[@]}" -gt 0 ]; do reap_one; done
+while [ "${#PIDS[@]}" -gt 0 ]; do reap; done
 
 # ---------- summary ----------
 
+failed=()
+for t in "${tests[@]}"; do
+    rc=$(cat "$LOGDIR/$t.exit" 2>/dev/null || echo 1)
+    [ "$rc" = 0 ] || failed+=("$t")
+done
+
 echo
 echo "=== summary ==="
-echo "total:  ${#tests[@]}"
-echo "passed: $N_PASS"
-echo "failed: $N_FAIL"
-
-if [ "$N_FAIL" -gt 0 ]; then
-    echo
-    echo "=== failing logs (in discovery order) ==="
-    for t in "${tests[@]}"; do
-        if [ "${STATE[$t]}" = failed ]; then
-            echo
-            echo "----- $t -----"
-            cat "$LOGDIR/$t.log"
-            echo "----- end $t -----"
-        fi
-    done
-    exit 1
-fi
+printf 'total:  %d\n' "${#tests[@]}"
+printf 'passed: %d\n' "$(( ${#tests[@]} - ${#failed[@]} ))"
+printf 'failed: %d\n' "${#failed[@]}"
 
 # ---------- coverage ----------
 
