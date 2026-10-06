@@ -32,8 +32,11 @@ podman build -q -t "$IMAGE" .. >/dev/null
 
 # the container's WORKDIR is the repo root (docs/run_tests.sh relies
 # on the same assumption); mount coverage underneath it
-WORKDIR=$(podman inspect "$IMAGE" --format '{{.Config.WorkingDir}}')
-[ -n "$WORKDIR" ] || WORKDIR=/
+REPO=$(podman run --rm "$IMAGE" sh -c '
+  for d in . / /src /app /repo /work /workspace /code; do
+    [ -f "$d/tests/run_all_tests.sh" ] && { cd "$d" && pwd; exit 0; }
+  done
+  exit 1') || { echo "repo not found in $IMAGE" >&2; exit 1; }
 
 OUT=$(mktemp -d)
 COV="$OUT/cov"
@@ -54,8 +57,8 @@ run_one() {
     local log="$OUT/$t.$v.log"
     local rc="$OUT/$t.$v.rc"
 
-    podman run --rm \
-        -v "$COV:$WORKDIR/tests/.coverage" \
+    podman run --rm --workdir "$REPO" \
+        -v "$COV:$REPO/tests/.coverage" \
         -e NO_COLOR=1 -e TERM=dumb \
         -e FAC_TESTWITHGIT="$([ "$v" = git ] && echo 1)" \
         "$IMAGE" \
