@@ -1,0 +1,3 @@
+- All code in fac/util should be stateless/pure.
+- Try to achieve maximum code coverage from doctests alone.
+    - Never do file operations or other IO in doctests.
