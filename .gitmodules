@@ -28,3 +28,6 @@
 [submodule "tests/facd_test2_edit"]
 	path = tests/facd_test2_edit
 	url = https://github.com/mikeizbicki/facd_test2_edit
+[submodule "tests/fac_test8_scopes"]
+	path = tests/fac_test8_scopes
+	url = https://github.com/mikeizbicki/fac_test8_scopes
