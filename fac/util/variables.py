@@ -10,7 +10,7 @@ import os
 
 import jq as jqlib
 
-from fac.Errors import FACError
+from fac.Errors import Frame, UserError
 from fac.Logging import logger
 from fac.util.targets import match_pattern_starstar, substitute_variables
 
@@ -27,7 +27,7 @@ def eval_var(expr, env, var='<unknown>', target='<unknown>', targets_dict={}, us
     >>> eval_var('ls /nonexistent/path', {})  # doctest: +ELLIPSIS
     Traceback (most recent call last):
         ...
-    variables.VariableEvaluationError
+    variables.VariableEvaluationError: ...
 
     The var and target parameters are only used for better error messages in the log.
 
@@ -128,7 +128,15 @@ def eval_var(expr, env, var='<unknown>', target='<unknown>', targets_dict={}, us
                 logger.error('  ' + line, submessage=True)
         logger.error({'env': dict(env)}, submessage=True)
         #logger.error({'context': context.to_dict()}, submessage=True)
-        raise VariableEvaluationError
+        raise VariableEvaluationError(
+                f'failed evaluating variable {var} in target {target}',
+                var=var,
+                target=target,
+                expr=expr,
+                env=dict(env),
+                stderr=stderr,
+                stdout=stdout,
+                )
 
     # if val is an integer, pad it with zeros
     lines = []
@@ -147,8 +155,31 @@ def eval_var(expr, env, var='<unknown>', target='<unknown>', targets_dict={}, us
     return result
 
 
-class VariableEvaluationError(FACError):
-    pass
+class VariableEvaluationError(UserError):
+    '''
+    Raised when a shell expression used to define a variable fails.
+
+    The evaluation context (var, target, expr, env, stderr, stdout) is
+    attached so that the top-level handler can print it without the
+    user having to look at the log file.
+    '''
+    def __init__(self, message, *, var, target, expr, env, stderr, stdout):
+        super().__init__(
+                message,
+                frames=(Frame(kind='script', name=var, message=str(target)),),
+                context={
+                    'var': var,
+                    'target': target,
+                    'expr': expr,
+                    'env': env,
+                    'stderr': stderr,
+                    'stdout': stdout,
+                    },
+                )
+        self.var = var
+        self.target = target
+        self.expr = expr
+        self.env = env
 
 
 def _format_result(stdout):

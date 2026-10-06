@@ -16,7 +16,7 @@ import yaml
 # project imports
 from fac.BuildContext import BuildContext, context_print
 from fac.Config import load_config
-from fac.Errors import DirtyRepo, FACError
+from fac.Errors import DirtyRepo, FACError, InternalError, UserError, format_frame
 from fac.Fac_merge import merge_context
 from fac.Job import Job, assert_git_sane
 from fac.PathRoutes import PathRoutes
@@ -249,6 +249,17 @@ class Fac(Routable):
         # if there are any unknown errors in the build_all function,
         # we log them here and end the program;
         # we call os.kill twice to ensure that the server actually ends
+        except UserError as e:
+            # user errors are not bugs in fac; do not print a Python traceback
+            logger.error(f'build_daemon crashed: {e.message}')
+            for frame in e.frames:
+                logger.error(format_frame(frame), submessage=True)
+            for key, value in e.context.items():
+                logger.error({key: value}, submessage=True)
+            if e.hint:
+                logger.error(f'  hint: {e.hint}', submessage=True)
+            os.kill(os.getpid(), signal.SIGTERM)
+            os.kill(os.getpid(), signal.SIGTERM)
         except Exception as e:
             logger.error(f"build_daemon crashed: {e}", exc_info=e)
             os.kill(os.getpid(), signal.SIGTERM)

@@ -9,7 +9,7 @@ import os
 import re
 
 # internal imports
-from fac.Errors import FACError
+from fac.Errors import Frame, UserError
 from fac.Logging import logger
 from fac.util.freeze import freeze, thaw
 from fac.util.targets import extract_ambiguous_targets, match_pattern_starstar
@@ -53,23 +53,80 @@ def load_config(path):
     '''
     with open(path) as fin:
         text = fin.read()
+    line_map = _line_map_for_top_level_keys(text)
     targets_dict = rawyaml_to_targets(text)
-    assert_sane_config(targets_dict)
+    assert_sane_config(targets_dict, line_map=line_map, path=path)
     return freeze(targets_dict)
 
 
-def assert_sane_config(targets_dict):
+def _line_map_for_top_level_keys(rawyaml):
+    '''
+    Use yaml.compose (rather than yaml.safe_load) to recover the source
+    line of each top-level key in a fac.yaml, so that config errors can
+    point the user at the right place in the file.
+
+    Returns a dict mapping key -> (line, col), both 1-indexed.
+    '''
+    node = yaml.compose(rawyaml)
+    if node is None or not isinstance(node, yaml.MappingNode):
+        return {}
+    result = {}
+    for key_node, _value_node in node.value:
+        if isinstance(key_node, yaml.ScalarNode):
+            line = key_node.start_mark.line + 1
+            col = key_node.start_mark.column + 1
+            result[key_node.value] = (line, col)
+    return result
+
+
+def _lookup_line(line_map, key):
+    '''
+    Find the source location associated with a target name, using a
+    line_map built from the top-level keys of a fac.yaml.  Tries the
+    exact key first, then successively shorter scope prefixes; for a
+    nested target the best we can do without a full yaml walk is the
+    line of the enclosing scope.
+
+    Returns a (line, col) tuple, or None if the key is not found.
+    '''
+    if not line_map:
+        return None
+    if key in line_map:
+        return line_map[key]
+    parts = key.split('/')
+    for i in range(len(parts) - 1, 0, -1):
+        prefix = '/'.join(parts[:i]) + '/'
+        if prefix in line_map:
+            return line_map[prefix]
+    return None
+
+
+def assert_sane_config(targets_dict, line_map=None, path=None):
     '''
     Verify that the config is sane and provide helpful error messages if not.
+
+    If line_map and path are provided (as they are when loading from a
+    file), each reported error is annotated with a '_source' frame
+    pointing at the offending target in the fac.yaml file.
     '''
+    line_map = line_map or {}
     errors = []
+
+    def source_of(key):
+        loc = _lookup_line(line_map, key)
+        if loc is None:
+            return None
+        return {'file': path, 'line': loc[0], 'col': loc[1]}
 
     # CHECK 1
     targets = list(targets_dict)
     targetss = extract_ambiguous_targets(targets)
     if len(targetss) > 0:
         for targets in targetss:
-            errors.append({'the following targets are ambiguous': targets})
+            errors.append({
+                'the following targets are ambiguous': targets,
+                '_source': source_of(targets[0]),
+                })
 
     # CHECK 2
     targets = frozenset(targets_dict)
@@ -77,24 +134,30 @@ def assert_sane_config(targets_dict):
         for dep in targets_dict[target]['dependencies']:
             matches = match_pattern_starstar(targets, dep['target'])
             if len(matches) == 0 and dep.get('in_fac.yaml', True):
-                message = {'dependency not found in targets list': {
-                   'target': target,
-                   'dep["target"]': dep["target"],
-                   'HINT': [
-                       'this is likely a typo in dep["target"]',
-                       'if you want to enforce that the user must provide the dependency (i.e. it cannot be built by fac) then set dep["in_fac.yaml"] = False'
-                       ]
-                    }}
+                message = {
+                    'dependency not found in targets list': {
+                        'target': target,
+                        'dep["target"]': dep["target"],
+                        'HINT': [
+                            'this is likely a typo in dep["target"]',
+                            'if you want to enforce that the user must provide the dependency (i.e. it cannot be built by fac) then set dep["in_fac.yaml"] = False'
+                            ]
+                        },
+                    '_source': source_of(target),
+                    }
                 errors.append(message)
             if len(matches) > 0 and not dep.get('in_fac.yaml', True):
-                message = {'in_fac.yaml set to False, but dependency found in fac.yaml': {
-                   'target': target,
-                   'dep["target"]': dep["target"],
-                   'matches': matches,
-                   'HINT': [
-                       'Only set in_fac.yaml = True on dependencies that do not match targets in fac.yaml'
-                       ]
-                    }}
+                message = {
+                    'in_fac.yaml set to False, but dependency found in fac.yaml': {
+                        'target': target,
+                        'dep["target"]': dep["target"],
+                        'matches': matches,
+                        'HINT': [
+                            'Only set in_fac.yaml = True on dependencies that do not match targets in fac.yaml'
+                            ]
+                        },
+                    '_source': source_of(target),
+                    }
                 errors.append(message)
 
     # CHECK 3
@@ -113,17 +176,33 @@ def assert_sane_config(targets_dict):
                         'trigger_rebuild',
                         'rebuild_on_metapaths',
                         ]:
-                    message = {'unknown dependency option': {
-                        'target': target,
-                        'dep["target"]': dep["target"],
-                        'option': option,
-                        }}
+                    message = {
+                        'unknown dependency option': {
+                            'target': target,
+                            'dep["target"]': dep["target"],
+                            'option': option,
+                            },
+                        '_source': source_of(target),
+                        }
                     errors.append(message)
 
     # raise errors
     if errors:
-        logger.error({f"{len(errors)} errors found in fac.yaml": errors})
-        raise FACError()
+        frames = tuple(
+                Frame(
+                    kind='fac.yaml',
+                    file=(err.get('_source') or {}).get('file'),
+                    line=(err.get('_source') or {}).get('line'),
+                    col=(err.get('_source') or {}).get('col'),
+                    )
+                for err in errors
+                if err.get('_source')
+                )
+        raise UserError(
+                f'{len(errors)} errors found in fac.yaml',
+                frames=frames,
+                context={'errors': errors},
+                )
 
 
 def pprint_targets(targets):
@@ -311,16 +390,21 @@ def _configdict_to_targets(config):
                           'options_text', 'options_image', 'options_video', 'options_audio']
             for key in c_value:
                 if key not in valid_keys:
-                    logger.error(f'error reading fac.yaml; key="{key}" invalid')
-                    logger.error(f'c_name={c_name}')
-                    logger.error(f'HINT: perhaps this should be within a targets: dictionary?')
-                    raise FACError()
+                    raise UserError(
+                            f'error reading fac.yaml; key="{key}" invalid',
+                            hint='perhaps this should be within a targets: dictionary?',
+                            context={'scope': c_name},
+                            )
             if 'targets' in c_value and 'include' in c_value:
-                logger.error(f'error reading fac.yaml; both "targets" and "include" key provided')
-                raise FACError()
+                raise UserError(
+                        'error reading fac.yaml; both "targets" and "include" key provided',
+                        context={'scope': c_name},
+                        )
             elif 'targets' not in c_value and 'include' not in c_value:
-                logger.error(f'error reading fac.yaml; you must provide either a "targets" or an "include" key')
-                raise FACError()
+                raise UserError(
+                        'error reading fac.yaml; you must provide either a "targets" or an "include" key',
+                        context={'scope': c_name},
+                        )
 
             # process include-scopes;
             # the strategy is that we will load the included fac.yaml
