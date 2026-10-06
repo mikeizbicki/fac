@@ -7,7 +7,7 @@ The Latin verb `facio` means to do/make, and fac is the imperative form.
 import sys
 import typing
 from fac.Config import pprint_targets
-from fac.Errors import InternalError, UserError, format_frame
+from fac.Errors import InternalError, UserError, render_user_error
 from fac.Fac import Fac, FacSettings
 from fac.Logging import logger
 from pydantic_settings import SettingsConfigDict, CliPositionalArg
@@ -30,24 +30,6 @@ class CLISettings(FacSettings):
     include_paths: list[str] | None = None
 
     print_context_states: bool = False
-
-
-def _render_user_error(e):
-    '''
-    Print a UserError without a Python traceback.
-
-    Renders the message, then each Frame, then the context dict, then
-    the hint.  This is a compiler-style diagnostic: the goal is for the
-    user to be able to trace back to a line in a fac.yaml (or a
-    template, or a script) without seeing any of fac's own code.
-    '''
-    logger.error(e.message or type(e).__name__)
-    for frame in e.frames:
-        logger.error(format_frame(frame), submessage=True)
-    for key, value in e.context.items():
-        logger.error({key: value}, submessage=True)
-    if e.hint:
-        logger.error(f'  hint: {e.hint}', submessage=True)
 
 
 def main():
@@ -80,7 +62,7 @@ def main():
             states = json.dumps(fac.context_states(), indent=2)
             print(states)
     except UserError as e:
-        _render_user_error(e)
+        render_user_error(e, logger)
         sys.exit(1)
     except InternalError:
         logger.error('internal error in fac; please report', exc_info=True)

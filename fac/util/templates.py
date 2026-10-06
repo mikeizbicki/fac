@@ -9,6 +9,8 @@ import re
 import subprocess
 import tempfile
 
+from fac.Errors import Frame, UserError
+
 
 def process_template(template_content, env_vars=None, print_function=None, template_name=None):
     """
@@ -108,20 +110,14 @@ __EOF_DELIMITER_END__
         # Execute the script and capture output
         result = subprocess.run([script_path], capture_output=True, text=True, env={**os.environ, **env_vars})
         if result.returncode != 0 or len(result.stderr.strip()) > 0:
-            error = TemplateProcessingError(
+            raise TemplateProcessingError(
                 result.returncode,
                 result.stdout,
                 result.stderr,
                 env_vars,
                 script_content,
+                template_name=template_name,
                 )
-            if print_function and template_name:
-                print_function(f'error processing template {template_name}: {error.get_bash_error()}')
-                error.print_template(print_function=print_function)
-                print_function('bound variables:', submessage=True)
-                for var in env_vars:
-                    print_function(f' - {var}: {repr(env_vars[var])}', submessage=True)
-            raise error
         return result.stdout.strip()
 
     finally:
@@ -130,16 +126,38 @@ __EOF_DELIMITER_END__
             os.unlink(script_path)
 
 
-class TemplateProcessingError(Exception):
-    """Exception raised when template processing fails."""
+class TemplateProcessingError(UserError):
+    """
+    Exception raised when a template (options, description, ...) fails
+    to process.  Inherits from UserError so that a bad template is
+    reported as a compiler-style diagnostic with a source frame,
+    rather than as an unexpected Python exception (the bug that the
+    bare-Exception inheritance used to cause).
+    """
 
-    def __init__(self, returncode, stdout, stderr, env_vars, script_content):
+    def __init__(self, returncode, stdout, stderr, env_vars, script_content, template_name=None):
+        stripped_stderr = stderr.strip()
+        first_stderr_line = stripped_stderr.splitlines()[0] if stripped_stderr else None
+        message = (
+                f'error processing template {template_name}'
+                if template_name else
+                'template processing failed'
+                )
+        super().__init__(
+                message,
+                frames=(Frame(kind='template', name=template_name, message=first_stderr_line),),
+                context={
+                    'returncode': returncode,
+                    'stdout': stdout,
+                    'stderr': stderr,
+                    },
+                )
         self.returncode = returncode
         self.stdout = stdout
         self.stderr = stderr
         self.env_vars = env_vars
         self.script_content = script_content
-        super().__init__(stderr)
+        self.template_name = template_name
 
     def get_bash_error(self):
 

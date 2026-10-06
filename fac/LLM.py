@@ -21,7 +21,7 @@ import openai
 import requests
 
 # project imports
-from fac.Errors import FACError
+from fac.Errors import FACError, InternalError, UserError
 from fac.Logging import logger
 from fac.util.freeze import thaw
 
@@ -160,8 +160,7 @@ class ModelUsageSummary():
 
         # other API calls
         else:
-            breakpoint()
-            raise ValueError('unsupported result type')
+            raise InternalError(f'register_result: unsupported result type: {type(result).__name__}')
 
         # record cost
         if hasattr(result, 'usage') and hasattr(result.usage, 'cost'):
@@ -417,8 +416,7 @@ class LLM():
             self.usage_summary.register_result(model, result)
 
         else:
-            logger.error(f'unknown model: {model}')
-            raise FACError()
+            raise UserError(f'unknown model: {model}')
 
         logger.info(f'request_cost: ${local_usage.total_cost():0.4f}  total_cost: ${self.usage_summary.total_cost():0.4f}', submessage=True)
         return local_usage
@@ -670,7 +668,9 @@ def generate_uuid7():
     timestamp = int(time.time() * 1000)
     random_number = uuid.uuid4().int
     uuid7 = (timestamp << 64) | random_number
-    return uuid7
+
+class LLMError(UserError):
+    pass
 
 class LLMError(FACError):
     pass

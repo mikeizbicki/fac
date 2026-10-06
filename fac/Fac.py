@@ -16,7 +16,7 @@ import yaml
 # project imports
 from fac.BuildContext import BuildContext, context_print
 from fac.Config import load_config
-from fac.Errors import DirtyRepo, FACError, InternalError, UserError, format_frame
+from fac.Errors import DirtyRepo, FACError, InternalError, UserError, render_user_error
 from fac.Fac_merge import merge_context
 from fac.Job import Job, assert_git_sane
 from fac.PathRoutes import PathRoutes
@@ -259,13 +259,8 @@ class Fac(Routable):
         # we call os.kill twice to ensure that the server actually ends
         except UserError as e:
             # user errors are not bugs in fac; do not print a Python traceback
-            logger.error(f'build_daemon crashed: {e.message}')
-            for frame in e.frames:
-                logger.error(format_frame(frame), submessage=True)
-            for key, value in e.context.items():
-                logger.error({key: value}, submessage=True)
-            if e.hint:
-                logger.error(f'  hint: {e.hint}', submessage=True)
+            logger.error('build_daemon crashed:')
+            render_user_error(e, logger)
             os.kill(os.getpid(), signal.SIGTERM)
             os.kill(os.getpid(), signal.SIGTERM)
         except Exception as e:
@@ -1310,12 +1305,17 @@ class Fac(Routable):
                 # a failed build did not complete the write we would
                 # otherwise suppress subsequent events for
                 self._awatch_build_paths.pop(context.path, None)
-                # if context.build() throws FACError,
-                # that means the error was already printed/handled internally;
-                # we just register the context as failed;
-                # for all other Exceptions,
-                # something unexpected happened and we want to see the exception
-                if not isinstance (e, FACError):
+                # UserErrors are problems with the user's fac.yaml,
+                # templates, scripts, or LLM calls; render them as
+                # compiler-style diagnostics.  InternalError and any
+                # other exception are unexpected -- keep the full
+                # traceback so they can be debugged.
+                if isinstance(e, UserError):
+                    render_user_error(e, logger)
+                elif isinstance(e, InternalError):
+                    logger.error(f'internal error when building {context.path}: see traceback below', exc_info=e)
+                    unknown_failure = True
+                elif not isinstance(e, FACError):
                     logger.error(f'unknown failure when building {context.path}: see traceback below; fac will stop after all build processes complete', exc_info=e)
                     unknown_failure = True
                 self._set_context_state(context, 'build_error')

@@ -16,7 +16,7 @@ import mdformat
 
 # project imports
 from fac.Logging import logger
-from fac.Errors import FACError
+from fac.Errors import Frame, UserError
 
 
 def validate_file(path, schema_file=None, fix=False):
@@ -54,8 +54,11 @@ def validate_file(path, schema_file=None, fix=False):
                     obj = json_repair.loads(text, skip_json_loads=True)
                     json.dump(obj, fout)
             else:
-                logger.error('JSONDecodeError: path={path}')
-                raise FACError(e)
+                raise UserError(
+                        f'JSONDecodeError: path={path}',
+                        frames=(Frame(kind='fac.yaml', name=path),),
+                        context={'json_error': str(e)},
+                        )
 
         # verify that the JSON matches the schema
         if schema_file:
@@ -101,9 +104,7 @@ def binary_file_to_base64_url(file_path):
             mime_type = mimetypes.guess_type(file_path)[0] or 'image/png'
             return f"data:{mime_type};base64,{encoded_string}"
     except FileNotFoundError:
-        logger.error(f'file not found: {file_path}')
-        raise FACError
-
+        raise UserError(f'file not found: {file_path}')
 
 class FacJSON:
     """

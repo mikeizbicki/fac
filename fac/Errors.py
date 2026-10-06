@@ -19,6 +19,7 @@ contributed each location.  A single UserError commonly contains
 frames of several kinds.
 '''
 
+import contextlib
 from dataclasses import dataclass
 from typing import Literal
 
@@ -89,13 +90,59 @@ class UserError(FACError):
         self.context = dict(context) if context else {}
 
     def add_frame(self, frame):
-        '''Return a new UserError with an additional frame appended.'''
+        '''
+        Return a UserError with `frame` appended, unless it is already
+        present.  Idempotency matters because an error can be caught,
+        re-raised, and caught again at two boundaries; without it, the
+        same frame would appear twice in the rendered diagnostic.
+        '''
+        if frame in self.frames:
+            return self
         return UserError(
                 self.message,
                 frames=self.frames + (frame,),
                 hint=self.hint,
                 context=self.context,
                 )
+
+    # alias so callers can read it as the symmetric form of frame_scope
+    with_frame = add_frame
+
+
+@contextlib.contextmanager
+def frame_scope(frame):
+    '''
+    Attach `frame` to any UserError raised inside the with block.
+
+    This is how outer frames (e.g. a fac.yaml line) get attached to an
+    error raised by a lower layer (e.g. a template or a script) without
+    the lower layer needing to know about its callers.
+
+    The frame is attached on __exit__, so an error that escapes an
+    async task scheduled from inside the block still carries it -- an
+    alternative design based on a contextvar frame stack would lose the
+    frame when the block popped.
+    '''
+    try:
+        yield
+    except UserError as e:
+        raise e.add_frame(frame) from e
+
+
+def render_user_error(e, logger):
+    '''
+    Print a UserError as a compiler-style diagnostic: the message, each
+    source frame, the context data, and the hint -- but no Python
+    traceback (which is reserved for InternalError and unexpected
+    exceptions).
+    '''
+    logger.error(e.message or type(e).__name__)
+    for frame in e.frames:
+        logger.error(format_frame(frame), submessage=True)
+    for key, value in e.context.items():
+        logger.error({key: value}, submessage=True)
+    if e.hint:
+        logger.error(f'  hint: {e.hint}', submessage=True)
 
 
 class InternalError(FACError):

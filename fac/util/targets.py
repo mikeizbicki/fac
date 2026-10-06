@@ -13,6 +13,8 @@ But any edge cases not covered by doctests are likely broken.
 from functools import lru_cache
 import re
 
+from fac.Errors import Frame, UserError
+
 
 def extract_variables(target):
     """
@@ -278,7 +280,11 @@ def match_pattern_starstar(patterns, input_string):
     """
     # Check for multiple ** in input_string
     if input_string.count('**') > 1:
-        raise ValueError("Multiple ** wildcards are not supported in input_string")
+        raise UserError(
+                'Multiple ** wildcards are not supported in input_string',
+                frames=(Frame(kind='fac.yaml', message=f'input_string={input_string!r}'),),
+                hint='use at most one ** per target pattern',
+                )
 
     # Normalize input
     norm_input = re.sub(r'(\.\/)+', '', input_string)

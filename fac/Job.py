@@ -18,18 +18,20 @@ def assert_git_sane(allow_dirty=False):
     repo = git.Repo('.')
 
     if repo.working_dir != os.getcwd():
-        logger.error('must be in root of git repo')
-        raise DirtyRepo()
+        raise DirtyRepo('must be in root of git repo')
 
     if repo.is_dirty(untracked_files=True):
         if allow_dirty:
             logger.warning('git repo is dirty but proceeding with --allow_dirty')
         else:
-            logger.error('git repo is dirty')
-            logger.error('you can clean the repo by committing all changes', submessage=True)
-            logger.error('you can clean the repo by deleting all changes with `git checkout . && git clean -fd`', submessage=True)
-            logger.error('you can allow running with a dirty repo using --allow_dirty or --auto_commit=False', submessage=True)
-            raise DirtyRepo()
+            raise DirtyRepo(
+                    'git repo is dirty',
+                    hint=(
+                        'you can clean the repo by committing all changes; '
+                        'or delete all changes with `git checkout . && git clean -fd`; '
+                        'or allow running with a dirty repo using --allow_dirty or --auto_commit=False'
+                        ),
+                    )
 
 
 class Job:

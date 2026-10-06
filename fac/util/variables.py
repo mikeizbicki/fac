@@ -100,9 +100,10 @@ def eval_var(expr, env, var='<unknown>', target='<unknown>', targets_dict={}, us
 
     # handle any errors
     if cmd.returncode != 0:
-        logger.error(f'Error evaluating variable {var} in target {target}')
-
-        # print hints for how to resolve common errors
+        # compute hints for how to resolve common errors; the top-level
+        # renderer will print these as part of the UserError diagnostic,
+        # so we do not log them here
+        hints = []
         patterns = [
             r"jq: error: Could not open file (.+?):",
             r"ls: cannot access '(.+?)':",
@@ -112,22 +113,10 @@ def eval_var(expr, env, var='<unknown>', target='<unknown>', targets_dict={}, us
             if match:
                 path = match.group(1)
                 target_matches = match_pattern_starstar(targets_dict, path)
-                logger.error(f'HINT: {var} depends on file {path}')
                 if len(target_matches) == 0:
-                    logger.error('HINT: there are no targets that correspond to this path')
+                    hints.append(f'{var} depends on file {path}, but there are no targets that correspond to this path')
                 else:
-                    logger.error(f'HINT: add "{target_matches[0][0]}" to the dependencies to build the file')
-
-        # print raw output
-        logger.error('stderr: |', submessage=True)
-        for line in (stderr.strip()).strip().split('\n'):
-            logger.error('  ' + line, submessage=True)
-        if len(stdout) > 0:
-            logger.error('stdout: |', submessage=True)
-            for line in stdout.split('\n'):
-                logger.error('  ' + line, submessage=True)
-        logger.error({'env': dict(env)}, submessage=True)
-        #logger.error({'context': context.to_dict()}, submessage=True)
+                    hints.append(f'add "{target_matches[0][0]}" to the dependencies to build the file')
         raise VariableEvaluationError(
                 f'failed evaluating variable {var} in target {target}',
                 var=var,
@@ -136,6 +125,7 @@ def eval_var(expr, env, var='<unknown>', target='<unknown>', targets_dict={}, us
                 env=dict(env),
                 stderr=stderr,
                 stdout=stdout,
+                hints=hints,
                 )
 
     # if val is an integer, pad it with zeros
@@ -163,10 +153,11 @@ class VariableEvaluationError(UserError):
     attached so that the top-level handler can print it without the
     user having to look at the log file.
     '''
-    def __init__(self, message, *, var, target, expr, env, stderr, stdout):
+    def __init__(self, message, *, var, target, expr, env, stderr, stdout, hints=()):
         super().__init__(
                 message,
                 frames=(Frame(kind='script', name=var, message=str(target)),),
+                hint='\n'.join(hints) if hints else None,
                 context={
                     'var': var,
                     'target': target,
