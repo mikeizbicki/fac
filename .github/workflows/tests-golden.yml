@@ -40,5 +40,4 @@ jobs:
           git config --global user.name "Your Name"
       - name: run tests
         run: |
-          cd tests
-          ./run_all_tests.sh
+          ./tests/run_all_tests.sh

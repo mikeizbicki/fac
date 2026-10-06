@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -e
+cd tests
 
 # this script runs all test cases and outputs a code coverage report
 
