@@ -5,7 +5,6 @@ import itertools
 import os
 import signal
 import sys
-import time
 
 # external imports
 from pathlib import Path
@@ -32,16 +31,6 @@ import logging
 from fac.Logging import logger, with_subtree
 #logger.setLevel(logging.DEBUG)
 logger.setLevel(logging.INFO)
-
-# When fac writes a file, awatch fires on that path shortly afterwards.
-# We suppress such events in _watch_files by remembering that fac
-# recently wrote the path.  A single-shot set proved too fragile: the
-# notify backend can emit more than one event for a single logical
-# write (and validate_file rewrites the file at the end of a build), so
-# a follow-up event would slip through and be treated as a user edit.
-# We instead ignore any event for a path fac wrote within this window.
-_AWATCH_BUILD_GRACE_SECONDS = 5.0
-
 
 class FacSettingsDebug(BaseSettings):
     '''
@@ -125,10 +114,16 @@ class Fac(Routable):
         self._contexts_history = defaultdict(lambda: [])
 
         # store paths that fac builds;
-        # the values are the time the path was last written by fac;
-        # this ensures that the awatch task does not process events
-        # caused by fac itself (including duplicate events from the
-        # notify backend, and rewrites from validate_file)
+        # the values are one of:
+        #   None -> a build of this path is currently in progress
+        #   int  -> os.stat(path).st_mtime_ns as of the last fac write
+        # The awatch task suppresses an event for a path in this dict by
+        # comparing the file's current mtime against the recorded value:
+        # a match means the event is a consequence of fac's write (the
+        # notify backend can emit more than one event for a single
+        # logical write, and validate_file rewrites the file at the end
+        # of a build), while a mismatch -- including the file being gone
+        # -- means an external change such as a user edit or rm.
         self._awatch_build_paths = {}
 
         # every built context has a dependencies_built field that stores the paths
@@ -665,19 +660,31 @@ class Fac(Routable):
                     else:
                         assert False, 'unknown change_type'
 
-                    # only update rdeps if the change was not caused by fac;
-                    # we use a time-based check because the notify backend
-                    # can emit several events for a single logical write by
-                    # fac (and validate_file rewrites the file at the end of
-                    # a build), so one-shot suppression is not sufficient
-                    ts = self._awatch_build_paths.get(path)
-                    if ts is not None and time.monotonic() - ts < _AWATCH_BUILD_GRACE_SECONDS:
+                    # determine whether this event was caused by fac
+                    # itself; see the comment on self._awatch_build_paths
+                    # in __init__ for the format
+                    if path not in self._awatch_build_paths:
+                        suppress = False
+                    else:
+                        rec = self._awatch_build_paths[path]
+                        if rec is None:
+                            # a build of this path is in progress
+                            suppress = True
+                        else:
+                            try:
+                                cur_mtime = os.stat(path).st_mtime_ns
+                            except FileNotFoundError:
+                                cur_mtime = None
+                            if cur_mtime == rec:
+                                suppress = True
+                            else:
+                                self._awatch_build_paths.pop(path, None)
+                                suppress = False
+                    if suppress:
                         logger.debug(f"awatch detected a change by fac ({change_str}): path={path}")
                     else:
-                        self._awatch_build_paths.pop(path, None)
                         logger.warning(f"change detected ({change_str}): path={path}")
                         self._update_rdeps_state(path)
-                    # only update rdeps if the change was not caused by fac
 
     def _path_to_state(self, path):
         '''
@@ -1281,20 +1288,28 @@ class Fac(Routable):
         unknown_failure = False
 
         async def _build_context(context):
-            self._awatch_build_paths[context.path] = time.monotonic()
+            # mark that a build of this path is in progress; events for
+            # this path are suppressed while the recorded value is None
+            self._awatch_build_paths[context.path] = None
             try:
                 await context.build()
                 assert os.path.exists(context.path)
-                # re-stamp the write time: the build may have taken a long
-                # time (e.g. an LLM call), and we want the grace window to
-                # start when the file was actually written, not when the
-                # build was started
-                self._awatch_build_paths[context.path] = time.monotonic()
+                # record the mtime of the file fac just wrote; events
+                # for this path whose file still has this mtime will be
+                # ignored, while a later edit or rm (which changes or
+                # removes the mtime) will be picked up
+                try:
+                    self._awatch_build_paths[context.path] = os.stat(context.path).st_mtime_ns
+                except FileNotFoundError:
+                    self._awatch_build_paths.pop(context.path, None)
                 logger.info(f'built {context.path}')
                 for postreq in context.config.get('postreqs', []):
                     self.add_target(postreq, required_for=context)
                 self._set_context_state(context, 'built')
             except Exception as e:
+                # a failed build did not complete the write we would
+                # otherwise suppress subsequent events for
+                self._awatch_build_paths.pop(context.path, None)
                 # if context.build() throws FACError,
                 # that means the error was already printed/handled internally;
                 # we just register the context as failed;
